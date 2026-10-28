@@ -167,3 +167,11 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - o `ctx` dos eventos do agente é `local` (sem IP).
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Aceite das ADR-003 e ADR-006
+
+- **Origem**: aceite explícito do dono na conversa de 2026-10-28 ("ADRs 3 e 6 aceita, prossiga").
+- **Resultado**: [ADR-003](adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md) (detecção por polling; tempo do app = processo existente; total = sessão ativa) e [ADR-006](adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md) (Ed25519, anti-replay, pareamento presencial) passam a **Aceito**. [ADR-004](adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md) e [ADR-005](adr/ADR-005-rede-da-api-de-comando.md) seguem **Proposto**.
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros antes do commit.
+- **Limitações**: nenhum código novo neste registro; a implementação das duas ADRs vem em commits próprios.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

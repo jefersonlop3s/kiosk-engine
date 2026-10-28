@@ -1,6 +1,6 @@
 # ADR-003 — Detecção de processos e definição de tempo de uso
 
-Status: Proposto. Data: 2026-10-28. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-28 pelo dono (Jeferson Lopes). Data: 2026-10-28. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; [E-004](../epics/E-004-agente-windows-enforcement.md) F1, [E-003](../epics/E-003-motor-de-regras-e-uso.md) (consumo).
 
 ## Contexto
