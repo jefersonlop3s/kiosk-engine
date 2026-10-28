@@ -201,3 +201,51 @@ async fn tipo_de_evento_desconhecido_e_recusado_pelo_banco() {
     .await;
     assert!(r.is_err());
 }
+
+async fn um_evento(db: &KioskDbManager) -> SecurityEvent {
+    let e = SecurityEvent::new(
+        "local",
+        ActionType::System,
+        EventType::Success,
+        TransactionStatus::Success,
+        "original",
+    );
+    db.record_event(&e).await.unwrap();
+    e
+}
+
+#[tokio::test]
+async fn update_no_log_e_recusado_e_o_registro_fica_intacto() {
+    let (_dir, db) = novo_banco().await;
+    let e = um_evento(&db).await;
+    let r = sqlx::query(
+        "UPDATE security_log SET rejection_reason_detail = 'adulterado' WHERE log_id = ?",
+    )
+    .bind(e.event_id.to_string())
+    .execute(db.pool())
+    .await;
+    let msg = r.unwrap_err().to_string();
+    assert!(msg.contains("append-only"), "mensagem inesperada: {msg}");
+    assert_eq!(eventos(&db).await[0].4, "original");
+}
+
+#[tokio::test]
+async fn delete_no_log_e_recusado_e_o_registro_permanece() {
+    let (_dir, db) = novo_banco().await;
+    um_evento(&db).await;
+    assert!(
+        sqlx::query("DELETE FROM security_log")
+            .execute(db.pool())
+            .await
+            .is_err()
+    );
+    assert_eq!(eventos(&db).await.len(), 1);
+}
+
+#[tokio::test]
+async fn insert_continua_funcionando_com_os_triggers_ativos() {
+    let (_dir, db) = novo_banco().await;
+    um_evento(&db).await;
+    um_evento(&db).await;
+    assert_eq!(eventos(&db).await.len(), 2);
+}

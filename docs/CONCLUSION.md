@@ -92,3 +92,16 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - o plugin de método (skills) não foi instalado; os comandos `/doc`, `/gap` e `/adr` vêm do plugin guard.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-002 F2: `Security_Log` append-only por trigger
+
+- **Origem**: pedido do dono para prosseguir ([ROADMAP](ROADMAP.md), sprint 2). Decisão do agente: executar só o trigger; o hash encadeado segue sem decisão e exige ADR.
+- **Resultado**:
+  - `migrations/0003_security_log_append_only.sql`: triggers `BEFORE UPDATE` e `BEFORE DELETE` em `security_log` com `RAISE(ABORT)`;
+  - `build.rs` com `rerun-if-changed=migrations`.
+- **Achado na execução**: os dois testes novos falharam na primeira rodada (`unwrap_err()` sobre `Ok`, `changes: 1`). Causa: `sqlx::migrate!` embute as migrações na compilação e o cargo não recompilou a lib ao surgir `0003`, então o teste rodou com o esquema antigo e o UPDATE passou. Depois de `touch src/db_manager.rs`, 9 + 9 passaram; o `build.rs` corrige a causa (arquivo novo em `migrations/` → `Compiling kiosk-engine`).
+- **Evidência**: `cargo test --locked` → 9 + 9 passando (inclui UPDATE recusado com registro intacto, DELETE recusado, INSERT seguindo funcionando); clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - o trigger não protege contra quem tem acesso ao arquivo (`DROP TRIGGER`, `DROP TABLE`, edição fora do SQLite): sem hash encadeado, adulteração por esse caminho não é detectável;
+  - a retenção (F3) não pode usar DELETE enquanto o trigger existir: precisa de caminho próprio, a definir com a política de retenção.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
