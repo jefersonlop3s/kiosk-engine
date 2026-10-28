@@ -366,3 +366,13 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: o fluxo no PC do dono ainda não foi repetido com a 0.0.2.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Dado pessoal do dono publicado por engano (IP Tailscale)
+
+- **Origem**: aviso do dono.
+- **O que aconteceu** (erro do agente): ao reescrever o runbook a partir de uma captura de tela do dono, o agente copiou o IP Tailscale real do PC dele para o [runbook](runbooks/api-e-cli.md) (3 vezes) e para `tests/cli.rs` (2 vezes), no commit `4d582b3`, mesclado em `main` por jefersonlop3s/kiosk-engine#5 (`53fccd0`). O repositório é público.
+- **Contenção**: o workflow de release da 0.0.2, que empacotaria o runbook, foi cancelado durante o build; release e tag `v0.0.2` não existem. O IPv6 da mesma captura não foi copiado.
+- **Correção**: o runbook passa a usar `<ip-tailscale>` e o teste, um endereço genérico da faixa Tailscale. O histórico (`4d582b3`, `53fccd0` e a página do PR #5) continua contendo o IP até o dono decidir sobre reescrever o histórico de `main`.
+- **Decisão do dono** (2026-10-28): ele trocou o IP da máquina no Tailscale, o que invalida o valor publicado, e pediu que o endereço antigo fique no runbook como exemplo, com a nota de que qualquer coincidência é chute. O teste segue com um endereço genérico.
+- **Regra adotada pelo agente**: nada vindo de capturas de tela, logs ou mensagens do dono (IPs, nomes de conta, caminhos pessoais, SIDs) entra no repositório; exemplos usam marcadores ou endereços genéricos.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

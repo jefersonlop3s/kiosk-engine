@@ -602,11 +602,10 @@ async fn administracao_local_de_perfis_e_apps_e_regra_pelo_cli_com_os_ids() {
 #[tokio::test]
 async fn endereco_sem_porta_explica_o_formato() {
     let m = mundo().await;
-    let s = kioskd(&m.db_url, Some("100.95.52.48"), &["servir"]);
+    let s = kioskd(&m.db_url, Some("100.64.0.7"), &["servir"]);
     assert!(!s.status.success());
     assert!(
-        texto(&s.stderr).contains("falta a porta")
-            && texto(&s.stderr).contains("100.95.52.48:8443"),
+        texto(&s.stderr).contains("falta a porta") && texto(&s.stderr).contains("100.64.0.7:8443"),
         "{}",
         texto(&s.stderr)
     );

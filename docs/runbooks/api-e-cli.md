@@ -17,6 +17,8 @@ Todos os comandos abaixo são para o **PowerShell aberto como Administrador**, d
 
 ## 2. Variáveis da sessão do PowerShell
 
+> Os exemplos usam `100.95.52.48` como IP Tailscale do PC. É só um exemplo: troque pelo seu. Se esse endereço for de alguém, é chute.
+
 ```powershell
 $env:KIOSK_DB = "sqlite://C:/ProgramData/kiosk/kiosk.db"
 $env:KIOSK_LISTEN = "100.95.52.48:8443"   # o IP do `tailscale ip -4`, com a porta
