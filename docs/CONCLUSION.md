@@ -152,3 +152,18 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: nenhuma alternativa foi exercitada em Windows real; as recomendações são análise, não medição. Cada ADR traz a validação exigida.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-004 (parte SO-independente): núcleo do agente e ligação banco → motor
+
+- **Origem**: pedido do dono para implementar o que fosse possível sem o aceite das ADR-003 a ADR-006. Critério de escolha: só o que sobrevive à rejeição das ADRs sem retrabalho relevante.
+- **Resultado**:
+  - `KioskDbManager::{perfil_por_sid, app_por_processo, regras_do_app, perfil_ctx, decidir_para, decidir_app}` (fecha GC-10): monta o contexto do motor a partir do banco; `decidir_app` isola as regras do app para que um aviso de sessão não esconda o de app;
+  - `src/agente.rs`: `Agente::tick` com a interface `Sistema`. A cada ciclo: agrupa processos por perfil (SID) e app (nome, sem caixa); contabiliza o intervalo desde o tick anterior; decide a sessão e cada app; avisa uma vez por marco (300 s e 60 s) e volta a valer quando a restrição some; encerra apps (tolerância de 5 ticks, desiste após 3 falhas com `TAMPER_SUSPECTED`); bloqueia a sessão com intervalo de 30 s; grava `WARNING_SHOWN`, `APP_TERMINATED`, `SESSION_LOCKED` e as falhas;
+  - erros isolados vão em `Relatorio.erros` e não interrompem o enforcement do resto (inclusive após salto de relógio).
+- **Evidência**: `cargo test --locked` → 12 (agente) + 9 + 14 + 14 + 11 passando, contra SQLite real e `Sistema` falso; clippy `-D warnings` e fmt limpos. Mutações deliberadas: desligar a deduplicação de aviso reprova 2 testes; desligar a tolerância pós-encerramento reprova 1; ambas revertidas.
+- **Decisão do agente**: sessão do perfil é avaliada mesmo sem app controlado em execução (a criança com limite total esgotado é bloqueada abrindo só o Explorer).
+- **Limitações**:
+  - nada disso foi executado em Windows; o adaptador `Sistema` real, o pipe da UI e a API ficam para depois do aceite das ADRs;
+  - GC-11 (sessão "viva" inferida por processos do SID; total ainda é a soma dos apps) e GC-12 (lock pode ser desfeito com a senha da criança) abertos no PENDING; GC-08 e GC-09 seguem abertos;
+  - o `ctx` dos eventos do agente é `local` (sem IP).
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

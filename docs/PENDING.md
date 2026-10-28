@@ -13,20 +13,22 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 ## GAPs de Código
 
-Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md), revisão do próprio entregue em 2026-10-28.
+Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agente-windows-enforcement.md) (núcleo SO-independente), revisão do próprio entregue em 2026-10-28.
 
 | ID | Mecanismo | Medido? | Próximo passo |
 |---|---|---|---|
 | GC-08 | Avisos de 5 e 1 min são constante no código (`AVISOS_SEGUNDOS`); a ADR-001 os quer configuráveis por regra e `active_rules` não tem coluna para isso | Por leitura | Migração + campo em `ActiveRule` quando o E-004 F2 definir a UX do aviso |
 | GC-09 | `consumo_do_dia` soma os apps do perfil como "total": dois apps em uso simultâneo contam em dobro contra o limite total | Por leitura | [ADR-003](adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md) propõe o total pelo tempo de sessão ativa (tabela `session_usage`); depende do aceite |
-| GC-10 | Nada liga as peças: ler perfil, janelas do dia, regras e consumo e chamar `decidir` ainda é montado à mão por quem chama | Por leitura | E-004 F1 (laço do agente), com leitura de `child_profile` e `profile_time_window` |
+| GC-11 | O agente considera a sessão do perfil "viva" quando há qualquer processo do SID na lista; a [ADR-003](adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md) propõe `WTSEnumerateSessions`. Enquanto isso, sessão bloqueada ou sem processos não conta e o total segue sendo a soma dos apps (GC-09) | Por leitura | Trocar a fonte do "total" quando a ADR-003 for aceita (tabela `session_usage`) |
+| GC-12 | Bloquear a sessão (lock) pode ser desfeito pela criança com a própria senha; o agente rebloqueia a cada 30 s. Se o lock basta ou se é preciso encerrar a sessão (logoff) não foi decidido | Por leitura | Decidir em E-004 F2 com teste em Windows real; muda só o adaptador `Sistema::bloquear_sessao` |
 
 ## Épicos abertos
 
 | Épico | Estado | Próximo passo |
 |---|---|---|
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) | em andamento | F1–F4 concluídas; falta o encerramento do épico (conferir o CI no GitHub) |
-| [E-004](epics/E-004-agente-windows-enforcement.md) a [E-005](epics/E-005-api-comando-e-pareamento.md) | proposto | Ver [ROADMAP](ROADMAP.md) |
+| [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Núcleo SO-independente pronto; F0–F4 dependem de Windows real e do aceite das ADR-003/004 |
+| [E-005](epics/E-005-api-comando-e-pareamento.md) | proposto | Depende do aceite das ADR-005/006 |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
 
 ## Infraestrutura do harness

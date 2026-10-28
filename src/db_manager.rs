@@ -1,12 +1,12 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, TimeZone, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 use crate::database_schema::*;
-use crate::motor::Consumo;
+use crate::motor::{AppCtx, Consumo, Decisao, Instante, PerfilCtx, decidir};
 use crate::security_logger_impl::insert_event;
 use crate::uso::{MAX_INTERVALO_SEGUNDOS, dividir_por_dia_local};
 
@@ -344,6 +344,146 @@ impl KioskDbManager {
             app_segundos: u(app)?,
             total_segundos: u(total)?,
         })
+    }
+
+    pub async fn perfil_por_sid(&self, sid: &str) -> Result<Option<ChildProfile>, sqlx::Error> {
+        let row: Option<ProfileRow> = sqlx::query_as(
+            "SELECT profile_id, windows_sid, display_name, daily_total_limit_seconds \
+             FROM child_profile WHERE windows_sid = ?",
+        )
+        .bind(sid)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(ChildProfile::try_from).transpose()
+    }
+
+    /// Procura o app pelo nome do executável, sem diferenciar maiúsculas de minúsculas.
+    pub async fn app_por_processo(
+        &self,
+        process_name: &str,
+    ) -> Result<Option<AppMetadata>, sqlx::Error> {
+        let row: Option<AppRow> = sqlx::query_as(
+            "SELECT app_id, process_name, current_status FROM app_metadata WHERE process_name = ?",
+        )
+        .bind(process_name)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(AppMetadata::try_from).transpose()
+    }
+
+    /// Todas as regras do perfil para o app; o motor descarta as não vigentes.
+    pub async fn regras_do_app(
+        &self,
+        profile_id: Uuid,
+        app_id: Uuid,
+    ) -> Result<Vec<ActiveRule>, sqlx::Error> {
+        let rows: Vec<RuleRow> = sqlx::query_as(
+            "SELECT rule_id, profile_id, app_id, creation_timestamp, current_state, daily_limit_seconds, \
+             time_window_start, time_window_end, effective_until_timestamp \
+             FROM active_rules WHERE profile_id = ? AND app_id = ? ORDER BY creation_timestamp, rowid",
+        )
+        .bind(profile_id.to_string())
+        .bind(app_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(ActiveRule::try_from).collect()
+    }
+
+    /// Limite total e janela geral do perfil para o dia da semana de `dia` (0 = domingo).
+    pub async fn perfil_ctx(
+        &self,
+        profile_id: Uuid,
+        dia: NaiveDate,
+    ) -> Result<PerfilCtx, sqlx::Error> {
+        let limite: Option<i64> = sqlx::query_scalar(
+            "SELECT daily_total_limit_seconds FROM child_profile WHERE profile_id = ?",
+        )
+        .bind(profile_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+        let janela: Option<(String, String)> = sqlx::query_as(
+            "SELECT window_start, window_end FROM profile_time_window WHERE profile_id = ? AND weekday = ?",
+        )
+        .bind(profile_id.to_string())
+        .bind(i64::from(dia.weekday().num_days_from_sunday()))
+        .fetch_optional(&self.pool)
+        .await?;
+        let hora = |t: &str| {
+            NaiveTime::parse_from_str(t, HHMM).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+        };
+        Ok(PerfilCtx {
+            profile_id,
+            limite_total_segundos: limite
+                .map(|v| u64::try_from(v).map_err(|e| sqlx::Error::Decode(Box::new(e))))
+                .transpose()?,
+            janela_geral: janela
+                .map(|(a, b)| {
+                    Ok::<_, sqlx::Error>(TimeWindow {
+                        start: hora(&a)?,
+                        end: hora(&b)?,
+                    })
+                })
+                .transpose()?,
+        })
+    }
+
+    /// Decisão completa (sessão e app), montada a partir do banco. Com `app = None` avalia só a
+    /// sessão do perfil (limite total e janela geral).
+    pub async fn decidir_para(
+        &self,
+        profile_id: Uuid,
+        app: Option<&AppMetadata>,
+        agora: Instante,
+    ) -> Result<Decisao, sqlx::Error> {
+        self.decidir_escopo(profile_id, app, agora, true).await
+    }
+
+    /// Só as regras do app, sem o limite total nem a janela geral do perfil. O agente usa esta
+    /// e `decidir_para(.., None, ..)` em passes separados para que um aviso de sessão não
+    /// esconda o aviso de app.
+    pub async fn decidir_app(
+        &self,
+        profile_id: Uuid,
+        app: &AppMetadata,
+        agora: Instante,
+    ) -> Result<Decisao, sqlx::Error> {
+        self.decidir_escopo(profile_id, Some(app), agora, false)
+            .await
+    }
+
+    async fn decidir_escopo(
+        &self,
+        profile_id: Uuid,
+        app: Option<&AppMetadata>,
+        agora: Instante,
+        com_sessao: bool,
+    ) -> Result<Decisao, sqlx::Error> {
+        let dia = agora.local.date();
+        let mut perfil = self.perfil_ctx(profile_id, dia).await?;
+        if !com_sessao {
+            perfil.limite_total_segundos = None;
+            perfil.janela_geral = None;
+        }
+        let (app_id, status, regras) = match app {
+            Some(a) => (
+                a.app_id,
+                a.status,
+                self.regras_do_app(profile_id, a.app_id).await?,
+            ),
+            None => (Uuid::nil(), ProcessStatus::Ignored, Vec::new()),
+        };
+        let consumo = self.consumo_do_dia(profile_id, app_id, dia).await?;
+        Ok(decidir(
+            &perfil,
+            &AppCtx {
+                app_id,
+                status,
+                regras: &regras,
+            },
+            agora,
+            consumo,
+        ))
     }
 }
 

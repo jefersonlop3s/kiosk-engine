@@ -58,7 +58,7 @@ pub struct Consumo {
     pub total_segundos: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Motivo {
     /// Regra com limite 0: o app não pode ser usado.
     AppBloqueado,
@@ -66,6 +66,24 @@ pub enum Motivo {
     LimiteDiarioTotal,
     ForaDaJanelaApp,
     ForaDaJanelaGeral,
+}
+
+impl Motivo {
+    /// Texto estável para o log forense.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AppBloqueado => "APP_BLOQUEADO",
+            Self::LimiteDiarioApp => "LIMITE_DIARIO_APP",
+            Self::LimiteDiarioTotal => "LIMITE_DIARIO_TOTAL",
+            Self::ForaDaJanelaApp => "FORA_DA_JANELA_APP",
+            Self::ForaDaJanelaGeral => "FORA_DA_JANELA_GERAL",
+        }
+    }
+
+    /// `true` se o motivo vem do perfil (sessão), `false` se vem de regra de app.
+    pub fn e_de_sessao(self) -> bool {
+        matches!(self, Self::LimiteDiarioTotal | Self::ForaDaJanelaGeral)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

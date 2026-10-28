@@ -18,6 +18,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - `Security_Log` append-only: triggers recusam UPDATE e DELETE (migração 0003, E-002 F2).
 - Retenção de 90 dias do log forense imposta por trigger, `purge_expired_events` e consulta de eventos por período e por perfil (migração 0004, E-002 F3).
 - Motor de decisão puro (`decidir`) e contabilidade de uso por dia local, com guarda de relógio (`TAMPER_SUSPECTED`) (E-003 F1–F3).
+- Núcleo do agente independente de SO (`Agente`, interface `Sistema`): avisos de 5 e 1 min, encerramento de apps e bloqueio de sessão com log forense, e leituras do banco para o motor (E-004, parte SO-independente).
 - Harness Sovereign: guard do agente, gates de git (pre-commit/pre-push) e contrato de validação em `.harness.toml` (E-001 F4).
 
 ### Corrigido

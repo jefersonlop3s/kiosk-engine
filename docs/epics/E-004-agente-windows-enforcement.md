@@ -1,6 +1,6 @@
 # E-004 — Agente Windows de enforcement
 
-Estado: proposto. Responsável: a definir. Repositório: kiosk.
+Estado: em andamento (núcleo independente de SO entregue em 2026-10-28; fases F0 a F4 aguardam Windows real e o aceite das ADR-003 e ADR-004). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -35,6 +35,12 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 | F2 | Ações: encerrar processo e bloquear sessão, guiadas por `decidir` | F1, [E-003](E-003-motor-de-regras-e-uso.md) F1 | Vídeo/log em Windows real; app permitido intocado |
 | F3 | UI de bandeja: tempo restante, avisos de 5 e 1 min, motivo do bloqueio | F2 | Captura de tela em Windows real |
 | F4 | Antiadulteração: conta da criança não para o serviço nem mata a UI (ACL do serviço, recuperação automática, heartbeat UI ↔ serviço gerando `TAMPER_SUSPECTED`/`AGENT_STOPPED`) | F2 | Teste negativo: `sc stop` e `taskkill` como usuário padrão falham ou são registrados |
+
+## Entregue sem depender de Windows nem das ADRs (2026-10-28)
+
+- `agente::Agente` com a interface `Sistema` (listar processos, encerrar, bloquear sessão, avisar): contabilidade por tick, avisos nos marcos de 5 e 1 min sem repetir, encerramento com tolerância e desistência após 3 falhas (`TAMPER_SUSPECTED`), bloqueio de sessão com intervalo de rebloqueio e eventos de log em cada ação.
+- Leituras do banco para o motor: perfil por SID, app por nome do executável (sem caixa), janela do dia da semana e regras do app (`decidir_para`, `decidir_app`).
+- Testes com `Sistema` falso contra SQLite real. O adaptador Win32, o pipe da UI e o total por sessão ficam para depois do aceite das ADRs.
 
 ## Aceites
 

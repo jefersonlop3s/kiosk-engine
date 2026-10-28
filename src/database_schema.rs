@@ -39,6 +39,15 @@ impl ProcessStatus {
             Self::Ignored => "IGNORE",
         }
     }
+
+    pub(crate) fn parse(s: &str) -> Result<Self, Error> {
+        match s {
+            "MONITORED" => Ok(Self::Monitored),
+            "WHITELISTED" => Ok(Self::Whitelisted),
+            "IGNORE" => Ok(Self::Ignored),
+            outro => Err(bad_value("current_status", outro)),
+        }
+    }
 }
 
 /// Perfil de criança, vinculado ao SID da conta Windows (ADR-002).
@@ -345,5 +354,50 @@ impl TransactionStatus {
             "FAILURE" => Ok(Self::Failure),
             outro => Err(bad_value("TransactionStatus", outro)),
         }
+    }
+}
+
+/// Linha crua de `app_metadata`.
+#[derive(FromRow)]
+pub(crate) struct AppRow {
+    app_id: String,
+    process_name: String,
+    current_status: String,
+}
+
+impl TryFrom<AppRow> for AppMetadata {
+    type Error = Error;
+
+    fn try_from(r: AppRow) -> Result<Self, Error> {
+        Ok(Self {
+            app_id: decode(Uuid::parse_str(&r.app_id))?,
+            process_name: r.process_name,
+            status: ProcessStatus::parse(&r.current_status)?,
+        })
+    }
+}
+
+/// Linha crua de `child_profile`.
+#[derive(FromRow)]
+pub(crate) struct ProfileRow {
+    profile_id: String,
+    windows_sid: String,
+    display_name: String,
+    daily_total_limit_seconds: Option<i64>,
+}
+
+impl TryFrom<ProfileRow> for ChildProfile {
+    type Error = Error;
+
+    fn try_from(r: ProfileRow) -> Result<Self, Error> {
+        Ok(Self {
+            profile_id: decode(Uuid::parse_str(&r.profile_id))?,
+            windows_sid: r.windows_sid,
+            display_name: r.display_name,
+            daily_total_limit_seconds: r
+                .daily_total_limit_seconds
+                .map(|v| decode(u64::try_from(v)))
+                .transpose()?,
+        })
     }
 }
