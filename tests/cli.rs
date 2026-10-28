@@ -610,3 +610,47 @@ async fn endereco_sem_porta_explica_o_formato() {
         texto(&s.stderr)
     );
 }
+
+#[tokio::test]
+async fn todo_comando_informa_o_banco_em_uso() {
+    let m = mundo().await;
+    for args in [
+        vec!["perfil", "listar"],
+        vec!["app", "listar"],
+        vec!["dispositivos"],
+    ] {
+        let s = kioskd(&m.db_url, None, &args);
+        assert!(s.status.success(), "{args:?}: {}", texto(&s.stderr));
+        assert!(
+            texto(&s.stderr).contains(&format!("kioskd: banco {}", m.db_url)),
+            "{args:?}: {}",
+            texto(&s.stderr)
+        );
+    }
+}
+
+#[tokio::test]
+async fn pareamento_recusado_explica_como_gerar_o_codigo() {
+    let m = mundo().await;
+    let porta = porta_livre();
+    let _srv = subir_servico(&m.db_url, porta);
+    let cred = m.dir.path().join("credenciais.json");
+    let p = kioskctl(
+        &cred,
+        &[
+            "parear",
+            "--servidor",
+            &format!("127.0.0.1:{porta}"),
+            "--codigo",
+            "1234",
+        ],
+    );
+    assert!(!p.status.success());
+    let erro = texto(&p.stderr);
+    assert!(
+        erro.contains("8 caracteres")
+            && erro.contains("kioskd codigo-pareamento")
+            && erro.contains("KIOSK_DB"),
+        "{erro}"
+    );
+}

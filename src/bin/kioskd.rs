@@ -12,7 +12,8 @@
 //!   `perfil limite <id> --segundos N|--sem-limite`, `perfil janela <id> --dias seg,ter,... --janela HH:MM-HH:MM`.
 //! - `kioskd app criar --processo NOME.exe [--isento | --ignorar]` e `app listar`.
 //!
-//! Variáveis: `KIOSK_DB` (padrão `sqlite://kiosk.db`) e `KIOSK_LISTEN` (`ip:porta[,ip:porta...]`,
+//! Variáveis: `KIOSK_DB` (padrão `sqlite://C:/ProgramData/kiosk/kiosk.db` no Windows e
+//! `sqlite://kiosk.db` nos outros sistemas; o banco em uso é sempre informado) e `KIOSK_LISTEN` (`ip:porta[,ip:porta...]`,
 //! somente loopback e Tailscale).
 
 use std::net::SocketAddr;
@@ -35,7 +36,7 @@ const USO: &str = "uso:
   kioskd perfil janela <id-do-perfil> --dias seg,ter,qua,qui,sex --janela 08:00-20:00
   kioskd app criar --processo NOME.exe [--isento | --ignorar]
   kioskd app listar
-variáveis: KIOSK_DB (padrão sqlite://kiosk.db), KIOSK_LISTEN (ip:porta[,ip:porta...], obrigatória em `servir`)";
+variáveis: KIOSK_DB (padrão no Windows: sqlite://C:/ProgramData/kiosk/kiosk.db), KIOSK_LISTEN (ip:porta[,ip:porta...], obrigatória em `servir`)";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -49,8 +50,16 @@ async fn main() -> ExitCode {
     }
 }
 
+/// Banco padrão: no Windows, um lugar fixo da máquina, igual em qualquer janela e pasta.
+#[cfg(windows)]
+const BANCO_PADRAO: &str = "sqlite://C:/ProgramData/kiosk/kiosk.db";
+#[cfg(not(windows))]
+const BANCO_PADRAO: &str = "sqlite://kiosk.db";
+
 async fn abrir_banco() -> Result<KioskDbManager, String> {
-    let url = std::env::var("KIOSK_DB").unwrap_or_else(|_| "sqlite://kiosk.db".into());
+    let url = std::env::var("KIOSK_DB").unwrap_or_else(|_| BANCO_PADRAO.into());
+    // sem isto, uma janela sem KIOSK_DB criava outro banco em silêncio e os cadastros "sumiam"
+    eprintln!("kioskd: banco {url}");
     // cria a pasta do arquivo, se faltar (o SQLite cria o arquivo, não a pasta)
     if let Some(caminho) = url.strip_prefix("sqlite://") {
         let arquivo = caminho.split('?').next().unwrap_or(caminho);

@@ -393,3 +393,16 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: o runbook dentro do pacote da 0.0.2 é o anterior; o texto novo chega aos pacotes na próxima versão.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Segundo teste do dono no Windows e preparação da 0.0.3
+
+- **Origem**: logs do dono com a 0.0.2 (dados pessoais dos logs não são registrados aqui).
+- **Confirmado em Windows real**: `kioskd perfil criar --conta` com nome de conta com espaço resolveu o SID correto da conta da criança; `app criar` funcionou; `servir` escutou no IP Tailscale e no loopback com o agente ativo.
+- **Achados**:
+  - (defeito, fail-loud violado) sem `KIOSK_DB` na janela, o `kioskd` usava `sqlite://kiosk.db` na pasta atual e criava outro banco em silêncio: na segunda janela o perfil "sumiu" e o app foi cadastrado no banco errado;
+  - pareamento recusado (`403`) porque o código digitado não era o gerado por `kioskd codigo-pareamento`; a mensagem do CLI não explicava o código esperado;
+  - na 0.0.1 o `servir` falhava sem a pasta do banco (já corrigido na 0.0.2).
+- **Resultado**: banco padrão fixo no Windows (`C:\ProgramData\kiosk\kiosk.db`); todo comando do `kioskd` informa o banco em uso; mensagem de pareamento recusado explica o código e o banco; runbook com o banco padrão, o loopback para parear no próprio PC e o código de 8 caracteres; versão 0.0.3.
+- **Evidência**: clippy `-D warnings` limpo em Linux e no alvo Windows; testes novos em `tests/cli.rs` (banco informado em todo comando; mensagem do pareamento recusado) e em `tests/windows.rs` (sem `KIOSK_DB`, o padrão é o banco da máquina), este no CI em Windows.
+- **Pendente**: o teste de bloqueio do Bloco de Notas na conta da criança ainda não foi feito.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
