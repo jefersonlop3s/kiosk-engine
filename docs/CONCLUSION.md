@@ -376,3 +376,20 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Regra adotada pelo agente**: nada vindo de capturas de tela, logs ou mensagens do dono (IPs, nomes de conta, caminhos pessoais, SIDs) entra no repositório; exemplos usam marcadores ou endereços genéricos.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Versão 0.0.2 publicada
+
+- **Origem**: pedido do dono para lançar a 0.0.2 (cadastro de perfis e apps e runbook em PowerShell); registro feito junto com a mudança seguinte, a pedido do dono.
+- **Resultado**: jefersonlop3s/kiosk-engine#5 e jefersonlop3s/kiosk-engine#6 mesclados; o `release.yml` com `publicar: true` publicou o release [v0.0.2](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.2) como pré-lançamento, com a tag em `dc543d6` (depois da correção do runbook) e os arquivos:
+  - `kiosk-engine-v0.0.2-windows-x86_64.zip` (3 611 049 bytes, `sha256:9beff387c88a34c044c296f7a96edc6d9202c78780ac0aaa950c6f336aa2b9a3`);
+  - `kiosk-engine-v0.0.2-linux-x86_64.tar.gz` (3 501 364 bytes, `sha256:4124a7c9efd9af9fafcf1fafecead906c4a43f8f2408540e9e1fbc690d847f7f`);
+  - `SHA256SUMS.txt`.
+- **Evidência**: release consultado pela API do GitHub (`prerelease: true`, três arquivos `uploaded`). A primeira tentativa de publicação da 0.0.2 foi cancelada no build (incidente do IP, entrada anterior).
+- **Limitações**: os pacotes não foram baixados nem executados depois de publicados.
+
+## 2026-10-28 — Runbook: como identificar a conta da criança
+
+- **Origem**: dúvida do dono ao testar (ID do perfil × nome da conta × nome da pasta em `C:\Users`); ele apontou que o [runbook](runbooks/api-e-cli.md) não esclarecia.
+- **Resultado**: a seção 3 do runbook passa a explicar os três identificadores (nome da conta, SID, ID do perfil), que o nome da pasta do perfil pode diferir do nome da conta (conta renomeada, conta Microsoft), como descobrir nome e SID com `Get-LocalUser`, o uso de aspas para nomes com espaço, o cadastro por `--sid` e o caso de conta Microsoft (`whoami /user` na conta da criança).
+- **Limitações**: o runbook dentro do pacote da 0.0.2 é o anterior; o texto novo chega aos pacotes na próxima versão.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
