@@ -605,8 +605,7 @@ async fn endereco_sem_porta_explica_o_formato() {
     let s = kioskd(&m.db_url, Some("100.64.0.7"), &["servir"]);
     assert!(!s.status.success());
     assert!(
-        texto(&s.stderr).contains("falta a porta")
-            && texto(&s.stderr).contains("100.64.0.7:8443"),
+        texto(&s.stderr).contains("falta a porta") && texto(&s.stderr).contains("100.64.0.7:8443"),
         "{}",
         texto(&s.stderr)
     );
