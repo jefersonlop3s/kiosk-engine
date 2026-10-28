@@ -22,6 +22,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - Tempo total do perfil pela sessão ativa (`session_usage`, ADR-003) e política de lock seguido de logoff após 2 desbloqueios.
 - Assinatura Ed25519 de requisições, anti-replay por nonce, pareamento presencial por código de uso único e revogação de dispositivos (ADR-006, E-005 F2).
 - Protocolo serviço ↔ UI com decodificação defensiva, limite de taxa e monitor de batimento (ADR-004, parte independente de plataforma).
+- API de comando `POST /api/windows/{ação}` com as Camadas 0 a 5 (criar, ativar e revogar regras), respostas genéricas e escuta restrita a loopback e Tailscale (ADR-005, E-005 F1/F3).
 - Harness Sovereign: guard do agente, gates de git (pre-commit/pre-push) e contrato de validação em `.harness.toml` (E-001 F4).
 
 ### Corrigido

@@ -229,3 +229,20 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: o named pipe com DACL, a conferência do SID do cliente, o lançamento da UI na sessão (`CreateProcessAsUser`) e a bandeja exigem Windows e não existem; o monitor ainda não está ligado ao agente (o agente não recebe o batimento via `Sistema`).
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-005 F1 e núcleo da F3: servidor da API e ciclo de regras
+
+- **Origem**: aceite das ADR-005 e ADR-006 e pedido do dono para prosseguir.
+- **Resultado**:
+  - `src/comandos.rs` (Camada 3): `interpretar` valida `add_rule`, `activate_rule` e `revoke_rule` com esquema fechado, `daily_limit_seconds` até 86400, janela `HH:MM` estrita com início anterior ao fim e os dois limites juntos, `effective_until` RFC 3339 no futuro e UUIDs; o motivo exato é devolvido só para o log;
+  - `src/api.rs`: `roteador` com `POST /api/windows/{acao}` e as Camadas 0 a 5 em ordem (corpo ≤ 16 KiB → `autenticar` → `autorizar` → validação e existência de perfil/app/regra → operação auditada → `202`); o IP do evento é o da conexão; qualquer recusa responde `403 {"status":"rejected"}` idêntico e falha interna, `500 {"status":"error"}`;
+  - política de endereços da ADR-005 em `endereco_permitido`/`vincular`: só loopback e Tailscale; curinga e LAN recusados antes de abrir porta;
+  - `existe_perfil`, `existe_app` e `existe_regra` no banco.
+- **Evidência**: `cargo test --locked` → 13 testes HTTP reais em `tests/api.rs` (cliente TCP cru contra o serviço em loopback) e 100 no total, todos passando: ciclo criar → ativar → revogar com os eventos e o IP `127.0.0.1`; sem assinatura, replay, corpo adulterado, caminho trocado, timestamp velho, dispositivo revogado, 17 parâmetros inválidos (todos `403` idênticos e `VALIDATION_FAIL` registrado), corpo de 16 KiB + 1 (`413`) com o serviço seguindo de pé, `GET` (`405`) e rota inexistente (`404`). Quatro mutações deliberadas (sem checar referências, caminho fixo, aceitar LAN, IP fixo no log) reprovaram testes e foram revertidas; a primeira tentativa de mutação não compilou e foi refeita. Clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - cobre só `add_rule`, `activate_rule` e `revoke_rule`; faltam `modify_limit`, consultas de uso e log e o CLI dos pais (GC-14);
+  - modo LAN com HTTPS não implementado, a API recusa (GC-15);
+  - não há `main` que suba o serviço (GC-16);
+  - sem TLS: no Tailscale o transporte é cifrado pela VPN (ADR-005); em loopback o tráfego não sai da máquina;
+  - testado em Linux; comportamento do firewall do Windows e do Tailscale real não foi exercitado.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

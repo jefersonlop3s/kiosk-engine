@@ -544,6 +544,28 @@ impl KioskDbManager {
             consumo,
         ))
     }
+
+    pub async fn existe_perfil(&self, profile_id: Uuid) -> Result<bool, sqlx::Error> {
+        self.existe("child_profile", "profile_id", profile_id).await
+    }
+
+    pub async fn existe_app(&self, app_id: Uuid) -> Result<bool, sqlx::Error> {
+        self.existe("app_metadata", "app_id", app_id).await
+    }
+
+    pub async fn existe_regra(&self, rule_id: Uuid) -> Result<bool, sqlx::Error> {
+        self.existe("active_rules", "rule_id", rule_id).await
+    }
+
+    /// `tabela` e `coluna` são constantes internas; nunca vêm de entrada externa.
+    async fn existe(&self, tabela: &str, coluna: &str, id: Uuid) -> Result<bool, sqlx::Error> {
+        let n: i64 =
+            sqlx::query_scalar(&format!("SELECT count(*) FROM {tabela} WHERE {coluna} = ?"))
+                .bind(id.to_string())
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(n > 0)
+    }
 }
 
 /// Quem pediu a operação; vai para o `client_ip` do evento.

@@ -1,6 +1,6 @@
 # E-005 — API de comando e pareamento
 
-Estado: em andamento (F2 pronta em 2026-10-28; F1 e F3 pendentes). Responsável: a definir. Repositório: kiosk.
+Estado: em andamento (F1, F2 e o núcleo da F3 prontos em 2026-10-28; falta o CLI dos pais). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -28,7 +28,9 @@ Estado: em andamento (F2 pronta em 2026-10-28; F1 e F3 pendentes). Responsável:
 
 - F2, núcleo sem servidor HTTP: `assinatura` (string canônica `KIOSK-V1`, Ed25519 estrito, nonce, código de pareamento) e `pareamento` (Camada 1 `autenticar`, Camada 2 `autorizar`, pareamento presencial por código de uso único, revogação). Migração 0006: `paired_device`, `seen_nonce`, `pairing_code`.
 - Recusas respondem com `Rejeicao` genérica; o motivo exato vai para `AUTH_FAIL`/`AUTHZ_FAIL`/`VALIDATION_FAIL`.
-- Falta ligar tudo a um servidor HTTP (ADR-005: escuta só nos endereços configurados) e as Camadas 3 a 5.
+- F1 e núcleo da F3: `api` (axum) com `POST /api/windows/{ação}` atravessando as Camadas 0 a 5; `comandos` valida os parâmetros (esquema fechado, limites, horários `HH:MM`, referências existentes); ações `add_rule` (nasce `PENDING`), `activate_rule` e `revoke_rule`, cada uma com o evento de sucesso na mesma transação. Respostas: `202 {"status":"accepted"}` (com `id` ao criar), `403 {"status":"rejected"}` idêntico para qualquer recusa e `500` genérico; corpo máximo de 16 KiB.
+- Política de rede da ADR-005 aplicada em código: `vincular` só abre loopback e Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) e recusa curinga e LAN antes de abrir qualquer porta.
+- Faltam: CLI dos pais, `modify_limit`, consultas de uso e log, e o `main` do serviço (GC-14 a GC-16 no [PENDING](../PENDING.md)).
 
 ## Aceites
 
