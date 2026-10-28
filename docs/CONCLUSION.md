@@ -322,8 +322,8 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Resultado**:
   - `LICENSE` com o texto da GPL v2 da FSF (339 linhas), obtido do repositório do choosealicense.com e conferido contra a lista da SPDX (`GPL-2.0-only`): as diferenças são só as normalizações da SPDX ("Inc." × "Inc.,", marcadores de modelo). `gnu.org` está bloqueado pela política de rede da sessão;
   - `Cargo.toml`: `version = "0.0.1"` (a `0.1.0` anterior nunca foi lançada) e `license = "GPL-2.0-only"`;
-  - `CHANGELOG.md`: seção `[0.0.1] - 2026-10-28`, marcada como pré-lançamento;
-  - `.github/workflows/release.yml`: na tag `vX.Y.Z`, confere a versão do `Cargo.toml`, roda os testes e compila em Windows e Linux, empacota `kioskd`, `kioskctl`, `LICENSE`, `CHANGELOG.md` e o runbook, gera `SHA256SUMS.txt` e publica um release marcado como pré-lançamento com as notas da seção do CHANGELOG.
+  - [CHANGELOG](../CHANGELOG.md): seção `[0.0.1] - 2026-10-28`, marcada como pré-lançamento;
+  - `.github/workflows/release.yml`: na tag `vX.Y.Z`, confere a versão do `Cargo.toml`, roda os testes e compila em Windows e Linux, empacota `kioskd`, `kioskctl`, a licença, o CHANGELOG e o runbook, gera `SHA256SUMS.txt` e publica um release marcado como pré-lançamento com as notas da seção do CHANGELOG.
 - **Evidência**: `cargo test --locked` → 119 passando; extração das notas e conferência da versão ensaiadas localmente com `GITHUB_REF_NAME=v0.0.1`.
 - **Limitações**: o workflow de release ainda não rodou (só roda com a tag ou manualmente a partir de `main`); "GPL v2" foi registrado como `GPL-2.0-only`.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
