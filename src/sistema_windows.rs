@@ -19,7 +19,8 @@ use std::ptr::{null, null_mut};
 use windows_sys::Win32::Foundation::{CloseHandle, FALSE, HANDLE, INVALID_HANDLE_VALUE, LocalFree};
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows_sys::Win32::Security::{
-    GetTokenInformation, LookupAccountNameW, PSID, SID_NAME_USE, TOKEN_QUERY, TOKEN_USER, TokenUser,
+    GetTokenInformation, LookupAccountNameW, PSID, SID_NAME_USE, SidTypeUser, TOKEN_QUERY,
+    TOKEN_USER, TokenUser,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
@@ -194,14 +195,19 @@ fn sid_da_conta(dominio: &str, usuario: &str) -> Option<String> {
     } else {
         format!("{dominio}\\{usuario}")
     };
-    let conta = para_utf16(&conta);
+    procurar_conta(&conta).ok().map(|(sid, _)| sid)
+}
+
+/// SID e tipo de uma conta (`usuario` ou `DOMINIO\usuario`).
+fn procurar_conta(conta: &str) -> Result<(String, SID_NAME_USE), String> {
+    let nome = para_utf16(conta);
     let (mut tam_sid, mut tam_dom) = (0u32, 0u32);
     let mut uso: SID_NAME_USE = 0;
     // SAFETY: primeira chamada só mede os buffers; a segunda os preenche.
     unsafe {
         LookupAccountNameW(
             null(),
-            conta.as_ptr(),
+            nome.as_ptr(),
             null_mut(),
             &mut tam_sid,
             null_mut(),
@@ -209,13 +215,13 @@ fn sid_da_conta(dominio: &str, usuario: &str) -> Option<String> {
             &mut uso,
         );
         if tam_sid == 0 {
-            return None;
+            return Err(ultimo_erro(&format!("conta {conta:?} não encontrada")));
         }
         let mut sid = vec![0u8; tam_sid as usize];
         let mut dom = vec![0u16; tam_dom as usize];
         if LookupAccountNameW(
             null(),
-            conta.as_ptr(),
+            nome.as_ptr(),
             sid.as_mut_ptr() as PSID,
             &mut tam_sid,
             dom.as_mut_ptr(),
@@ -223,10 +229,20 @@ fn sid_da_conta(dominio: &str, usuario: &str) -> Option<String> {
             &mut uso,
         ) == FALSE
         {
-            return None;
+            return Err(ultimo_erro(&format!("LookupAccountNameW({conta:?})")));
         }
-        sid_em_texto(sid.as_mut_ptr() as PSID).ok()
+        Ok((sid_em_texto(sid.as_mut_ptr() as PSID)?, uso))
     }
+}
+
+/// SID de uma conta de **usuário** do Windows (recusa grupos, computadores etc.), para cadastrar
+/// o perfil de uma criança pelo nome da conta (ADR-002).
+pub fn sid_de_usuario(conta: &str) -> Result<String, String> {
+    let (sid, tipo) = procurar_conta(conta)?;
+    if tipo != SidTypeUser {
+        return Err(format!("{conta:?} não é uma conta de usuário"));
+    }
+    Ok(sid)
 }
 
 fn sessoes() -> Result<Vec<Sessao>, String> {

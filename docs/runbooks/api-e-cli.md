@@ -1,73 +1,94 @@
-# Runbook — serviço, pareamento e CLI dos pais
+# Runbook — instalar, cadastrar, parear e administrar
 
-Procedimento para subir a API de comando e administrar regras pelo CLI. Decisões de origem: [ADR-005](../adr/ADR-005-rede-da-api-de-comando.md) (rede) e [ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md) (assinatura e pareamento). Épico: [E-005](../epics/E-005-api-comando-e-pareamento.md).
+Procedimento para pôr o kiosk para funcionar num PC Windows e administrá-lo pelo CLI. Decisões de origem: [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (uma conta por criança), [ADR-005](../adr/ADR-005-rede-da-api-de-comando.md) (rede) e [ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md) (assinatura e pareamento). Épicos: [E-004](../epics/E-004-agente-windows-enforcement.md) e [E-005](../epics/E-005-api-comando-e-pareamento.md).
 
-> Estado em 2026-10-28: o serviço sobe **só a API**. O laço do agente que encerra apps e bloqueia a sessão ([E-004](../epics/E-004-agente-windows-enforcement.md)) ainda não está ligado a ele e depende do adaptador Windows. Validado em Linux (loopback); o firewall do Windows e a rede Tailscale reais não foram exercitados.
+> Pré-lançamento: o agente encerra apps em Windows real, mas bloqueio de sessão, logoff e avisos ainda não foram validados com uma criança logada. O `kioskd` ainda roda como programa de console, não como serviço do Windows. Não use como única proteção.
 
-## Compilar
+Todos os comandos abaixo são para o **PowerShell aberto como Administrador**, dentro da pasta extraída do pacote `kiosk-engine-v<versão>-windows-x86_64.zip`.
 
-```bash
-cargo build --release --locked
+## 1. Pré-requisitos
+
+- Uma conta local **padrão** (sem administrador) para cada criança; os pais usam outra conta, de administrador.
+- Tailscale instalado e conectado no PC e no dispositivo dos pais. Veja o IP do PC:
+
+  ```powershell
+  tailscale ip -4
+  ```
+
+## 2. Variáveis da sessão do PowerShell
+
+```powershell
+$env:KIOSK_DB = "sqlite://C:/ProgramData/kiosk/kiosk.db"
+$env:KIOSK_LISTEN = "100.95.52.48:8443"   # o IP do `tailscale ip -4`, com a porta
 ```
 
-Gera `kioskd` (serviço) e `kioskctl` (CLI dos pais) em `target/release/`.
+- `KIOSK_DB`: onde fica o banco. A pasta é criada se faltar. O arquivo tem dados de crianças: deixe a pasta acessível só a SYSTEM e Administradores.
+- `KIOSK_LISTEN`: `ip:porta`, obrigatória para `servir`. Só são aceitos loopback (`127.0.0.1`, `::1`) e a rede Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`); `0.0.0.0` e endereços de LAN são recusados.
+- As variáveis valem só para a janela atual do PowerShell; defina-as de novo em cada janela.
 
-## Configurar o serviço (conta de administrador do PC)
+## 3. Cadastrar a criança e os apps
 
-| Variável | Significado | Padrão |
-|---|---|---|
-| `KIOSK_DB` | URL do SQLite, por exemplo `sqlite://C:/ProgramData/kiosk/kiosk.db` | `sqlite://kiosk.db` |
-| `KIOSK_LISTEN` | endereços de escuta `ip:porta[,ip:porta...]` | **nenhum: o serviço recusa iniciar** |
-
-Endereços aceitos: loopback (`127.0.0.1`, `::1`) e a rede Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`). O serviço **recusa** `0.0.0.0`, `::` e qualquer endereço de LAN antes de abrir a porta. Use o IP Tailscale do PC (`tailscale ip -4`).
-
-```bash
-KIOSK_DB=sqlite://kiosk.db KIOSK_LISTEN=100.64.0.7:8443 kioskd servir
+```powershell
+.\kioskd.exe perfil criar --conta ana --nome "Ana" --limite-total 7200
+.\kioskd.exe perfil janela <id-do-perfil> --dias seg,ter,qua,qui,sex --janela 08:00-20:00
+.\kioskd.exe app criar --processo Roblox.exe
+.\kioskd.exe app criar --processo escola.exe --isento
+.\kioskd.exe perfil listar
+.\kioskd.exe app listar
 ```
 
-O banco é criado e migrado na primeira execução. O arquivo `.db` contém dados de crianças: proteja-o com permissão só para SYSTEM e Administradores e não o copie para fora do PC.
+- `--conta` é o nome da conta Windows da criança; o SID é obtido do próprio Windows. Grupos e contas inexistentes são recusados.
+- `--limite-total` (segundos) é o tempo de computador por dia; `perfil limite <id> --segundos N` ou `--sem-limite` muda depois.
+- Dia sem janela cadastrada não tem restrição de horário.
+- Os comandos `criar` imprimem o id que os outros comandos usam.
+- App **monitorado** (padrão) só é restringido por regras; `--isento` nunca é encerrado; `--ignorar` fica fora do controle.
+- O nome do processo é o do `.exe` (veja no Gerenciador de Tarefas, aba Detalhes). Renomear o `.exe` burla a identificação: limitação conhecida.
 
-## Parear o dispositivo dos pais
+## 4. Subir o serviço
 
-1. Na conta de administrador do PC, gere o código (uso único, válido por 5 minutos):
-
-   ```bash
-   kioskd codigo-pareamento
-   ```
-
-2. No dispositivo dos pais:
-
-   ```bash
-   kioskctl parear --servidor 100.64.0.7:8443 --codigo ABCD2345 --nome "Celular da mãe"
-   ```
-
-   O CLI gera o par de chaves Ed25519, envia só a chave pública e grava `credenciais.json` com a chave privada (permissão `0600` no Unix). Local do arquivo: `KIOSK_CREDENCIAIS`, ou `~/.config/kiosk/credenciais.json` (`%APPDATA%\kiosk\credenciais.json` no Windows).
-
-Dez códigos errados em 5 minutos bloqueiam novos pareamentos por esse período (não afetam dispositivos já pareados).
-
-## Administrar regras
-
-```bash
-kioskctl regra criar --perfil <id-do-perfil> --app <id-do-app> --limite 3600 --janela 08:00-20:00
-kioskctl regra ativar <id-da-regra>
-kioskctl regra revogar <id-da-regra>
+```powershell
+.\kioskd.exe servir
 ```
 
-```bash
-kioskctl regra limite <id-da-regra> --segundos 5400      # altera o limite diário (regra não revogada)
-kioskctl uso --perfil <id-do-perfil> [--data 2026-03-09] # tempo de sessão e por app do dia
-kioskctl log --perfil <id-do-perfil> [--dias 7] [--limite 100]
+Deve aparecer `escutando em 100.95.52.48:8443` e `agente de enforcement ativo (tick de 2s)`. Deixe a janela aberta. O Windows pode pedir permissão de firewall para a porta: libere só para redes privadas (a Tailscale).
+
+## 5. Parear o dispositivo dos pais
+
+Numa **segunda** janela do PowerShell, com o mesmo `$env:KIOSK_DB`:
+
+```powershell
+.\kioskd.exe codigo-pareamento
 ```
 
-- A regra nasce **pendente**; só `ativar` a põe em vigor.
-- `--limite` em segundos (até 86400); `--janela` em `HH:MM-HH:MM`; `--ate` em RFC 3339 (no futuro). Todos opcionais.
-- Se o serviço recusar, o CLI diz apenas "recusou o comando": a resposta é genérica de propósito. O motivo exato está no log do PC (`security_log`, eventos `AUTH_FAIL`, `AUTHZ_FAIL` ou `VALIDATION_FAIL`).
+O código é de uso único e vale por 5 minutos. No dispositivo dos pais, com o `kioskctl` do pacote:
 
-## Dispositivos
+```powershell
+.\kioskctl.exe parear --servidor 100.95.52.48:8443 --codigo ABCD2345 --nome "Celular da mãe"
+```
 
-```bash
-kioskd dispositivos          # lista id, nome e estado
-kioskd revogar <id>          # vale na próxima requisição
+O CLI gera o par de chaves Ed25519, envia só a chave pública e grava `credenciais.json` com a chave privada (`%APPDATA%\kiosk\credenciais.json` no Windows, `~/.config/kiosk/credenciais.json` no Linux e macOS, ou `KIOSK_CREDENCIAIS`). Dez códigos errados em 5 minutos bloqueiam novos pareamentos por esse período.
+
+## 6. Administrar as regras
+
+```powershell
+.\kioskctl.exe regra criar --perfil <id-do-perfil> --app <id-do-app> --limite 3600 --janela 08:00-20:00
+.\kioskctl.exe regra ativar <id-da-regra>
+.\kioskctl.exe regra limite <id-da-regra> --segundos 5400
+.\kioskctl.exe regra revogar <id-da-regra>
+.\kioskctl.exe uso --perfil <id-do-perfil> [--data 2026-03-09]
+.\kioskctl.exe log --perfil <id-do-perfil> [--dias 7] [--limite 100]
+```
+
+- A regra nasce **pendente**; só `ativar` a põe em vigor. Regra com `--limite 0` bloqueia o app.
+- `--limite` em segundos (até 86400); `--janela` em `HH:MM-HH:MM`; `--ate` em RFC 3339 (no futuro).
+- Se o serviço recusar, o CLI diz apenas que recusou: a resposta é genérica de propósito. O motivo exato fica no log do PC.
+- O `log` mostra o detalhe dos eventos de enforcement, mas não o das falhas de autenticação, autorização e validação.
+
+## 7. Dispositivos
+
+```powershell
+.\kioskd.exe dispositivos          # lista id, nome e estado
+.\kioskd.exe revogar <id>          # vale na próxima requisição
 ```
 
 Perdeu o celular: revogue o dispositivo no PC e pareie outro.
@@ -75,6 +96,6 @@ Perdeu o celular: revogue o dispositivo no PC e pareie outro.
 ## Limitações conhecidas
 
 - Sem segundo fator: um dispositivo pareado e desbloqueado nas mãos da criança comanda tudo (ADR-006).
-- O `log` mostra o detalhe dos eventos de enforcement, mas não o das falhas de autenticação, autorização e validação (esse fica só no banco do PC).
-- Sem modo LAN com HTTPS (GC-15).
+- Sem modo LAN com HTTPS (GC-15 no [PENDING](../PENDING.md)).
+- Avisos são caixas de mensagem do Windows até existir a bandeja (GC-17); bloqueio desconecta a sessão (GC-18).
 - Quem alcança a porta pode errar códigos de pareamento de propósito e bloquear um pareamento novo por 5 minutos (GC-13).

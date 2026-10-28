@@ -176,3 +176,72 @@ async fn o_agente_encerra_o_app_bloqueado_e_nao_toca_no_app_isento() {
     assert!(n >= 1);
     let _ = permitido.kill();
 }
+
+const KIOSKD: &str = env!("CARGO_BIN_EXE_kioskd");
+
+#[test]
+fn perfil_criado_pelo_nome_da_conta_recebe_o_sid_do_windows() {
+    let dir = tempfile::tempdir().unwrap();
+    let db_url = format!("sqlite://{}", dir.path().join("k.db").display());
+    let conta = String::from_utf8_lossy(&Command::new("whoami").output().unwrap().stdout)
+        .trim()
+        .to_owned();
+    let saida = Command::new(KIOSKD)
+        .args([
+            "perfil",
+            "criar",
+            "--conta",
+            &conta,
+            "--nome",
+            "Conta do teste",
+        ])
+        .env("KIOSK_DB", &db_url)
+        .output()
+        .unwrap();
+    assert!(
+        saida.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saida.stderr)
+    );
+    let lista = Command::new(KIOSKD)
+        .args(["perfil", "listar"])
+        .env("KIOSK_DB", &db_url)
+        .output()
+        .unwrap();
+    let lista = String::from_utf8_lossy(&lista.stdout);
+    assert!(
+        lista.contains(&sid_atual()),
+        "SID esperado {} em {lista}",
+        sid_atual()
+    );
+
+    let inexistente = Command::new(KIOSKD)
+        .args([
+            "perfil",
+            "criar",
+            "--conta",
+            "conta-que-nao-existe-kiosk",
+            "--nome",
+            "X",
+        ])
+        .env("KIOSK_DB", &db_url)
+        .output()
+        .unwrap();
+    assert!(!inexistente.status.success());
+    let grupo = Command::new(KIOSKD)
+        .args([
+            "perfil",
+            "criar",
+            "--conta",
+            "BUILTIN\\Administrators",
+            "--nome",
+            "X",
+        ])
+        .env("KIOSK_DB", &db_url)
+        .output()
+        .unwrap();
+    assert!(
+        !grupo.status.success(),
+        "um grupo não pode virar perfil de criança"
+    );
+}

@@ -352,3 +352,17 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: os pacotes não foram baixados nem executados depois da publicação; a tag está no merge do PR #3 (inclui o ajuste do workflow), não no merge do PR #2; continuam valendo as limitações da versão (sem validação interativa de bloqueio, logoff e avisos; `kioskd` ainda não é serviço do Windows).
 - **Commit**: este registro (branch `claude/hopeful-curie-egiw07`).
 
+## 2026-10-28 — Primeiro teste do dono no Windows e preparação da 0.0.2
+
+- **Origem**: o dono tentou subir a 0.0.1 no próprio PC seguindo o [runbook](runbooks/api-e-cli.md) e recebeu erro do PowerShell e do cmd.
+- **Achados** (erros do agente):
+  - o runbook usava sintaxe de bash (`KIOSK_DB=... kioskd servir`), que não existe no PowerShell nem no cmd, e o exemplo de `KIOSK_LISTEN` não mostrava a porta com clareza;
+  - não havia nenhum comando nem endpoint para cadastrar o perfil da criança (SID) e os apps; a API só cria regras para perfis e apps existentes, então o serviço subia sem nada a controlar. Os testes cobriam o fluxo porque cadastravam pela biblioteca, não pelo produto.
+- **Resultado**:
+  - `kioskd perfil criar|listar|limite|janela` e `kioskd app criar|listar`; `--conta` resolve o SID pelo Windows (`sistema_windows::sid_de_usuario`, recusa grupos), `--sid` explícito nos outros sistemas; `KioskDbManager::{listar_perfis, listar_apps, janelas_do_perfil, set_profile_limit}` (este auditado como `MODIFY_LIMIT`);
+  - `kioskd` cria a pasta do banco; `KIOSK_LISTEN` sem porta explica o formato;
+  - runbook reescrito em PowerShell, com o fluxo completo do zero (variáveis, cadastro, serviço, pareamento, regras); versão 0.0.2 no `Cargo.toml` e no [CHANGELOG](../CHANGELOG.md).
+- **Evidência**: `cargo clippy --all-targets --locked -- -D warnings` limpo em Linux e no alvo `x86_64-pc-windows-gnu`; `tests/cli.rs` com 2 testes novos (cadastro e listagem de perfil, janela, limite e apps pelo `kioskd`, erros de SID, dia, janela, duplicidade, perfil inexistente, criação da pasta do banco e a regra criada pelo `kioskctl` com os ids impressos; endereço sem porta). `tests/windows.rs` ganha o teste de `perfil criar --conta` com o SID do `whoami` e a recusa de conta inexistente e de grupo, que roda no CI em Windows.
+- **Limitações**: o fluxo no PC do dono ainda não foi repetido com a 0.0.2.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
