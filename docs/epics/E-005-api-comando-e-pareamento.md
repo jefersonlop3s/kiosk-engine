@@ -1,0 +1,36 @@
+# E-005 — API de comando e pareamento
+
+Estado: proposto. Responsável: a definir. Repositório: kiosk.
+
+## Resultado e escopo
+
+**Resultado observável**: um dispositivo dos pais previamente pareado cria, altera e revoga regras e consulta uso e log pela API local do serviço. Toda requisição passa pelas Camadas 0–5 da arquitetura e responde de forma genérica (`202 Accepted` ou erro sem detalhe).
+
+- **Inclui**: pareamento (troca de chave pública numa ação presencial na conta de admin), assinatura das requisições (*proof-of-possession*), autorização por papel, validação de parâmetros, transição atômica de `Active_Rules` com evento no log, e um cliente CLI mínimo para os pais (substituto do app mobile no MVP).
+- **Exclui**: o app mobile ([E-006](E-006-app-mobile-administracao.md)).
+
+## Origem e decisões
+
+- [Arquitetura](../architecture/README.md), Seção III (Camadas 0–5) e `POST /api/windows/{action}`.
+- **Hipóteses a confirmar com o dono**:
+  - `client_ip: 100.x.x.x` na arquitetura sugere acesso pela faixa CGNAT do Tailscale. A topologia de rede (só LAN ou VPN mesh) não foi decidida.
+  - O esquema de assinatura (algoritmo, anti-replay) não foi decidido.
+
+  Ambas são estruturais e exigem ADR antes de F1.
+
+## Fases e dependências
+
+| Fase | Entrega | Depende de | Evidência |
+|---|---|---|---|
+| F1 | Servidor HTTP no serviço, Camadas 0 e 3 (recepção e validação) | [E-001](E-001-fundacao-crate-e-dados.md), [E-002](E-002-log-forense.md) F1, ADR de rede | Testes HTTP reais contra o serviço |
+| F2 | Pareamento e Camadas 1 e 2 (autenticação e autorização) | F1, ADR de assinatura | Teste negativo: requisição sem assinatura, com assinatura inválida ou repetida (replay) gera `AUTH_FAIL` |
+| F3 | Camadas 4 e 5 + CLI dos pais | F2, [E-003](E-003-motor-de-regras-e-uso.md) | Ciclo completo criar → ativar → revogar via CLI |
+
+## Aceites
+
+- Nenhuma resposta externa vaza `rejection_reason_detail`.
+- Sem superfície linguística na API; mensagens do CLI em pt-BR.
+
+## Encerramento
+
+A preencher.
