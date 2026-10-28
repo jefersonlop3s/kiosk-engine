@@ -1,6 +1,6 @@
 # ADR-004 — Comunicação serviço ↔ UI por named pipe
 
-Status: Proposto. Data: 2026-10-28. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-28 pelo dono (Jeferson Lopes). Data: 2026-10-28. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; [E-004](../epics/E-004-agente-windows-enforcement.md) F3 e F4.
 
 ## Contexto

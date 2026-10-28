@@ -175,3 +175,14 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: nenhum código novo neste registro; a implementação das duas ADRs vem em commits próprios.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Aceite das ADR-004 e ADR-005 e confirmação de semânticas do motor
+
+- **Origem**: respostas do dono às perguntas da sessão em 2026-10-28.
+- **Decidido**:
+  - [ADR-004](adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md) e [ADR-005](adr/ADR-005-rede-da-api-de-comando.md) passam a **Aceito** (as quatro ADRs do agente e da API estão aceitas);
+  - motor: app `MONITORED` sem regra vigente é **permitido** e dia sem janela cadastrada é **sem restrição de horário** (confirmados; deixam de ser pendência);
+  - sessão (GC-12): **lock e, se a criança desbloquear 2 vezes, logoff**.
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros antes do commit.
+- **Limitações**: sem código neste registro; a política de logoff, o tempo de sessão (ADR-003), o protocolo da UI (ADR-004), a verificação de assinatura (ADR-006) e o servidor (ADR-005) vêm em commits próprios.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

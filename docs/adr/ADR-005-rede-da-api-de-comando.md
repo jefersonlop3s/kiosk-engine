@@ -1,6 +1,6 @@
 # ADR-005 — Topologia de rede da API de comando
 
-Status: Proposto. Data: 2026-10-28. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-28 pelo dono (Jeferson Lopes). Data: 2026-10-28. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; [E-005](../epics/E-005-api-comando-e-pareamento.md) F1.
 
 ## Contexto
