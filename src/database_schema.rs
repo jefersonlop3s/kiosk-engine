@@ -14,7 +14,6 @@ pub struct AppMetadata {
     // process_name: Nome exato do .exe ou binário que está sendo monitorado.
     pub process_name: String,
     // current_status: Status de monitoramento (MONITORED, WHITELISTED, IGNORE). É o estado lógico da regra.
-    #[derive(Debug, PartialEq)]
     pub status: ProcessStatus, 
 }
 
@@ -40,7 +39,6 @@ pub struct ActiveRule {
     // creation_timestamp: Quando a regra foi criada/ativada pela primeira vez. Essencial para rastreabilidade histórica.
     pub creation_timestamp: DateTime<Utc>, 
     // current_state: Status do ciclo de vida (PENDING -> ACTIVE -> REVOKED). É o estado *vivo*.
-    #[derive(Debug, PartialEq)]
     pub state: RuleState,
     // daily_limit_seconds: Limite máximo em segundos. Se for NULL no DB, usamos Option<u64>. Aqui representamos como u64 com um valor especial (0) para "Sem Limite".
     pub daily_limit_seconds: u64, 
@@ -73,7 +71,6 @@ pub struct SecurityEvent {
     // action_attempted: A intenção do cliente (Ex: ADD_RULE, MODIFY_LIMIT, REVOKE). O que ele *tentou* fazer?
     pub action_attempted: ActionType, 
     // status: Resultado da transação (SUCCESS ou FAILURE). Foi aceito ou rejeitado pelo Daemon Core.
-    #[derive(Debug, PartialEq)]
     pub transaction_status: TransactionStatus,
     // REJECTION_REASON_DETAIL (CRÍTICO): Texto livre detalhado com a razão EXATA do bloqueio/falha. 
     // Este é o campo que armazena os "porquês" forenses e deve ser robusto para textos longos.
@@ -81,7 +78,7 @@ pub struct SecurityEvent {
 }
 
 /// Enum para as ações críticas registradas (a intenção).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ActionType {
     AddRule, 
     ModifyLimit, 
@@ -90,7 +87,7 @@ pub enum ActionType {
 }
 
 /// Enum para o resultado da transação (o que realmente aconteceu).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TransactionStatus {
     Success, // A intenção foi executada com sucesso e alterou o estado do sistema corretamente.
     Failure, // O comando falhou por erro interno ou validação de dados.
