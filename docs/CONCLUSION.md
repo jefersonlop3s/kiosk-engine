@@ -291,3 +291,16 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - não li os logs dos passos, só a conclusão por passo.
 - **Commit**: `216f8da` (branch `claude/hopeful-curie-egiw07`).
 
+## 2026-10-28 — E-004: adaptador Win32 e agente ligado ao serviço
+
+- **Origem**: pedido do dono para prosseguir com o adaptador Windows (ADR-002, ADR-003 e ADR-004 aceitas).
+- **Resultado**:
+  - `src/sistema_windows.rs` (`cfg(windows)`, `windows-sys` 0.59): listar processos com o SID do dono, sessões logadas e desbloqueadas, encerrar processo, bloquear sessão (`WTSDisconnectSession`, GC-18), logoff (`WTSLogoffSession`) e aviso (`WTSSendMessageW`, provisório até a bandeja, GC-17); todo `unsafe` com comentário `SAFETY` e handles fechados por `Drop`;
+  - `src/textos.rs`: mensagens pt-BR à criança (quanto falta, por quê, o que acontece; sem SID nem códigos internos);
+  - `agente::rodar_em_laco` e `kioskd servir` com o agente no Windows (tick de 2 s) e limpeza diária do log; `--sem-agente`; fora do Windows só a API;
+  - `tests/windows.rs`: SID do processo igual ao do `whoami /user`, `TerminateProcess` real num `ping`, falha alta para PID inexistente, consulta de sessões e o agente completo encerrando um `PING.EXE` bloqueado sem tocar num `powershell.exe` isento (controle negativo).
+- **Evidência local**: `cargo clippy --all-targets --locked --target x86_64-pc-windows-gnu -- -D warnings` limpo (mingw instalado no container); um erro proposital no módulo foi detectado, provando que ele é compilado; `cargo test --locked` em Linux → 119 passando (4 de textos e 1 do laço novos).
+- **Evidência em Windows**: registrada na entrada seguinte, após a execução do CI.
+- **Limitações**: o `kioskd` ainda não é um serviço do Windows (GC-16); bloqueio, logoff e aviso não podem ser exercitados no CI (sem sessão interativa); a criança pode renomear o `.exe` (risco aceito na ADR-003).
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

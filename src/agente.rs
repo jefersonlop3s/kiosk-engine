@@ -649,3 +649,28 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         }
     }
 }
+
+/// Roda o agente a cada `intervalo` até `continuar` devolver `false`. Cada relatório é entregue a
+/// `continuar` (o serviço registra os erros no seu log; o log forense já foi gravado no tick).
+pub async fn rodar_em_laco<S, Tz, F>(
+    db: &KioskDbManager,
+    sistema: S,
+    tz: Tz,
+    intervalo: std::time::Duration,
+    mut continuar: F,
+) where
+    S: Sistema,
+    Tz: TimeZone,
+    F: FnMut(&Relatorio) -> bool,
+{
+    let mut agente = Agente::new(db, sistema, tz);
+    let mut relogio = tokio::time::interval(intervalo);
+    relogio.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        relogio.tick().await;
+        let rel = agente.tick(Utc::now()).await;
+        if !continuar(&rel) {
+            break;
+        }
+    }
+}

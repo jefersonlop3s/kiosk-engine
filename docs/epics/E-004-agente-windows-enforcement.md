@@ -1,6 +1,6 @@
 # E-004 — Agente Windows de enforcement
 
-Estado: em andamento (núcleo independente de SO entregue em 2026-10-28; fases F0 a F4 aguardam Windows real e o aceite das ADR-003 e ADR-004). Responsável: a definir. Repositório: kiosk.
+Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam SCM, bandeja e teste em sessão interativa). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -44,6 +44,13 @@ Estado: em andamento (núcleo independente de SO entregue em 2026-10-28; fases F
 - Política de sessão decidida pelo dono: lock e, após 2 desbloqueios com a restrição valendo, logoff (`Sistema::encerrar_sessao`).
 - Protocolo serviço ↔ UI ([ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md)) independente de transporte: mensagens JSON por linha versionadas, decodificação defensiva da entrada da UI, limite de taxa e monitor de batimento (3 batimentos perdidos = alerta único). O named pipe com DACL e a UI de bandeja exigem Windows.
 - Testes com `Sistema` falso contra SQLite real. O adaptador Win32, o pipe da UI e o total por sessão ficam para depois do aceite das ADRs.
+
+## Adaptador Win32 (2026-10-28)
+
+- `sistema_windows::SistemaWindows` implementa `Sistema`: processos por `CreateToolhelp32Snapshot` com o SID do dono (`TokenUser`); sessões logadas e desbloqueadas por `WTSEnumerateSessionsW` + `WTSSessionInfoEx`; `TerminateProcess`; bloqueio por `WTSDisconnectSession`; logoff por `WTSLogoffSession`; avisos por `WTSSendMessageW` (provisório até a bandeja, GC-17).
+- `kioskd servir` roda o agente a cada 2 s e a limpeza diária do log; `--sem-agente` desliga o agente.
+- Textos pt-BR dos avisos em `textos` (testáveis fora do Windows).
+- F0 resolvida por dois caminhos: verificação cruzada local (`--target x86_64-pc-windows-gnu`, com mingw) e o runner `windows-latest` do CI, que roda `tests/windows.rs` em Windows real.
 
 ## Aceites
 

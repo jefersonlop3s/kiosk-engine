@@ -674,3 +674,49 @@ async fn leituras_do_banco_para_o_motor_perfil_por_sid_app_sem_caixa_e_janela_do
         Decisao::Permitir
     );
 }
+
+#[tokio::test]
+async fn o_laco_roda_ate_ser_interrompido_e_pode_rodar_em_outra_tarefa() {
+    let m = mundo(None).await;
+    m.regra(&m.jogo, Some(0)).await;
+    let db = std::sync::Arc::new(m.db);
+    let db2 = db.clone();
+    // tokio::spawn exige Send: prova de compilação de que o serviço pode rodar o laço em segundo plano
+    let tarefa = tokio::spawn(async move {
+        let fake = Fake {
+            processos: vec![proc(5, "jogo.exe", SID)],
+            ..Default::default()
+        };
+        let mut ticks = 0;
+        let mut encerramentos = 0;
+        rodar_em_laco(
+            &db2,
+            fake,
+            Utc,
+            std::time::Duration::from_millis(10),
+            |rel| {
+                ticks += 1;
+                encerramentos += rel
+                    .acoes
+                    .iter()
+                    .filter(|a| matches!(a, Acao::Encerrou { .. }))
+                    .count();
+                ticks < 3
+            },
+        )
+        .await;
+        (ticks, encerramentos)
+    });
+    let (ticks, encerramentos) = tarefa.await.unwrap();
+    assert_eq!(ticks, 3);
+    assert_eq!(
+        encerramentos, 1,
+        "encerra uma vez e respeita a tolerância nos ticks seguintes"
+    );
+    let n: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM security_log WHERE event_type = 'APP_TERMINATED'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(n, 1);
+}

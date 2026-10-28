@@ -1,6 +1,8 @@
 //! Serviço do kiosk. Uso:
 //!
-//! - `kioskd servir`: sobe a API de comando (exige `KIOSK_LISTEN`, sem valor padrão — ADR-005).
+//! - `kioskd servir [--sem-agente]`: sobe a API de comando (exige `KIOSK_LISTEN`, sem valor
+//!   padrão — ADR-005) e, no Windows, o agente de enforcement (tick de 2 s) e a limpeza diária
+//!   do log (retenção de 90 dias). Fora do Windows só a API sobe.
 //! - `kioskd codigo-pareamento`: gera o código de pareamento (válido por 5 min) para digitar no
 //!   dispositivo dos pais. Rodar na conta de administrador do PC.
 //! - `kioskd dispositivos`: lista os dispositivos pareados.
@@ -18,7 +20,7 @@ use kiosk_engine::api;
 use kiosk_engine::db_manager::{EventContext, KioskDbManager};
 use uuid::Uuid;
 
-const USO: &str = "uso: kioskd <servir | codigo-pareamento | dispositivos | revogar <id>>\n\
+const USO: &str = "uso: kioskd <servir [--sem-agente] | codigo-pareamento | dispositivos | revogar <id>>\n\
 variáveis: KIOSK_DB (padrão sqlite://kiosk.db), KIOSK_LISTEN (ip:porta[,ip:porta...], obrigatória em `servir`)";
 
 #[tokio::main]
@@ -55,6 +57,53 @@ fn enderecos() -> Result<Vec<SocketAddr>, String> {
         .collect()
 }
 
+/// Limpeza do log forense (retenção de 90 dias), na partida e a cada 24 h.
+fn iniciar_manutencao(db: Arc<KioskDbManager>) {
+    tokio::spawn(async move {
+        let mut relogio = tokio::time::interval(std::time::Duration::from_secs(24 * 3600));
+        loop {
+            relogio.tick().await;
+            match db.purge_expired_events(&EventContext::local()).await {
+                Ok(0) => {}
+                Ok(n) => eprintln!("kioskd: retenção: {n} eventos antigos removidos"),
+                Err(e) => eprintln!("kioskd: retenção falhou: {e}"),
+            }
+        }
+    });
+}
+
+/// Intervalo do agente (ADR-003: polling de 2 s).
+#[cfg(windows)]
+const TICK_AGENTE: std::time::Duration = std::time::Duration::from_secs(2);
+
+#[cfg(windows)]
+fn iniciar_agente(db: Arc<KioskDbManager>) {
+    eprintln!(
+        "kioskd: agente de enforcement ativo (tick de {}s)",
+        TICK_AGENTE.as_secs()
+    );
+    tokio::spawn(async move {
+        kiosk_engine::agente::rodar_em_laco(
+            &db,
+            kiosk_engine::sistema_windows::SistemaWindows,
+            chrono::Local,
+            TICK_AGENTE,
+            |rel| {
+                for e in &rel.erros {
+                    eprintln!("kioskd: agente: {e}");
+                }
+                true
+            },
+        )
+        .await;
+    });
+}
+
+#[cfg(not(windows))]
+fn iniciar_agente(_db: Arc<KioskDbManager>) {
+    eprintln!("kioskd: agente de enforcement só existe no Windows; servindo apenas a API");
+}
+
 async fn executar(args: &[String]) -> Result<(), String> {
     match args
         .iter()
@@ -62,10 +111,19 @@ async fn executar(args: &[String]) -> Result<(), String> {
         .collect::<Vec<_>>()
         .as_slice()
     {
-        ["servir"] => {
+        ["servir", resto @ ..] => {
+            let com_agente = match resto {
+                [] => true,
+                ["--sem-agente"] => false,
+                _ => return Err(USO.to_string()),
+            };
             let enderecos = enderecos()?;
             api::validar_enderecos(&enderecos).map_err(|e| e.to_string())?;
             let db = Arc::new(abrir_banco().await?);
+            iniciar_manutencao(db.clone());
+            if com_agente {
+                iniciar_agente(db.clone());
+            }
             let lista: Vec<String> = enderecos.iter().map(ToString::to_string).collect();
             eprintln!("kioskd: escutando em {}", lista.join(", "));
             api::servir_em(db, &enderecos)
