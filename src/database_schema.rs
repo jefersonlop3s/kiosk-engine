@@ -1,58 +1,153 @@
-// sovereign-pair/src/database_schema.rs
+// Contrato do dado (arquitetura Seção II + ADR-002). Os nomes de campo espelham as colunas das migrações.
 
+use chrono::{DateTime, NaiveTime, Utc};
+use sqlx::{Error, FromRow};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
-/// ===================================================
-/// 🛡️ TABELA: AppMetadata
-/// Mapeia os processos sob vigilância (o que está sendo monitorado).
-/// ===================================================
-#[derive(Debug, Clone)]
+/// Formato de hora das janelas no banco.
+pub(crate) const HHMM: &str = "%H:%M";
+
+fn decode<T, E: std::error::Error + Send + Sync + 'static>(r: Result<T, E>) -> Result<T, Error> {
+    r.map_err(|e| Error::Decode(Box::new(e)))
+}
+
+fn bad_value(coluna: &str, valor: &str) -> Error {
+    Error::Decode(format!("valor inválido em {coluna}: {valor:?}").into())
+}
+
+/// Processos sob vigilância.
+#[derive(Debug, Clone, PartialEq)]
 pub struct AppMetadata {
-    // app_id (PK): UUID único. Essencial para referências cruzadas e integridade de chave estrangeira.
-    pub app_id: Uuid, 
-    // process_name: Nome exato do .exe ou binário que está sendo monitorado.
+    pub app_id: Uuid,
+    /// Nome exato do `.exe` monitorado.
     pub process_name: String,
-    // current_status: Status de monitoramento (MONITORED, WHITELISTED, IGNORE). É o estado lógico da regra.
-    pub status: ProcessStatus, 
+    pub status: ProcessStatus,
 }
 
-/// Enum para representar os estados lógicos do AppMetadata.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ProcessStatus {
-    Monitored,      // O processo está ativo e sob vigilância ativa (requer check constante)
-    Whitelisted,    // O processo foi aprovado; não deve ser alvo de controle por regras específicas.
-    Ignored,        // Processo que o sistema decide ignorar intencionalmente.
+    Monitored,
+    Whitelisted,
+    Ignored,
 }
 
-/// ===================================================
-/// 🛡️ TABELA: ActiveRules
-/// Contém o estado VIVO da regra (O ciclo de vida do controle).
-/// Esta é a tabela principal para transações críticas.
-/// ===================================================
-#[derive(Debug, Clone)]
+impl ProcessStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Monitored => "MONITORED",
+            Self::Whitelisted => "WHITELISTED",
+            Self::Ignored => "IGNORE",
+        }
+    }
+}
+
+/// Perfil de criança, vinculado ao SID da conta Windows (ADR-002).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChildProfile {
+    pub profile_id: Uuid,
+    pub windows_sid: String,
+    pub display_name: String,
+    /// `None` = sem limite diário total.
+    pub daily_total_limit_seconds: Option<u64>,
+}
+
+/// Janela de horário local, `start < end`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimeWindow {
+    pub start: NaiveTime,
+    pub end: NaiveTime,
+}
+
+/// Estado vivo da regra (ciclo PENDING -> ACTIVE -> REVOKED).
+#[derive(Debug, Clone, PartialEq)]
 pub struct ActiveRule {
-    // rule_id (PK): UUID único para esta instância da regra. 
     pub rule_id: Uuid,
-    // app_id (FK): O alvo deste controle (referência a AppMetadata). Garante que o alvo existe e é válido.
-    pub target_app_id: Uuid,
-    // creation_timestamp: Quando a regra foi criada/ativada pela primeira vez. Essencial para rastreabilidade histórica.
-    pub creation_timestamp: DateTime<Utc>, 
-    // current_state: Status do ciclo de vida (PENDING -> ACTIVE -> REVOKED). É o estado *vivo*.
+    pub profile_id: Uuid,
+    pub app_id: Uuid,
+    pub creation_timestamp: DateTime<Utc>,
     pub state: RuleState,
-    // daily_limit_seconds: Limite máximo em segundos. Se for NULL no DB, usamos Option<u64>. Aqui representamos como u64 com um valor especial (0) para "Sem Limite".
-    pub daily_limit_seconds: u64, 
-    // time_window_start/end: Controla a janela de aplicação. Usaremos structs dedicadas em outro arquivo.
-    // AQUI ESTÃO OS CAMPOS CHAVE PARA O CONTRATO DO DADO:
-    pub effective_until_timestamp: DateTime<Utc>, // Timestamp de desativação lógica (quando o controle deve parar).
+    /// `None` = sem limite diário para este app.
+    pub daily_limit_seconds: Option<u64>,
+    pub time_window: Option<TimeWindow>,
+    /// `None` = sem data de desativação lógica.
+    pub effective_until_timestamp: Option<DateTime<Utc>>,
 }
 
-/// Enum para representar os estados do ciclo de vida da regra.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum RuleState {
-    Pending,  // Aguardando ativação ou confirmação de configuração.
-    Active,   // Regra está em pleno funcionamento e sendo aplicada pelo Daemon Core.
-    Revoked,  // A regra foi desativada logicamente (não deve mais ter efeito).
+    Pending,
+    Active,
+    Revoked,
+}
+
+impl RuleState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "PENDING",
+            Self::Active => "ACTIVE",
+            Self::Revoked => "REVOKED",
+        }
+    }
+
+    fn parse(s: &str) -> Result<Self, Error> {
+        match s {
+            "PENDING" => Ok(Self::Pending),
+            "ACTIVE" => Ok(Self::Active),
+            "REVOKED" => Ok(Self::Revoked),
+            outro => Err(bad_value("current_state", outro)),
+        }
+    }
+}
+
+/// Linha crua de `active_rules`; a conversão valida cada coluna e falha alto.
+#[derive(FromRow)]
+pub(crate) struct RuleRow {
+    rule_id: String,
+    profile_id: String,
+    app_id: String,
+    creation_timestamp: String,
+    current_state: String,
+    daily_limit_seconds: Option<i64>,
+    time_window_start: Option<String>,
+    time_window_end: Option<String>,
+    effective_until_timestamp: Option<String>,
+}
+
+impl TryFrom<RuleRow> for ActiveRule {
+    type Error = Error;
+
+    fn try_from(r: RuleRow) -> Result<Self, Error> {
+        let time_window = match (r.time_window_start, r.time_window_end) {
+            (Some(a), Some(b)) => Some(TimeWindow {
+                start: decode(NaiveTime::parse_from_str(&a, HHMM))?,
+                end: decode(NaiveTime::parse_from_str(&b, HHMM))?,
+            }),
+            (None, None) => None,
+            _ => {
+                return Err(bad_value(
+                    "time_window_*",
+                    "apenas um dos limites preenchido",
+                ));
+            }
+        };
+        Ok(Self {
+            rule_id: decode(Uuid::parse_str(&r.rule_id))?,
+            profile_id: decode(Uuid::parse_str(&r.profile_id))?,
+            app_id: decode(Uuid::parse_str(&r.app_id))?,
+            creation_timestamp: decode(DateTime::parse_from_rfc3339(&r.creation_timestamp))?
+                .with_timezone(&Utc),
+            state: RuleState::parse(&r.current_state)?,
+            daily_limit_seconds: r
+                .daily_limit_seconds
+                .map(|v| decode(u64::try_from(v)))
+                .transpose()?,
+            time_window,
+            effective_until_timestamp: r
+                .effective_until_timestamp
+                .map(|t| decode(DateTime::parse_from_rfc3339(&t)).map(|d| d.with_timezone(&Utc)))
+                .transpose()?,
+        })
+    }
 }
 
 /// ===================================================
@@ -63,16 +158,16 @@ pub enum RuleState {
 #[derive(Debug, Clone)]
 pub struct SecurityEvent {
     // log_id (PK): UUID único para este evento/tentativa. Garante a unicidade do registro.
-    pub event_id: Uuid, 
+    pub event_id: Uuid,
     // timestamp: Momento EXATO do evento/tentativa. A fonte da verdade forense.
     pub timestamp: DateTime<Utc>,
     // client_ip: IP da origem do comando (ex: "100.x.x.x"). Essencial para rastrear o agente atacante ou administrador.
-    pub client_ip: String, 
+    pub client_ip: String,
     // action_attempted: A intenção do cliente (Ex: ADD_RULE, MODIFY_LIMIT, REVOKE). O que ele *tentou* fazer?
-    pub action_attempted: ActionType, 
+    pub action_attempted: ActionType,
     // status: Resultado da transação (SUCCESS ou FAILURE). Foi aceito ou rejeitado pelo Daemon Core.
     pub transaction_status: TransactionStatus,
-    // REJECTION_REASON_DETAIL (CRÍTICO): Texto livre detalhado com a razão EXATA do bloqueio/falha. 
+    // REJECTION_REASON_DETAIL (CRÍTICO): Texto livre detalhado com a razão EXATA do bloqueio/falha.
     // Este é o campo que armazena os "porquês" forenses e deve ser robusto para textos longos.
     pub rejection_reason_detail: String,
 }
@@ -80,8 +175,8 @@ pub struct SecurityEvent {
 /// Enum para as ações críticas registradas (a intenção).
 #[derive(Debug, PartialEq, Clone)]
 pub enum ActionType {
-    AddRule, 
-    ModifyLimit, 
+    AddRule,
+    ModifyLimit,
     Revoke,
     // ... outros comandos como ChangeWhitelistStatus, etc.
 }

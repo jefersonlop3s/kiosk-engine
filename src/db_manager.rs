@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Sqlite, SqlitePool, Transaction};
+use uuid::Uuid;
 
 use crate::database_schema::*;
 
@@ -11,21 +12,125 @@ pub struct KioskDbManager {
 }
 
 impl KioskDbManager {
-    /// Abre (e cria, se preciso) o banco em `conn_string` (ex.: `sqlite://kiosk.db`).
+    /// Abre (e cria, se preciso) o banco em `conn_string` (ex.: `sqlite://kiosk.db`)
+    /// e aplica as migrações. Falha em qualquer etapa é devolvida ao chamador.
     pub async fn new(conn_string: &str) -> Result<Self, sqlx::Error> {
         let options = SqliteConnectOptions::from_str(conn_string)?
             .create_if_missing(true)
             .foreign_keys(true);
         let pool = SqlitePoolOptions::new().connect_with(options).await?;
+        sqlx::migrate!("./migrations").run(&pool).await?;
         Ok(Self { pool })
+    }
+
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 
     pub async fn begin_transaction(&self) -> Result<Transaction<'_, Sqlite>, sqlx::Error> {
         self.pool.begin().await
     }
 
-    /// Persistência da regra: implementada na F3 (migrações na F2).
-    pub async fn create_active_rule(&self, _rule: &ActiveRule) -> Result<(), sqlx::Error> {
-        unimplemented!("E-001 F3")
+    pub async fn create_app(&self, app: &AppMetadata) -> Result<(), sqlx::Error> {
+        let mut tx = self.begin_transaction().await?;
+        sqlx::query(
+            "INSERT INTO app_metadata (app_id, process_name, current_status) VALUES (?, ?, ?)",
+        )
+        .bind(app.app_id.to_string())
+        .bind(&app.process_name)
+        .bind(app.status.as_str())
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await
     }
+
+    pub async fn create_profile(&self, profile: &ChildProfile) -> Result<(), sqlx::Error> {
+        let mut tx = self.begin_transaction().await?;
+        sqlx::query(
+            "INSERT INTO child_profile (profile_id, windows_sid, display_name, daily_total_limit_seconds) \
+             VALUES (?, ?, ?, ?)",
+        )
+        .bind(profile.profile_id.to_string())
+        .bind(&profile.windows_sid)
+        .bind(&profile.display_name)
+        .bind(opt_secs(profile.daily_total_limit_seconds)?)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await
+    }
+
+    /// Define (ou substitui) a janela permitida de um dia da semana do perfil.
+    pub async fn set_profile_window(
+        &self,
+        profile_id: Uuid,
+        weekday: u8,
+        window: &TimeWindow,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.begin_transaction().await?;
+        sqlx::query(
+            "INSERT INTO profile_time_window (profile_id, weekday, window_start, window_end) \
+             VALUES (?, ?, ?, ?) \
+             ON CONFLICT (profile_id, weekday) DO UPDATE SET \
+             window_start = excluded.window_start, window_end = excluded.window_end",
+        )
+        .bind(profile_id.to_string())
+        .bind(i64::from(weekday))
+        .bind(window.start.format(HHMM).to_string())
+        .bind(window.end.format(HHMM).to_string())
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await
+    }
+
+    /// Cria a regra numa única transação, com `commit()` explícito.
+    pub async fn create_active_rule(&self, rule: &ActiveRule) -> Result<(), sqlx::Error> {
+        let mut tx = self.begin_transaction().await?;
+        sqlx::query(
+            "INSERT INTO active_rules (rule_id, profile_id, app_id, creation_timestamp, current_state, \
+             daily_limit_seconds, time_window_start, time_window_end, effective_until_timestamp) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(rule.rule_id.to_string())
+        .bind(rule.profile_id.to_string())
+        .bind(rule.app_id.to_string())
+        .bind(rule.creation_timestamp.to_rfc3339())
+        .bind(rule.state.as_str())
+        .bind(opt_secs(rule.daily_limit_seconds)?)
+        .bind(rule.time_window.map(|w| w.start.format(HHMM).to_string()))
+        .bind(rule.time_window.map(|w| w.end.format(HHMM).to_string()))
+        .bind(rule.effective_until_timestamp.map(|t| t.to_rfc3339()))
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await
+    }
+
+    pub async fn get_active_rule(&self, rule_id: Uuid) -> Result<Option<ActiveRule>, sqlx::Error> {
+        let row: Option<RuleRow> = sqlx::query_as(
+            "SELECT rule_id, profile_id, app_id, creation_timestamp, current_state, daily_limit_seconds, \
+             time_window_start, time_window_end, effective_until_timestamp \
+             FROM active_rules WHERE rule_id = ?",
+        )
+        .bind(rule_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(ActiveRule::try_from).transpose()
+    }
+
+    pub async fn set_rule_state(&self, rule_id: Uuid, state: RuleState) -> Result<(), sqlx::Error> {
+        let mut tx = self.begin_transaction().await?;
+        let done = sqlx::query("UPDATE active_rules SET current_state = ? WHERE rule_id = ?")
+            .bind(state.as_str())
+            .bind(rule_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+        if done.rows_affected() == 0 {
+            return Err(sqlx::Error::RowNotFound);
+        }
+        tx.commit().await
+    }
+}
+
+fn opt_secs(v: Option<u64>) -> Result<Option<i64>, sqlx::Error> {
+    v.map(|s| i64::try_from(s).map_err(|e| sqlx::Error::Encode(Box::new(e))))
+        .transpose()
 }

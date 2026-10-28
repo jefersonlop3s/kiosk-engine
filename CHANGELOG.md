@@ -10,6 +10,10 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - Arquitetura movida para `docs/architecture/README.md`; `ARCHITECTURE.md` vira stub.
 - ADR-001 (enforcement ativo e visível) e ADR-002 (perfil por conta Windows, somente Windows) propostas e aceitas em 2026-10-27.
 
+### Adicionado
+- Migração inicial com o contrato do dado (ADR-002), structs alinhadas e CRUD transacional com testes em SQLite real (E-001 F2–F3).
+- CI no GitHub: `cargo fmt --check`, `clippy -D warnings` e `cargo test` em Ubuntu e Windows.
+
 ### Corrigido
 - Manifesto na raiz com dependências resolvíveis; `cargo check` passa (E-001 F1).
 

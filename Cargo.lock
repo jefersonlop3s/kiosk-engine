@@ -625,7 +625,6 @@ dependencies = [
  "chrono",
  "sqlx",
  "tempfile",
- "thiserror",
  "tokio",
  "uuid",
 ]
