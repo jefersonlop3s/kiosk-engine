@@ -201,3 +201,19 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - GC-08 (avisos configuráveis por regra) segue aberto.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-005 F2: assinatura de requisições e pareamento (ADR-006)
+
+- **Origem**: aceite da ADR-006 e pedido do dono para prosseguir.
+- **Resultado**:
+  - `src/assinatura.rs`: string canônica `KIOSK-V1` (método, caminho, `timestamp`, `nonce`, SHA-256 do corpo), assinatura e verificação Ed25519 estrita, nonce de 16 bytes, código de pareamento de 8 caracteres sem símbolos ambíguos (~40 bits);
+  - `src/pareamento.rs` e `migrations/0006_dispositivos_e_pareamento.sql`: `autenticar` (formato, janela de ±60 s, dispositivo ativo, assinatura, nonce único; o nonce só é gravado depois da assinatura válida), `autorizar` (papel `ADMIN`), `criar_codigo_pareamento` (validade de 5 min, só o hash no banco), `parear_dispositivo` (uso único, normaliza caixa/hífen, valida a chave pública, bloqueia após 10 falhas em 5 min), `revogar_dispositivo`;
+  - recusas devolvem `Rejeicao` ("requisição recusada" / "falha interna") e gravam o motivo no log; os eventos de recusa usam o relógio da chamada.
+- **Achado na execução**: a contagem de falhas de pareamento comparava o relógio injetado com a hora real dos eventos, então o bloqueio dependia dos dois coincidirem; os eventos de recusa passaram a usar o relógio da chamada (o teste de recuperação após o bloqueio expôs isso).
+- **Evidência**: `cargo test --locked` → 15 (assinatura) + 17 + 9 + 14 + 14 + 12 passando, SQLite real e chaves Ed25519 reais. Cinco mutações deliberadas reprovaram os testes e foram revertidas: aceitar qualquer assinatura (3 testes), ignorar nonce repetido (1), janela de 6000 s (2), código reutilizável (1), canônica sem o corpo (2). Clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - não há servidor HTTP: `autenticar` recebe os cabeçalhos como texto; ligação, Camadas 3 a 5 e CLI são E-005 F1/F3;
+  - sem segundo fator (já registrado na ADR-006): um dispositivo pareado e desbloqueado na mão da criança comanda tudo;
+  - o bloqueio de pareamento por tentativas pode ser usado para atrasar um pareamento novo (GC-13);
+  - a chave privada do cliente (arquivo com permissão restrita na CLI) ainda não tem implementação.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

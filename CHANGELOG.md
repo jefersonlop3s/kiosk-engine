@@ -20,6 +20,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - Motor de decisão puro (`decidir`) e contabilidade de uso por dia local, com guarda de relógio (`TAMPER_SUSPECTED`) (E-003 F1–F3).
 - Núcleo do agente independente de SO (`Agente`, interface `Sistema`): avisos de 5 e 1 min, encerramento de apps e bloqueio de sessão com log forense, e leituras do banco para o motor (E-004, parte SO-independente).
 - Tempo total do perfil pela sessão ativa (`session_usage`, ADR-003) e política de lock seguido de logoff após 2 desbloqueios.
+- Assinatura Ed25519 de requisições, anti-replay por nonce, pareamento presencial por código de uso único e revogação de dispositivos (ADR-006, E-005 F2).
 - Harness Sovereign: guard do agente, gates de git (pre-commit/pre-push) e contrato de validação em `.harness.toml` (E-001 F4).
 
 ### Corrigido

@@ -16,6 +16,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | ID | Mecanismo | Medido? | Próximo passo |
 |---|---|---|---|
 | GC-08 | Avisos de 5 e 1 min são constante no código (`AVISOS_SEGUNDOS`); a ADR-001 os quer configuráveis por regra e `active_rules` não tem coluna para isso | Por leitura | Migração + campo em `ActiveRule` quando o E-004 F2 definir a UX do aviso |
+| GC-13 | Pareamento bloqueia por 5 min depois de 10 códigos errados (`MAX_FALHAS_PAREAMENTO`); quem está na rede pode errar de propósito e atrasar o pareamento de um dispositivo novo (não afeta dispositivos já pareados) | Por leitura | Aceitável no MVP; revisar se virar problema real (limite por IP depende do servidor, E-005 F1) |
 
 ## Épicos abertos
 
@@ -23,7 +24,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 |---|---|---|
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) | em andamento | F1–F4 concluídas; falta o encerramento do épico (conferir o CI no GitHub) |
 | [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Núcleo SO-independente pronto; F0–F4 dependem de Windows real e do aceite das ADR-003/004 |
-| [E-005](epics/E-005-api-comando-e-pareamento.md) | proposto | Depende do aceite das ADR-005/006 |
+| [E-005](epics/E-005-api-comando-e-pareamento.md) | em andamento | F2 (assinatura e pareamento) pronto; faltam o servidor HTTP (F1) e as Camadas 4 e 5 com o CLI (F3) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
 
 ## Infraestrutura do harness

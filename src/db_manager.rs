@@ -44,7 +44,7 @@ impl KioskDbManager {
 
     /// Fecha uma operação auditada: sucesso grava o evento na mesma transação e confirma;
     /// falha desfaz a transação, grava um evento FAILURE em outra e devolve o erro original.
-    async fn finish<T>(
+    pub(crate) async fn finish<T>(
         &self,
         mut tx: Transaction<'_, Sqlite>,
         result: Result<T, sqlx::Error>,

@@ -252,6 +252,11 @@ pub enum ActionType {
     SetProfileWindow,
     /// Evento gerado pelo próprio agente, sem comando externo.
     System,
+    /// Verificação de assinatura de uma requisição (ADR-006).
+    Authenticate,
+    CreatePairingCode,
+    PairDevice,
+    RevokeDevice,
 }
 
 impl ActionType {
@@ -265,6 +270,10 @@ impl ActionType {
             Self::AddProfile => "ADD_PROFILE",
             Self::SetProfileWindow => "SET_PROFILE_WINDOW",
             Self::System => "SYSTEM",
+            Self::Authenticate => "AUTHENTICATE",
+            Self::CreatePairingCode => "CREATE_PAIRING_CODE",
+            Self::PairDevice => "PAIR_DEVICE",
+            Self::RevokeDevice => "REVOKE_DEVICE",
         }
     }
 
@@ -278,6 +287,10 @@ impl ActionType {
             "ADD_PROFILE" => Ok(Self::AddProfile),
             "SET_PROFILE_WINDOW" => Ok(Self::SetProfileWindow),
             "SYSTEM" => Ok(Self::System),
+            "AUTHENTICATE" => Ok(Self::Authenticate),
+            "CREATE_PAIRING_CODE" => Ok(Self::CreatePairingCode),
+            "PAIR_DEVICE" => Ok(Self::PairDevice),
+            "REVOKE_DEVICE" => Ok(Self::RevokeDevice),
             outro => Err(bad_value("ActionType", outro)),
         }
     }

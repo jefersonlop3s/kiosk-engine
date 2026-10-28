@@ -1,6 +1,6 @@
 # E-005 — API de comando e pareamento
 
-Estado: proposto. Responsável: a definir. Repositório: kiosk.
+Estado: em andamento (F2 pronta em 2026-10-28; F1 e F3 pendentes). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -23,6 +23,12 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 | F1 | Servidor HTTP no serviço, Camadas 0 e 3 (recepção e validação) | [E-001](E-001-fundacao-crate-e-dados.md), [E-002](E-002-log-forense.md) F1, ADR de rede | Testes HTTP reais contra o serviço |
 | F2 | Pareamento e Camadas 1 e 2 (autenticação e autorização) | F1, ADR de assinatura | Teste negativo: requisição sem assinatura, com assinatura inválida ou repetida (replay) gera `AUTH_FAIL` |
 | F3 | Camadas 4 e 5 + CLI dos pais | F2, [E-003](E-003-motor-de-regras-e-uso.md) | Ciclo completo criar → ativar → revogar via CLI |
+
+## Entregue (2026-10-28)
+
+- F2, núcleo sem servidor HTTP: `assinatura` (string canônica `KIOSK-V1`, Ed25519 estrito, nonce, código de pareamento) e `pareamento` (Camada 1 `autenticar`, Camada 2 `autorizar`, pareamento presencial por código de uso único, revogação). Migração 0006: `paired_device`, `seen_nonce`, `pairing_code`.
+- Recusas respondem com `Rejeicao` genérica; o motivo exato vai para `AUTH_FAIL`/`AUTHZ_FAIL`/`VALIDATION_FAIL`.
+- Falta ligar tudo a um servidor HTTP (ADR-005: escuta só nos endereços configurados) e as Camadas 3 a 5.
 
 ## Aceites
 
