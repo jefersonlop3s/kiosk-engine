@@ -105,3 +105,21 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - a retenção (F3) não pode usar DELETE enquanto o trigger existir: precisa de caminho próprio, a definir com a política de retenção.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-002 F3: retenção de 90 dias e consulta por período e por perfil
+
+- **Origem**: decisões do dono na conversa de 2026-10-28: (1) hash encadeado **adiado**; (2) retenção de **3 meses** (adotado: 90 dias).
+- **Resultado**:
+  - `migrations/0004_security_log_retencao_e_perfil.sql`: coluna `profile_id` (sem chave estrangeira, para o log aceitar evento de perfil inexistente), índice `(profile_id, timestamp)` e o trigger de DELETE substituído por `security_log_retention_only_delete`, que só deixa sair evento com mais de 90 dias. A regra vive no banco: SQL direto também é recusado para evento recente;
+  - `KioskDbManager::purge_expired_events` remove o vencido e registra a limpeza (`SYSTEM`, com a contagem) na mesma transação; sem nada a remover, não registra;
+  - `KioskDbManager::security_events(from, to, profile_id)`: consulta por período e, opcionalmente, por perfil, em ordem cronológica;
+  - todo evento de operação leva o `profile_id` (inclusive o de falha); timestamps do log passam a largura fixa em UTC com microssegundos e `Z`, ordenáveis como texto;
+  - `SecurityEvent` ganha `profile_id`; `ActionType`, `EventType` e `TransactionStatus` ganham `parse`, que falha alto em valor desconhecido.
+- **Evidência**: `cargo test --locked` → 9 + 14 passando, com dados de vários dias: consulta por período e por perfil, retenção com eventos de 100, 91, 89 e 1 dia (saem 2), DELETE de evento de 89 dias recusado por SQL direto e de 91 dias aceito, UPDATE recusado até em evento de 200 dias; clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - o prazo de 90 dias está no SQL (trigger e `purge_expired_events`); mudar exige nova migração, e um teste de fronteira (89 × 91 dias) acusa divergência entre os dois;
+  - a limpeza não roda sozinha: alguém (o serviço do E-004) precisa chamar `purge_expired_events` periodicamente;
+  - o prazo usa o relógio do sistema (`'now'` do SQLite); a ADR-002 assume conta padrão sem direito de alterar a hora;
+  - eventos gravados antes da migração 0004 não têm perfil (não há dados em produção).
+- **Encerra o E-002**; o hash encadeado fica fora do épico.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

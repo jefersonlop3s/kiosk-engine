@@ -249,3 +249,168 @@ async fn insert_continua_funcionando_com_os_triggers_ativos() {
     um_evento(&db).await;
     assert_eq!(eventos(&db).await.len(), 2);
 }
+
+fn evento_de(dias_atras: i64, perfil: Option<Uuid>, detalhe: &str) -> SecurityEvent {
+    let mut e = SecurityEvent::new(
+        "local",
+        ActionType::System,
+        EventType::WarningShown,
+        TransactionStatus::Success,
+        detalhe,
+    )
+    .with_profile(perfil);
+    e.timestamp = Utc::now() - chrono::Duration::days(dias_atras);
+    e
+}
+
+#[tokio::test]
+async fn consulta_por_periodo_e_por_perfil_com_dados_de_varios_dias() {
+    let (_dir, db) = novo_banco().await;
+    let (ana, beto) = (Uuid::new_v4(), Uuid::new_v4());
+    for (dias, perfil, nome) in [
+        (10, ana, "ana-10"),
+        (5, beto, "beto-5"),
+        (3, ana, "ana-3"),
+        (1, beto, "beto-1"),
+    ] {
+        db.record_event(&evento_de(dias, Some(perfil), nome))
+            .await
+            .unwrap();
+    }
+    db.record_event(&evento_de(4, None, "sem-perfil"))
+        .await
+        .unwrap();
+
+    let agora = Utc::now();
+    let detalhes = |v: Vec<SecurityEvent>| {
+        v.into_iter()
+            .map(|e| e.rejection_reason_detail)
+            .collect::<Vec<_>>()
+    };
+
+    let tudo = db
+        .security_events(agora - chrono::Duration::days(30), agora, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        detalhes(tudo),
+        ["ana-10", "beto-5", "sem-perfil", "ana-3", "beto-1"],
+        "ordem cronológica"
+    );
+
+    let janela = db
+        .security_events(
+            agora - chrono::Duration::days(6),
+            agora - chrono::Duration::days(2),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(detalhes(janela), ["beto-5", "sem-perfil", "ana-3"]);
+
+    let da_ana = db
+        .security_events(agora - chrono::Duration::days(30), agora, Some(ana))
+        .await
+        .unwrap();
+    assert_eq!(detalhes(da_ana), ["ana-10", "ana-3"]);
+
+    let nenhum = db
+        .security_events(
+            agora - chrono::Duration::days(30),
+            agora,
+            Some(Uuid::new_v4()),
+        )
+        .await
+        .unwrap();
+    assert!(nenhum.is_empty());
+}
+
+#[tokio::test]
+async fn evento_de_operacao_leva_o_perfil_inclusive_na_falha() {
+    let (_dir, db) = novo_banco().await;
+    let p = perfil();
+    db.create_profile(&ctx(), &p).await.unwrap();
+    let fantasma = Uuid::new_v4(); // perfil que não existe: a regra falha e o log ainda grava
+    let r = regra(fantasma, Uuid::new_v4());
+    assert!(db.create_active_rule(&ctx(), &r).await.is_err());
+
+    let agora = Utc::now();
+    let h = agora - chrono::Duration::hours(1);
+    let do_filho = db
+        .security_events(h, agora, Some(p.profile_id))
+        .await
+        .unwrap();
+    assert_eq!(do_filho.len(), 1);
+    assert_eq!(do_filho[0].action_attempted, ActionType::AddProfile);
+    let do_fantasma = db.security_events(h, agora, Some(fantasma)).await.unwrap();
+    assert_eq!(
+        (do_fantasma.len(), do_fantasma[0].transaction_status),
+        (1, TransactionStatus::Failure)
+    );
+}
+
+#[tokio::test]
+async fn retencao_remove_so_o_que_passou_de_90_dias_e_registra_a_limpeza() {
+    let (_dir, db) = novo_banco().await;
+    for (dias, nome) in [
+        (100, "velho-100"),
+        (91, "velho-91"),
+        (89, "novo-89"),
+        (1, "novo-1"),
+    ] {
+        db.record_event(&evento_de(dias, None, nome)).await.unwrap();
+    }
+    assert_eq!(db.purge_expired_events(&ctx()).await.unwrap(), 2);
+
+    let restantes: Vec<String> = eventos(&db).await.into_iter().map(|e| e.4).collect();
+    assert_eq!(restantes.len(), 3);
+    assert!(
+        restantes.contains(&"novo-89".to_string()) && restantes.contains(&"novo-1".to_string())
+    );
+    assert!(
+        restantes
+            .iter()
+            .any(|d| d.contains("2 eventos com mais de 90 dias")),
+        "limpeza fica registrada"
+    );
+
+    // sem nada a remover, nada é registrado
+    assert_eq!(db.purge_expired_events(&ctx()).await.unwrap(), 0);
+    assert_eq!(eventos(&db).await.len(), 3);
+}
+
+#[tokio::test]
+async fn banco_recusa_delete_de_evento_recente_mesmo_por_sql_direto() {
+    let (_dir, db) = novo_banco().await;
+    db.record_event(&evento_de(89, None, "novo-89"))
+        .await
+        .unwrap();
+    db.record_event(&evento_de(91, None, "velho-91"))
+        .await
+        .unwrap();
+
+    let recente = sqlx::query("DELETE FROM security_log WHERE rejection_reason_detail = 'novo-89'")
+        .execute(db.pool())
+        .await;
+    assert!(recente.unwrap_err().to_string().contains("90 dias"));
+    let velho = sqlx::query("DELETE FROM security_log WHERE rejection_reason_detail = 'velho-91'")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(velho.rows_affected(), 1);
+    assert_eq!(eventos(&db).await.len(), 1);
+}
+
+#[tokio::test]
+async fn update_continua_recusado_mesmo_em_evento_velho() {
+    let (_dir, db) = novo_banco().await;
+    db.record_event(&evento_de(200, None, "velho"))
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query("UPDATE security_log SET rejection_reason_detail = 'x'")
+            .execute(db.pool())
+            .await
+            .is_err()
+    );
+}

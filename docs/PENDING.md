@@ -6,8 +6,7 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 | ID / documento | Estado | Próximo passo | Responsável |
 |---|---|---|---|
-| Hash encadeado no `Security_Log` (E-002 F2, opcional) | Sem decisão; exige ADR antes de executar. O trigger append-only já cobre UPDATE/DELETE via SQL | dono |
-| Política de retenção do log (E-002 F3) | Definir por quanto tempo guardar eventos de crianças; hoje o trigger impede qualquer DELETE, então a expiração precisará de caminho próprio | dono |
+| Hash encadeado no `Security_Log` | Adiado pelo dono em 2026-10-28; retomar só com ADR. O trigger cobre UPDATE/DELETE via SQL, não edição direta do arquivo | dono |
 | AGENTS global em `~/.claude/` | Criado pela sessão `3a84a5f7` fora do repositório; sem efeito | Apagar (a regra já está no AGENTS.md do projeto) | dono |
 
 ## GAPs de Código
@@ -19,7 +18,6 @@ Nenhum aberto. GC-01 a GC-07 (origem: [revisão do estado inicial](insights/2026
 | Épico | Estado | Próximo passo |
 |---|---|---|
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) | em andamento | F1–F4 concluídas; falta o encerramento do épico (conferir o CI no GitHub) |
-| [E-002](epics/E-002-log-forense.md) | em andamento | F1–F2 concluídas; F3 (retenção e consulta) depende da decisão do dono sobre retenção |
 | [E-003](epics/E-003-motor-de-regras-e-uso.md) a [E-005](epics/E-005-api-comando-e-pareamento.md) | proposto | Ver [ROADMAP](ROADMAP.md) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
 

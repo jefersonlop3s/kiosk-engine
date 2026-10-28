@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use chrono::{DateTime, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
@@ -47,6 +48,7 @@ impl KioskDbManager {
         result: Result<T, sqlx::Error>,
         ctx: &EventContext,
         action: ActionType,
+        profile_id: Option<Uuid>,
     ) -> Result<T, sqlx::Error> {
         match result {
             Ok(value) => {
@@ -56,7 +58,8 @@ impl KioskDbManager {
                     EventType::Success,
                     TransactionStatus::Success,
                     "",
-                );
+                )
+                .with_profile(profile_id);
                 insert_event(&mut tx, &ok).await?;
                 tx.commit().await?;
                 Ok(value)
@@ -69,7 +72,8 @@ impl KioskDbManager {
                     EventType::InternalError,
                     TransactionStatus::Failure,
                     &err.to_string(),
-                );
+                )
+                .with_profile(profile_id);
                 match self.record_event(&fail).await {
                     Ok(()) => Err(err),
                     Err(log_err) => Err(sqlx::Error::Protocol(format!(
@@ -95,7 +99,7 @@ impl KioskDbManager {
         .execute(&mut *tx)
         .await
         .map(|_| ());
-        self.finish(tx, r, ctx, ActionType::AddApp).await
+        self.finish(tx, r, ctx, ActionType::AddApp, None).await
     }
 
     pub async fn create_profile(
@@ -118,7 +122,8 @@ impl KioskDbManager {
             .map(|_| ())
         }
         .await;
-        self.finish(tx, r, ctx, ActionType::AddProfile).await
+        self.finish(tx, r, ctx, ActionType::AddProfile, Some(profile.profile_id))
+            .await
     }
 
     /// Define (ou substitui) a janela permitida de um dia da semana do perfil.
@@ -143,7 +148,8 @@ impl KioskDbManager {
         .execute(&mut *tx)
         .await
         .map(|_| ());
-        self.finish(tx, r, ctx, ActionType::SetProfileWindow).await
+        self.finish(tx, r, ctx, ActionType::SetProfileWindow, Some(profile_id))
+            .await
     }
 
     /// Cria a regra e grava o evento `ADD_RULE` na mesma transação.
@@ -173,7 +179,8 @@ impl KioskDbManager {
             .map(|_| ())
         }
         .await;
-        self.finish(tx, r, ctx, ActionType::AddRule).await
+        self.finish(tx, r, ctx, ActionType::AddRule, Some(rule.profile_id))
+            .await
     }
 
     pub async fn get_active_rule(&self, rule_id: Uuid) -> Result<Option<ActiveRule>, sqlx::Error> {
@@ -199,6 +206,13 @@ impl KioskDbManager {
             _ => ActionType::ActivateRule,
         };
         let mut tx = self.begin_transaction().await?;
+        let profile_id: Option<Uuid> = sqlx::query_scalar::<_, String>(
+            "SELECT profile_id FROM active_rules WHERE rule_id = ?",
+        )
+        .bind(rule_id.to_string())
+        .fetch_optional(&mut *tx)
+        .await?
+        .and_then(|p| Uuid::parse_str(&p).ok());
         let r = sqlx::query("UPDATE active_rules SET current_state = ? WHERE rule_id = ?")
             .bind(state.as_str())
             .bind(rule_id.to_string())
@@ -208,7 +222,55 @@ impl KioskDbManager {
                 0 => Err(sqlx::Error::RowNotFound),
                 _ => Ok(()),
             });
-        self.finish(tx, r, ctx, action).await
+        self.finish(tx, r, ctx, action, profile_id).await
+    }
+
+    /// Eventos do período `[from, to]` (inclusive), do mais antigo ao mais novo;
+    /// com `profile_id`, só os daquele perfil.
+    pub async fn security_events(
+        &self,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        profile_id: Option<Uuid>,
+    ) -> Result<Vec<SecurityEvent>, sqlx::Error> {
+        let rows: Vec<EventRow> = sqlx::query_as(
+            "SELECT log_id, timestamp, client_ip, action_attempted, event_type, transaction_status, \
+             rejection_reason_detail, profile_id FROM security_log \
+             WHERE timestamp >= ? AND timestamp <= ? AND (? IS NULL OR profile_id = ?) \
+             ORDER BY timestamp, rowid",
+        )
+        .bind(log_ts(from))
+        .bind(log_ts(to))
+        .bind(profile_id.map(|p| p.to_string()))
+        .bind(profile_id.map(|p| p.to_string()))
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(SecurityEvent::try_from).collect()
+    }
+
+    /// Remove eventos com mais de 90 dias (retenção decidida pelo dono) e registra a limpeza.
+    /// O prazo é imposto pelo trigger de DELETE: o banco recusa a remoção de eventos mais novos.
+    /// Devolve quantos eventos saíram.
+    pub async fn purge_expired_events(&self, ctx: &EventContext) -> Result<u64, sqlx::Error> {
+        let mut tx = self.begin_transaction().await?;
+        let removed = sqlx::query(
+            "DELETE FROM security_log WHERE timestamp < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days')",
+        )
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if removed > 0 {
+            let e = SecurityEvent::new(
+                &ctx.client_ip,
+                ActionType::System,
+                EventType::Success,
+                TransactionStatus::Success,
+                &format!("retenção: {removed} eventos com mais de 90 dias removidos"),
+            );
+            insert_event(&mut tx, &e).await?;
+        }
+        tx.commit().await?;
+        Ok(removed)
     }
 }
 

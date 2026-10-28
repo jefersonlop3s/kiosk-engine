@@ -4,6 +4,7 @@
 use sqlx::SqliteConnection;
 
 pub use crate::database_schema::SecurityEvent;
+use crate::database_schema::log_ts;
 
 pub async fn insert_event(
     conn: &mut SqliteConnection,
@@ -11,15 +12,16 @@ pub async fn insert_event(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO security_log (log_id, timestamp, client_ip, action_attempted, event_type, \
-         transaction_status, rejection_reason_detail) VALUES (?, ?, ?, ?, ?, ?, ?)",
+         transaction_status, rejection_reason_detail, profile_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(e.event_id.to_string())
-    .bind(e.timestamp.to_rfc3339())
+    .bind(log_ts(e.timestamp))
     .bind(&e.client_ip)
     .bind(e.action_attempted.as_str())
     .bind(e.event_type.as_str())
     .bind(e.transaction_status.as_str())
     .bind(&e.rejection_reason_detail)
+    .bind(e.profile_id.map(|p| p.to_string()))
     .execute(conn)
     .await?;
     Ok(())

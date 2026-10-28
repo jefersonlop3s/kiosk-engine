@@ -1,6 +1,6 @@
 // Contrato do dado (arquitetura Seção II + ADR-002). Os nomes de campo espelham as colunas das migrações.
 
-use chrono::{DateTime, NaiveTime, Utc};
+use chrono::{DateTime, NaiveTime, SecondsFormat, Utc};
 use sqlx::{Error, FromRow};
 use uuid::Uuid;
 
@@ -163,6 +163,8 @@ pub struct SecurityEvent {
     pub transaction_status: TransactionStatus,
     /// Razão exata, só para o log: nunca vai na resposta externa (arquitetura, Camada 5).
     pub rejection_reason_detail: String,
+    /// Perfil afetado, quando houver. Sem chave estrangeira: o log aceita perfil inexistente.
+    pub profile_id: Option<Uuid>,
 }
 
 impl SecurityEvent {
@@ -181,7 +183,51 @@ impl SecurityEvent {
             event_type,
             transaction_status,
             rejection_reason_detail: rejection_reason_detail.to_owned(),
+            profile_id: None,
         }
+    }
+
+    pub fn with_profile(mut self, profile_id: Option<Uuid>) -> Self {
+        self.profile_id = profile_id;
+        self
+    }
+}
+
+/// Formato do timestamp no `security_log`: UTC, microssegundos, largura fixa (ordenável como texto).
+pub(crate) fn log_ts(t: DateTime<Utc>) -> String {
+    t.to_rfc3339_opts(SecondsFormat::Micros, true)
+}
+
+/// Linha crua de `security_log`; a conversão falha alto em valor desconhecido.
+#[derive(FromRow)]
+pub(crate) struct EventRow {
+    log_id: String,
+    timestamp: String,
+    client_ip: String,
+    action_attempted: String,
+    event_type: String,
+    transaction_status: String,
+    rejection_reason_detail: String,
+    profile_id: Option<String>,
+}
+
+impl TryFrom<EventRow> for SecurityEvent {
+    type Error = Error;
+
+    fn try_from(r: EventRow) -> Result<Self, Error> {
+        Ok(Self {
+            event_id: decode(Uuid::parse_str(&r.log_id))?,
+            timestamp: decode(DateTime::parse_from_rfc3339(&r.timestamp))?.with_timezone(&Utc),
+            client_ip: r.client_ip,
+            action_attempted: ActionType::parse(&r.action_attempted)?,
+            event_type: EventType::parse(&r.event_type)?,
+            transaction_status: TransactionStatus::parse(&r.transaction_status)?,
+            rejection_reason_detail: r.rejection_reason_detail,
+            profile_id: r
+                .profile_id
+                .map(|p| decode(Uuid::parse_str(&p)))
+                .transpose()?,
+        })
     }
 }
 
@@ -210,6 +256,20 @@ impl ActionType {
             Self::AddProfile => "ADD_PROFILE",
             Self::SetProfileWindow => "SET_PROFILE_WINDOW",
             Self::System => "SYSTEM",
+        }
+    }
+
+    pub(crate) fn parse(s: &str) -> Result<Self, Error> {
+        match s {
+            "ADD_RULE" => Ok(Self::AddRule),
+            "MODIFY_LIMIT" => Ok(Self::ModifyLimit),
+            "REVOKE" => Ok(Self::Revoke),
+            "ACTIVATE_RULE" => Ok(Self::ActivateRule),
+            "ADD_APP" => Ok(Self::AddApp),
+            "ADD_PROFILE" => Ok(Self::AddProfile),
+            "SET_PROFILE_WINDOW" => Ok(Self::SetProfileWindow),
+            "SYSTEM" => Ok(Self::System),
+            outro => Err(bad_value("ActionType", outro)),
         }
     }
 }
@@ -246,6 +306,23 @@ impl EventType {
             Self::TamperSuspected => "TAMPER_SUSPECTED",
         }
     }
+
+    pub(crate) fn parse(s: &str) -> Result<Self, Error> {
+        match s {
+            "SUCCESS" => Ok(Self::Success),
+            "AUTH_FAIL" => Ok(Self::AuthFail),
+            "AUTHZ_FAIL" => Ok(Self::AuthzFail),
+            "VALIDATION_FAIL" => Ok(Self::ValidationFail),
+            "INTERNAL_ERROR" => Ok(Self::InternalError),
+            "STALE_RULE" => Ok(Self::StaleRule),
+            "WARNING_SHOWN" => Ok(Self::WarningShown),
+            "APP_TERMINATED" => Ok(Self::AppTerminated),
+            "SESSION_LOCKED" => Ok(Self::SessionLocked),
+            "AGENT_STOPPED" => Ok(Self::AgentStopped),
+            "TAMPER_SUSPECTED" => Ok(Self::TamperSuspected),
+            outro => Err(bad_value("EventType", outro)),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -259,6 +336,14 @@ impl TransactionStatus {
         match self {
             Self::Success => "SUCCESS",
             Self::Failure => "FAILURE",
+        }
+    }
+
+    pub(crate) fn parse(s: &str) -> Result<Self, Error> {
+        match s {
+            "SUCCESS" => Ok(Self::Success),
+            "FAILURE" => Ok(Self::Failure),
+            outro => Err(bad_value("TransactionStatus", outro)),
         }
     }
 }
