@@ -140,3 +140,15 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - sem integração ainda: nada lê perfil/regras do banco para montar a decisão.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — ADR-003 a ADR-006 propostas (agente Windows e API de comando)
+
+- **Origem**: pedido do dono para redigir as ADRs que bloqueiam E-004 e E-005.
+- **Resultado** (todas **Proposto**; o aceite é do dono):
+  - [ADR-003](adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md): polling de 2 s com SID do dono do processo; tempo do app = processo existente, tempo total = sessão ativa (resolve o GC-09);
+  - [ADR-004](adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md): named pipe por sessão com DACL, protocolo JSON versionado, UI só recebe e envia batimento, o serviço inicia a UI;
+  - [ADR-005](adr/ADR-005-rede-da-api-de-comando.md): sem escuta pública; Tailscale por padrão, LAN opcional com HTTPS e certificado fixado;
+  - [ADR-006](adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md): Ed25519 por dispositivo, `timestamp` ±60 s e `nonce`, pareamento presencial por código de uso único.
+- **Evidência**: `verificar_adr.py` → `adr em dia`; `verificar_refs.py` → `refs em dia`; épicos E-004 e E-005 apontam para as ADRs.
+- **Limitações**: nenhuma alternativa foi exercitada em Windows real; as recomendações são análise, não medição. Cada ADR traz a validação exigida.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

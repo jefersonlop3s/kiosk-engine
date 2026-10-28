@@ -8,6 +8,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - Estrutura documental do método sovereign-harness em `docs/`, com índice, PENDING, ROADMAP e CONCLUSION.
 - `AGENTS.md` como fonte única de instruções para agentes; `CLAUDE.md` passa a ser symlink para ele.
 - Arquitetura movida para `docs/architecture/README.md`; `ARCHITECTURE.md` vira stub.
+- ADR-003 a ADR-006 propostas (detecção de processos, IPC serviço↔UI, rede da API, assinatura e pareamento), aguardando aceite do dono.
 - ADR-001 (enforcement ativo e visível) e ADR-002 (perfil por conta Windows, somente Windows) propostas e aceitas em 2026-10-27.
 
 ### Adicionado

@@ -12,11 +12,9 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 ## Origem e decisões
 
 - [Arquitetura](../architecture/README.md), Seção III (Camadas 0–5) e `POST /api/windows/{action}`.
-- **Hipóteses a confirmar com o dono**:
-  - `client_ip: 100.x.x.x` na arquitetura sugere acesso pela faixa CGNAT do Tailscale. A topologia de rede (só LAN ou VPN mesh) não foi decidida.
-  - O esquema de assinatura (algoritmo, anti-replay) não foi decidido.
-
-  Ambas são estruturais e exigem ADR antes de F1.
+- **ADRs propostas (2026-10-28), aguardando aceite do dono**:
+  - [ADR-005](../adr/ADR-005-rede-da-api-de-comando.md): rede privada Tailscale por padrão, LAN opcional com HTTPS, nunca exposta à internet;
+  - [ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md): Ed25519 por dispositivo, anti-replay por `timestamp` e `nonce`, pareamento presencial.
 
 ## Fases e dependências
 

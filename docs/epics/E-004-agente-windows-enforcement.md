@@ -21,11 +21,9 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 
 - [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Aceito): enforcement ativo e visível.
 - [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (Aceito): perfil por SID, somente Windows.
-- **ADR a abrir ao iniciar F1**:
-  - detecção de processos por polling (Toolhelp/`EnumProcesses`) ou por eventos (ETW/WMI);
-  - comunicação serviço ↔ UI (named pipe).
-
-  São decisões estruturais e ainda não foram tomadas.
+- **ADRs propostas (2026-10-28), aguardando aceite do dono**:
+  - [ADR-003](../adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md): detecção por polling de 2 s e definição de tempo de uso (app enquanto o processo existe; total enquanto a sessão está ativa);
+  - [ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md): serviço ↔ UI por named pipe com DACL, o serviço inicia a UI e o batimento detecta adulteração.
 - [Insight sobre o relatório de hardening](../insights/2026-10-27-relatorio-hardening-windows.md): os poucos itens aproveitáveis entram em F4.
 
 ## Fases e dependências
