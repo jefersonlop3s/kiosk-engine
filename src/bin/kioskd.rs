@@ -11,6 +11,9 @@
 //!   outros sistemas, `--sid S-1-...` no lugar de `--conta`), `perfil listar`,
 //!   `perfil limite <id> --segundos N|--sem-limite`, `perfil janela <id> --dias seg,ter,... --janela HH:MM-HH:MM`.
 //! - `kioskd app criar --processo NOME.exe [--isento | --ignorar]` e `app listar`.
+//! - `kioskd regra criar --perfil ID --app ID [--limite S] [--janela HH:MM-HH:MM] [--ate RFC3339] [--ativar]`,
+//!   `regra ativar|revogar <id>`, `regra limite <id> --segundos N` e `regra listar [--perfil ID]`:
+//!   administração local das regras, com a mesma validação e auditoria da API.
 //!
 //! Variáveis: `KIOSK_DB` (padrão `sqlite://C:/ProgramData/kiosk/kiosk.db` no Windows e
 //! `sqlite://kiosk.db` nos outros sistemas; o banco em uso é sempre informado) e `KIOSK_LISTEN` (`ip:porta[,ip:porta...]`,
@@ -36,6 +39,11 @@ const USO: &str = "uso:
   kioskd perfil janela <id-do-perfil> --dias seg,ter,qua,qui,sex --janela 08:00-20:00
   kioskd app criar --processo NOME.exe [--isento | --ignorar]
   kioskd app listar
+  kioskd regra criar --perfil ID --app ID [--limite SEGUNDOS] [--janela HH:MM-HH:MM] [--ate RFC3339] [--ativar]
+  kioskd regra ativar <id-da-regra>
+  kioskd regra revogar <id-da-regra>
+  kioskd regra limite <id-da-regra> --segundos N
+  kioskd regra listar [--perfil ID]
 variáveis: KIOSK_DB (padrão no Windows: sqlite://C:/ProgramData/kiosk/kiosk.db), KIOSK_LISTEN (ip:porta[,ip:porta...], obrigatória em `servir`)";
 
 #[tokio::main]
@@ -419,6 +427,152 @@ async fn executar(args: &[String]) -> Result<(), String> {
             }
             for a in apps {
                 println!("{}\t{}\t{}", a.app_id, a.process_name, a.status.as_str());
+            }
+            Ok(())
+        }
+        ["regra", "criar", ..] => {
+            use kiosk_engine::comandos::{Comando, interpretar};
+            use kiosk_engine::database_schema::{ActiveRule, RuleState};
+            // mesmo corpo e mesma validação da API (Camada 3)
+            let mut corpo = serde_json::json!({
+                "profile_id": exigir(args, "--perfil")?,
+                "app_id": exigir(args, "--app")?,
+            });
+            if let Some(l) = opcao(args, "--limite") {
+                corpo["daily_limit_seconds"] = segundos(&l, "--limite")?.into();
+            }
+            if let Some(j) = opcao(args, "--janela") {
+                let (a, b) = j
+                    .split_once('-')
+                    .ok_or_else(|| format!("--janela deve ser HH:MM-HH:MM, recebi {j:?}"))?;
+                corpo["window_start"] = a.into();
+                corpo["window_end"] = b.into();
+            }
+            if let Some(t) = opcao(args, "--ate") {
+                corpo["effective_until"] = t.into();
+            }
+            let agora = Utc::now();
+            let Comando::AddRule(nova) =
+                interpretar("add_rule", corpo.to_string().as_bytes(), agora)?
+            else {
+                unreachable!("add_rule sempre produz AddRule")
+            };
+            let db = abrir_banco().await?;
+            if !db
+                .existe_perfil(nova.profile_id)
+                .await
+                .map_err(|e| e.to_string())?
+            {
+                return Err("perfil inexistente (veja `kioskd perfil listar`)".into());
+            }
+            if !db
+                .existe_app(nova.app_id)
+                .await
+                .map_err(|e| e.to_string())?
+            {
+                return Err("app inexistente (veja `kioskd app listar`)".into());
+            }
+            let regra = ActiveRule {
+                rule_id: Uuid::new_v4(),
+                profile_id: nova.profile_id,
+                app_id: nova.app_id,
+                creation_timestamp: agora,
+                state: RuleState::Pending,
+                daily_limit_seconds: nova.daily_limit_seconds,
+                time_window: nova.time_window,
+                effective_until_timestamp: nova.effective_until,
+            };
+            let ctx = EventContext::local();
+            db.create_active_rule(&ctx, &regra)
+                .await
+                .map_err(|e| e.to_string())?;
+            let ativar = args.iter().any(|a| a == "--ativar");
+            if ativar {
+                db.set_rule_state(&ctx, regra.rule_id, RuleState::Active)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            println!("{}", regra.rule_id);
+            eprintln!(
+                "kioskd: regra criada ({})",
+                if ativar {
+                    "ativa"
+                } else {
+                    "pendente: use `regra ativar`"
+                }
+            );
+            Ok(())
+        }
+        ["regra", acao @ ("ativar" | "revogar"), regra] => {
+            use kiosk_engine::database_schema::RuleState;
+            let regra = id(regra)?;
+            let estado = if *acao == "ativar" {
+                RuleState::Active
+            } else {
+                RuleState::Revoked
+            };
+            let db = abrir_banco().await?;
+            db.set_rule_state(&EventContext::local(), regra, estado)
+                .await
+                .map_err(|e| match e {
+                    sqlx::Error::RowNotFound => "regra inexistente".to_string(),
+                    outro => outro.to_string(),
+                })?;
+            eprintln!(
+                "kioskd: regra {}",
+                if *acao == "ativar" {
+                    "ativada"
+                } else {
+                    "revogada"
+                }
+            );
+            Ok(())
+        }
+        ["regra", "limite", regra, ..] => {
+            let regra = id(regra)?;
+            let s = segundos(&exigir(args, "--segundos")?, "--segundos")?;
+            if s > kiosk_engine::comandos::MAX_LIMITE_SEGUNDOS {
+                return Err(format!(
+                    "--segundos acima de {}",
+                    kiosk_engine::comandos::MAX_LIMITE_SEGUNDOS
+                ));
+            }
+            let db = abrir_banco().await?;
+            db.set_rule_limit(&EventContext::local(), regra, s)
+                .await
+                .map_err(|e| match e {
+                    sqlx::Error::RowNotFound => "regra inexistente ou revogada".to_string(),
+                    outro => outro.to_string(),
+                })?;
+            eprintln!("kioskd: limite diário da regra agora é {}", duracao(s));
+            Ok(())
+        }
+        ["regra", "listar", ..] => {
+            let perfil = opcao(args, "--perfil").map(|p| id(&p)).transpose()?;
+            let db = abrir_banco().await?;
+            let apps: std::collections::HashMap<Uuid, String> = db
+                .listar_apps()
+                .await
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(|a| (a.app_id, a.process_name))
+                .collect();
+            let regras = db.listar_regras(perfil).await.map_err(|e| e.to_string())?;
+            if regras.is_empty() {
+                eprintln!("kioskd: nenhuma regra cadastrada");
+            }
+            for r in regras {
+                let app = apps.get(&r.app_id).map_or("?", String::as_str);
+                let limite = r.daily_limit_seconds.map_or("sem limite".into(), duracao);
+                let janela = r.time_window.map_or("sem janela".into(), |j| {
+                    format!("{}-{}", j.start.format("%H:%M"), j.end.format("%H:%M"))
+                });
+                println!(
+                    "{}\t{}\t{app}\t{}\tlimite: {limite}\t{janela}",
+                    r.rule_id,
+                    r.profile_id,
+                    r.state.as_str()
+                );
             }
             Ok(())
         }

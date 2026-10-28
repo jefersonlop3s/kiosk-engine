@@ -104,6 +104,20 @@ O CLI gera o par de chaves Ed25519, envia só a chave pública e grava `credenci
 
 ## 6. Administrar as regras
 
+**No próprio PC** (PowerShell de administrador, sem precisar parear nada):
+
+```powershell
+.\kioskd.exe regra criar --perfil <id-do-perfil> --app <id-do-app> --limite 0 --ativar
+.\kioskd.exe regra listar [--perfil <id-do-perfil>]
+.\kioskd.exe regra ativar <id-da-regra>
+.\kioskd.exe regra limite <id-da-regra> --segundos 5400
+.\kioskd.exe regra revogar <id-da-regra>
+```
+
+Sem `--ativar`, a regra nasce **pendente**. No PC os erros vêm com o motivo exato (por exemplo, `perfil inexistente`).
+
+**De outro dispositivo** (celular ou notebook dos pais, já pareado), com o `kioskctl`:
+
 ```powershell
 .\kioskctl.exe regra criar --perfil <id-do-perfil> --app <id-do-app> --limite 3600 --janela 08:00-20:00
 .\kioskctl.exe regra ativar <id-da-regra>

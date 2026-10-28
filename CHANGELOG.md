@@ -8,6 +8,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 Ainda **pré-lançamento**. Corrige armadilhas encontradas no primeiro teste no Windows.
 
+### Adicionado
+- `kioskd regra criar|ativar|revogar|limite|listar`: regras administradas no próprio PC, sem parear dispositivo, com a mesma validação e a mesma auditoria da API (`--ativar` cria já ativa).
+
 ### Corrigido
 - Sem `KIOSK_DB`, o `kioskd` criava em silêncio um banco novo na pasta atual, e cadastros feitos em outra janela pareciam sumir. No Windows o padrão passa a ser `C:\ProgramData\kiosk\kiosk.db`, e todo comando informa o banco em uso.
 - Pareamento recusado agora explica o código esperado (8 caracteres, 5 minutos, uso único, gerado por `kioskd codigo-pareamento` no mesmo banco).

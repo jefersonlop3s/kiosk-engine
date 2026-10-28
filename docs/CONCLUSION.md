@@ -403,6 +403,8 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - na 0.0.1 o `servir` falhava sem a pasta do banco (já corrigido na 0.0.2).
 - **Resultado**: banco padrão fixo no Windows (`C:\ProgramData\kiosk\kiosk.db`); todo comando do `kioskd` informa o banco em uso; mensagem de pareamento recusado explica o código e o banco; runbook com o banco padrão, o loopback para parear no próprio PC e o código de 8 caracteres; versão 0.0.3.
 - **Evidência**: clippy `-D warnings` limpo em Linux e no alvo Windows; testes novos em `tests/cli.rs` (banco informado em todo comando; mensagem do pareamento recusado) e em `tests/windows.rs` (sem `KIOSK_DB`, o padrão é o banco da máquina), este no CI em Windows.
+- **Pareamento confirmado em Windows real**: com o banco certo, `codigo-pareamento` + `kioskctl parear` pelo loopback funcionou.
+- **Achado seguinte**: o dono tentou `kioskd regra criar`, que não existia (regras só pelo `kioskctl`). Adicionado `kioskd regra criar|ativar|revogar|limite|listar`, que reaproveita `comandos::interpretar` (mesma validação da Camada 3) e as operações auditadas do banco; `listar_regras` no banco; teste de ponta a ponta em `tests/cli.rs` (inclui os eventos `ADD_RULE`, `ACTIVATE_RULE`, `MODIFY_LIMIT`, `REVOKE` no log).
 - **Pendente**: o teste de bloqueio do Bloco de Notas na conta da criança ainda não foi feito.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
