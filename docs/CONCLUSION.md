@@ -17,4 +17,13 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - o relatório de hardening colado na conversa ([insight](insights/2026-10-27-relatorio-hardening-windows.md)).
 - **Evidência**: [revisão do estado inicial](insights/2026-10-27-revisao-estado-inicial.md); `cmp ARCHITECTURE.md docs/20260906133311.md` sem diferença; `cargo check` falha em GC-01; `verificar_refs.py` e `verificar_adr.py` sem erros antes do commit.
 - **Limitações**: nenhum código foi alterado ou compilado; os GAPs GC-02 a GC-06 foram vistos só por leitura.
-- **Commit**: `docs: estrutura documental sovereign-harness e revisão do estado inicial` na branch `claude/estrutura-documental`.
+- **Commit**: `e7ccaa5` (`docs: estrutura documental sovereign-harness e revisão do estado inicial`), integrado em `main` por fast-forward.
+
+## 2026-10-27 — Aceite das ADR-001 e ADR-002 e commit do trabalho em andamento
+
+- **Origem**: aceite explícito do dono na conversa de 2026-10-27 ("aceito.. commit e mergeie tudo").
+- **Resultado**:
+  - [ADR-001](adr/ADR-001-enforcement-ativo-e-visivel.md) e [ADR-002](adr/ADR-002-identidade-por-conta-windows.md) passam a **Aceito**; E-001 F2 fica desbloqueada;
+  - o trabalho em andamento do dono em `src/` foi commitado como está, num commit próprio. Ele não compila e segue rastreado como GC-07 no [PENDING](PENDING.md).
+- **Limitações**: nenhum código foi corrigido; o build continua quebrado até E-001 F1.
+- **Commit**: branch `claude/aceite-adrs`, integrada em `main` por fast-forward.

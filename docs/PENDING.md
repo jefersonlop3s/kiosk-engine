@@ -6,8 +6,6 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 | ID / documento | Estado | Próximo passo | Responsável |
 |---|---|---|---|
-| [ADR-001](adr/ADR-001-enforcement-ativo-e-visivel.md) | Proposto | Revisar e aceitar ou rejeitar | dono |
-| [ADR-002](adr/ADR-002-identidade-por-conta-windows.md) | Proposto | Revisar e aceitar ou rejeitar; bloqueia E-001 F2 | dono |
 | AGENTS global em `~/.claude/` | Criado pela sessão `3a84a5f7` fora do repositório; sem efeito | Apagar (a regra já está no AGENTS.md do projeto) | dono |
 
 ## GAPs de Código
@@ -22,7 +20,7 @@ Origem: [revisão do estado inicial](insights/2026-10-27-revisao-estado-inicial.
 | GC-04 | Nomes divergentes: `active_rule` × `active_rules`, `id` × `app_id`/`rule_id`, `status` × `current_state`; `process_name` ausente no DDL | Por leitura | E-001 F2 |
 | GC-05 | `src/database_schema.rs`: `#[derive]` sobre campos (erro de compilação); `daily_limit_seconds` usa `0` como "sem limite", contra a arquitetura (nulo); `effective_until_timestamp` obrigatório; falta `time_window_start` | Por leitura | E-001 F2–F3 |
 | GC-06 | `SecurityEvent` definido em `database_schema.rs` e de novo em `security_logger_impl.rs` com campos privados | Por leitura | E-001 F3 |
-| GC-07 | Trabalho não commitado do dono em `src/db_manager.rs`, `src/security_logger_impl.rs` e `src/Cargo.toml` | `git status` | Absorver em E-001 F1 |
+| GC-07 | Trabalho em andamento do dono em `src/db_manager.rs`, `src/security_logger_impl.rs` e `src/Cargo.toml`, commitado como está em 2026-10-27 (não compila: GC-01 a GC-06) | `cargo check` | Absorver em E-001 F1 |
 
 ## Épicos abertos
 

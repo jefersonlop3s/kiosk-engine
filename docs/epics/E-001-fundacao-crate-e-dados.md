@@ -15,15 +15,15 @@ Estado: proposto (próximo a executar). Responsável: a definir. Repositório: k
 ## Origem e decisões
 
 - [Arquitetura](../architecture/README.md), Seção II: tabelas `App_Metadata`, `Active_Rules`, `Security_Log`.
-- [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (Proposto): `child_profile`, `usage_ledger`, `profile_id` e `time_window_end` em `Active_Rules`.
+- [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (Aceito): `child_profile`, `usage_ledger`, `profile_id` e `time_window_end` em `Active_Rules`.
 - [Revisão do estado inicial](../insights/2026-10-27-revisao-estado-inicial.md).
 
 ## Fases e dependências
 
 | Fase | Entrega | Depende de | Evidência exigida |
 |---|---|---|---|
-| F1 | Manifesto na raiz com dependências resolvíveis (`sqlx` com feature `sqlite`), `src/lib.rs` declarando os módulos, binário falso removido. Absorve o trabalho não commitado em `src/` | — | `cargo check` verde (saída colada) |
-| F2 | Migrações `sqlx` com nomes únicos de tabela e coluna (fim de `active_rule`/`active_rules`/`app_id`/`id`); `daily_limit_seconds` e `effective_until` como `Option`; `time_window_start/end`; tabelas da ADR-002 | F1, aceite da ADR-002 | Banco criado do zero; `PRAGMA foreign_keys` ativo |
+| F1 | Manifesto na raiz com dependências resolvíveis (`sqlx` com feature `sqlite`), `src/lib.rs` declarando os módulos, binário falso removido. Absorve o trabalho em andamento commitado em `src/` (GC-07) | — | `cargo check` verde (saída colada) |
+| F2 | Migrações `sqlx` com nomes únicos de tabela e coluna (fim de `active_rule`/`active_rules`/`app_id`/`id`); `daily_limit_seconds` e `effective_until` como `Option`; `time_window_start/end`; tabelas da ADR-002 | F1, ADR-002 (aceita) | Banco criado do zero; `PRAGMA foreign_keys` ativo |
 | F3 | Structs do `database_schema.rs` corrigidas (sem `derive` em campo, sem `SecurityEvent` duplicado) e repositório CRUD com transação e `commit()` explícito | F2 | Testes de integração |
 | F4 | `.harness.toml` com gates `cargo fmt --check`, `cargo clippy -D warnings` e `cargo test`; hooks ativados | F3 | Gate reprova num commit propositalmente quebrado (prova negativa) |
 

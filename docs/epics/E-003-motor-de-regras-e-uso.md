@@ -16,8 +16,8 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 
 ## Origem e decisões
 
-- [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Proposto): dois níveis de ação, avisos de 5 e 1 min, escopo passivo de `STALE_RULE`.
-- [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (Proposto): perfil e `usage_ledger`.
+- [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Aceito): dois níveis de ação, avisos de 5 e 1 min, escopo passivo de `STALE_RULE`.
+- [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (Aceito): perfil e `usage_ledger`.
 - [Arquitetura](../architecture/README.md), Seção II: ciclo `PENDING → ACTIVE → REVOKED` e `effective_until_timestamp`.
 
 ## Fases e dependências

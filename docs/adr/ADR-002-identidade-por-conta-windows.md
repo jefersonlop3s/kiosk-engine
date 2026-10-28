@@ -1,6 +1,6 @@
 # ADR-002 — Perfil por conta Windows (SID) e alvo somente Windows
 
-Status: Proposto. Data: 2026-10-27. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-27 pelo dono (Jeferson Lopes). Data: 2026-10-27. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; [arquitetura](../architecture/README.md) Seção II (contrato do dado).
 
 ## Contexto
@@ -16,7 +16,7 @@ Origem: [revisão do estado inicial](../insights/2026-10-27-revisao-estado-inici
 
 ## Decisão
 
-Escolha do dono em 2026-10-27, registrada aqui como proposta:
+Escolha do dono em 2026-10-27, aceita formalmente na mesma data:
 
 - **Alvo somente Windows 10/11** no MVP. macOS e Linux ficam fora do escopo, sem núcleo portável preventivo.
 - **Uma conta local Windows padrão (sem admin) por criança.** O perfil (`child_profile`) é vinculado ao **SID** da conta. Os pais usam uma conta administradora separada.

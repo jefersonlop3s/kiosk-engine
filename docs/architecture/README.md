@@ -1,6 +1,6 @@
 # Arquitetura — kiosk (controle parental doméstico)
 
-> **Estado (2026-10-27)**: especificação original de 2026-09-06, preservada abaixo sem edição. O produto foi definido como controle parental doméstico para Windows, e duas ADRs propostas revisam partes dela:
+> **Estado (2026-10-27)**: especificação original de 2026-09-06, preservada abaixo sem edição. O produto foi definido como controle parental doméstico para Windows, e duas ADRs aceitas em 2026-10-27 revisam partes dela:
 > - [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md): Seção I.2 (Regra da Discrepância) e o objetivo de "invisibilidade". O enforcement passa a ser ativo e visível.
 > - [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md): Seção II. Entram `child_profile` e `usage_ledger`; alvo somente Windows.
 >

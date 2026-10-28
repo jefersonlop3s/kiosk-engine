@@ -1,6 +1,6 @@
 # ADR-001 — Enforcement ativo e visível para a criança
 
-Status: Proposto. Data: 2026-10-27. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-27 pelo dono (Jeferson Lopes). Data: 2026-10-27. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; [arquitetura](../architecture/README.md) Seção I.2 e objetivo principal.
 
 ## Contexto
@@ -14,7 +14,7 @@ Origem: [revisão do estado inicial](../insights/2026-10-27-revisao-estado-inici
 
 ## Decisão
 
-Escolha do dono em 2026-10-27, registrada aqui como proposta:
+Escolha do dono em 2026-10-27, aceita formalmente na mesma data:
 
 - **Bloqueio ativo em dois níveis**:
   - **Por aplicativo**: app fora da lista permitida, fora da janela de horário ou com limite diário esgotado recebe aviso e, ao fim do prazo, tem o processo encerrado.

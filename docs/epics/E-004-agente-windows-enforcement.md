@@ -19,8 +19,8 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 
 ## Origem e decisões
 
-- [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Proposto): enforcement ativo e visível.
-- [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (Proposto): perfil por SID, somente Windows.
+- [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Aceito): enforcement ativo e visível.
+- [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (Aceito): perfil por SID, somente Windows.
 - **ADR a abrir ao iniciar F1**:
   - detecção de processos por polling (Toolhelp/`EnumProcesses`) ou por eventos (ETW/WMI);
   - comunicação serviço ↔ UI (named pipe).

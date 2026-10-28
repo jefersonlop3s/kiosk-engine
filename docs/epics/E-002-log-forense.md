@@ -17,7 +17,7 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 ## Origem e decisões
 
 - [Arquitetura](../architecture/README.md), Seções I.1, I.3 e III.
-- [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Proposto): novos tipos de evento.
+- [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Aceito): novos tipos de evento.
 - **Hipótese em aberto**: imutabilidade por hash encadeado (cada evento carrega o hash do anterior). Exige ADR quando F2 for executada; hoje não há decisão.
 
 ## Fases e dependências

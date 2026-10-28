@@ -54,6 +54,6 @@ Reaproveitar `EPICS_OVERVIEW` e `data_models.rs` foi descartado: os dois ignoram
   - somente Windows;
   - uma conta Windows por criança.
 
-  Estão registrados como ADRs **Propostas** aguardando aceite formal.
+  Foram registrados como ADRs Propostas e **aceitos pelo dono em 2026-10-27** ([CONCLUSION](../CONCLUSION.md)).
 - Continuam hipóteses: topologia de rede, esquema de assinatura, hash encadeado no log e política de retenção.
 - Fica com o dono: remover o AGENTS global em `~/.claude/`, que está fora do repositório.
