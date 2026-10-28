@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Integridade documental; políticas de commit/coordenação pertencem ao projeto.
+set -euo pipefail
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+if [ -d docs ]; then
+    exec python3 .harness/documentation.py check
+fi
+echo 'docrefs: docs ausente; configure o verificador da documentação existente.'

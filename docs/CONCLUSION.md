@@ -74,3 +74,21 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - `client_ip` é fornecido pelo chamador e não validado.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+
+
+## 2026-10-28 — E-001 F4: harness instalado e gates locais ativos
+
+- **Origem**: pedido do dono para instalar o [sovereign-harness](https://github.com/personal-digital-sovereignty/sovereign-harness) e prosseguir.
+- **Resultado**:
+  - marketplace `sovereign-harness` e plugin `sovereign-harness-guard` 0.7.1 instalados (escopo de projeto);
+  - `install.sh --agentes claude --sem-docs --sem-skills`: criados `.harness/`, `.harness.toml` e `.githooks/` (pre-commit e pre-push), sem conflito com a documentação existente; adaptadores de Codex, OpenCode e Antigravity e cópia de skills ficaram de fora por escolha;
+  - contrato de validação em `.harness.toml` com 5 gates: `docs-refs`, `docs-adr`, `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings`, `cargo test --locked`;
+  - `core.hooksPath` apontado para `.githooks` neste clone.
+- **Evidência**: `python3 .harness/validation.py check` → `gates aprovados: 5`. Prova negativa: com `src/lib.rs` desformatado de propósito, o mesmo comando → `gates reprovados: fmt (exit 1)`; o arquivo foi restaurado.
+- **Limitações**:
+  - `hooksPath` não é versionado: cada clone precisa ativá-lo;
+  - o guard do agente é heurístico, não é fronteira de segurança (documentação do harness);
+  - o pre-push do harness valida o checkout local; o CI do GitHub segue como segunda barreira e não foi observado;
+  - o plugin de método (skills) não foi instalado; os comandos `/doc`, `/gap` e `/adr` vêm do plugin guard.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

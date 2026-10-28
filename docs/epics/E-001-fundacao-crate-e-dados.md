@@ -1,6 +1,6 @@
 # E-001 — Fundação do crate e contrato de dados
 
-Estado: em andamento (F1–F3 concluídas em 2026-10-28; F4 parcial). Responsável: a definir. Repositório: kiosk.
+Estado: em andamento (F1–F4 concluídas em 2026-10-28; falta conferir o CI no GitHub). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 

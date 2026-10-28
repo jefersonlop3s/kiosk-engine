@@ -14,6 +14,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - Migração inicial com o contrato do dado (ADR-002), structs alinhadas e CRUD transacional com testes em SQLite real (E-001 F2–F3).
 - CI no GitHub: `cargo fmt --check`, `clippy -D warnings` e `cargo test` em Ubuntu e Windows.
 - Log forense: tipo de evento (migração 0002) e gravação do evento na mesma transação de cada escrita; falhas registram a razão em evento próprio (E-002 F1).
+- Harness Sovereign: guard do agente, gates de git (pre-commit/pre-push) e contrato de validação em `.harness.toml` (E-001 F4).
 
 ### Corrigido
 - Manifesto na raiz com dependências resolvíveis; `cargo check` passa (E-001 F1).
