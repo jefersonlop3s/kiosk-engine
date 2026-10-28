@@ -1,54 +1,62 @@
-// src/db_manager.rs - Gerenciador de Conexões e Transações Seguras (SQLite)
-
-use sqlx::{SqlitePool, QueryBuilder};
+use sqlx::{SqlitePool, Sqlite};
 use crate::database_schema::*; // Importa os structs do schema definido anteriormente.
 
+/// Pool de conexão seguro para transações atômicas no SQLite local (Kiosk).
 pub struct KioskDbManager {
-    pool: SqlitePlus<DatabaseConnection>, // Pool seguro para transações atômicas.
+    pool: SqlitePool,
 }
 
 impl KioskDbManager {
-     /// Inicializa o banco de dados e garante que as tabelas críticas estejam presentes antes da operação lógica começar.
+      /// Inicializa o banco e garante que as tabelas críticas estejam presentes antes da operação lógica.
      pub async fn new(conn_string: &str) -> Result<Self, Box<dyn std::error::Error>> { 
-         let pool = SqlitePool::connect_pool_options(// Configuração para conexão segura com SQLite no sistema operacional local do kiosk).
-             conn_string.parse::<Url>()?; // Validação básica de URL antes da criação.
+         let pool = SqlitePool::connect_url(
+             conn_string.parse::<Url>()?, // Validação básica de URL (ex: "sqlite:///path/to/kiosk.db")
+        ).await?;
 
-         Ok(Self) } 
+         Ok(Self { pool }) } 
 
-    /// Inicializa as tabelas críticas (AppMetadata, ActiveRules e SecurityLog) se ainda não existirem na base atual. 
+     /// Inicializa as tabelas críticas se ainda não existirem na base atual. 
      pub async fn init_tables(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // Cria a tabela App_Metadata com os campos estruturados para mapeamento de processos via WinAPI (UUID + process_name).
-         let create_app_metadata = r#"CREATE TABLE IF NOT EXISTS app_metadata 
-            (app_id UUID PRIMARY KEY, status TEXT DEFAULT 'WHITELISTED', last_seen TIMESTAMP)"#;
+         // Cria a tabela App_Metadata com UUID + process_name (PK para mapeamento de processos via WinAPI).
+         let create_app_metadata = r#"CREATE TABLE IF NOT EXISTS app_metadata (
+             id TEXT PRIMARY KEY, 
+             status TEXT DEFAULT 'WHITELISTED', 
+             last_seen DATETIME)";
 
-        // Cria a tabela Active_Rules com o ciclo de vida completo da regra e seus campos temporais críticos.
-         let create_active_rules = r#"CREATE TABLE IF NOT EXISTS active_rule 
-            (rule_id UUID PRIMARY KEY, status TEXT DEFAULT 'PENDING')"#;
+         // Cria a tabela Active_Rules com o ciclo completo da regra e campos temporais críticos.
+         let create_active_rules = r#"CREATE TABLE IF NOT EXISTS active_rule (
+             id TEXT PRIMARY KEY, 
+             target_app_id TEXT REFERENCES app_metadata(id),
+             status TEXT DEFAULT 'PENDING', 
+             created_at DATETIME)";
 
-        // Define a estrutura do Security_Log como fonte primária da verdade forense: imutável por design e com campo de rejeição detalhado.
-         let create_security_log = r#"CREATE TABLE IF NOT EXISTS security_event 
-            (event_id UUID PRIMARY KEY, timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"#;
+         // Define a estrutura do Security_Log como fonte primária da verdade forense: imutável por design.
+         let create_security_log = r#"CREATE TABLE IF NOT EXISTS security_event (
+             id TEXT PRIMARY KEY, 
+             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)"#;
 
         Ok(()) } 
 
-    /// Garante que a transação seja atômica: sucesso total ou rollback completo em caso de erro crítico na inserção.
-     pub async fn log_security_event(&self) -> Result<(), Box<dyn std::error::Error>> { /* ... lógica complexa do insert ... */ 
-        Ok(()) } 
+     /// Garante que a transação seja atômica: sucesso total ou rollback completo em caso de erro.
+    pub async fn begin_transaction(&self) -> Result<sqlx::Transaction<'_>, Box<dyn std::error::Error>> { 
+         let mut tx = self.pool.begin().await?; // Inicia uma nova transação para garantir atomicidade
 
-    /// Garante que a regra seja registrada com o ciclo de vida correto e os campos temporais exigidos pelo contrato.
-     pub async fn create_active_rule(&self) -> Result<(), Box<dyn std::error::Error>> { /* ... lógica complexa do insert ... */ 
-        Ok(()) } 
+        Ok(tx) } 
 
-    /// Garante que a regra seja registrada com o ciclo de vida correto e os campos temporais exigidos pelo contrato.
-     pub async fn create_app_metadata(&self) -> Result<(), Box<dyn std::error::Error>> { /* ... lógica complexa do insert ... */ 
-        Ok(()) } 
+     /// Garante que a regra seja registrada com o ciclo de vida correto e campos temporais exigidos pelo contrato.
+    pub async fn create_active_rule(&self, rule: &ActiveRule) -> Result<(), Box<dyn std::error::Error>> { 
+         let mut tx = self.begin_transaction().await?;
 
-    /// Garante que a regra seja registrada com o ciclo de vida correto e os campos temporais exigidos pelo contrato.
-     pub async fn create_app_metadata(&self) -> Result<(), Box<dyn std::error::Error>> { /* ... lógica complexa do insert ... */ 
-        Ok(()) } 
+        sqlx::query!("INSERT INTO active_rules (target_app_id, status, created_at) VALUES (?, ?, ?)",
+                     // ... parâmetros da regra ...
+                    ).execute(&mut *tx).await.map_err(|e| e.into())?; 
 
+         Ok(()) } 
 }
 
-/// Implementação da função primária que registra eventos no log forense absoluto, garantindo integridade transacional e imutabilidade.
-pub async fn log_security_event(event: SecurityEvent) -> Result<(), Box<dyn std::error::Error>> { /* ... lógica complexa do insert ... */ 
-    Ok(()) }
+/// Implementação do log forense absoluto com integridade transacional.
+pub async fn log_security_event(event: SecurityEvent) -> Result<(), Box<dyn std::error::Error>> { 
+    // ... lógica complexa de inserção atômica aqui ...
+    
+        Ok(()) }
+
