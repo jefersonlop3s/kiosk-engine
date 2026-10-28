@@ -1,6 +1,6 @@
 # E-003 — Motor de regras e contabilidade de uso
 
-Estado: proposto. Responsável: a definir. Repositório: kiosk.
+Estado: concluído em 2026-10-28 (semântica a confirmar pelo dono, ver PENDING). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -35,4 +35,4 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 
 ## Encerramento
 
-A preencher.
+Entregue em 2026-10-28; evidências na entrada de mesmo título no [CONCLUSION](../CONCLUSION.md). Pendências derivadas: GC-08 a GC-10 no [PENDING](../PENDING.md).

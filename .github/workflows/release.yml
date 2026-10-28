@@ -1,0 +1,77 @@
+name: release
+
+# Publica um release ao receber uma tag `vX.Y.Z`. Também pode rodar manualmente
+# (workflow_dispatch) como ensaio: compila e empacota, mas só publica quando é tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            alvo: windows-x86_64
+          - os: ubuntu-latest
+            alvo: linux-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Versão da tag igual à do Cargo.toml
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          versao=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          test "v${versao}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != Cargo.toml ${versao}"; exit 1; }
+      - run: cargo test --locked
+      - run: cargo build --release --locked --bins
+      - name: Empacotar
+        shell: bash
+        run: |
+          nome="kiosk-engine-${GITHUB_REF_NAME//\//-}-${{ matrix.alvo }}"
+          mkdir -p "dist/${nome}"
+          ext=""; [ "${{ runner.os }}" = "Windows" ] && ext=".exe"
+          cp "target/release/kioskd${ext}" "target/release/kioskctl${ext}" "dist/${nome}/"
+          cp LICENSE CHANGELOG.md docs/runbooks/api-e-cli.md "dist/${nome}/"
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "${nome}.zip" "${nome}" > /dev/null
+          else
+            tar czf "${nome}.tar.gz" "${nome}"
+          fi
+          rm -rf "${nome}"
+          ls -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pacote-${{ matrix.alvo }}
+          path: dist/*
+
+  publicar:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Somas SHA-256 e notas da versão
+        run: |
+          cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
+          versao="${GITHUB_REF_NAME#v}"
+          awk -v v="## [${versao}]" 'index($0, v) == 1 {p=1; next} /^## \[/ {p=0} p' CHANGELOG.md > notas.md
+          test -s notas.md || { echo "CHANGELOG sem a seção ${versao}"; exit 1; }
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: notas.md
+          prerelease: true
+          files: dist/*

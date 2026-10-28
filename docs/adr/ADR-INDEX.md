@@ -7,5 +7,9 @@ Status: Proposto → Aceito | Rejeitado | Descontinuado | Substituído. **O acei
 |---|---|---|---|---|
 | [ADR-001](ADR-001-enforcement-ativo-e-visivel.md) | Enforcement ativo e visível para a criança | Aceito | 2026-10-27 | kiosk |
 | [ADR-002](ADR-002-identidade-por-conta-windows.md) | Perfil por conta Windows (SID) e alvo somente Windows | Aceito | 2026-10-27 | kiosk |
+| [ADR-003](ADR-003-deteccao-de-processos-e-tempo-de-uso.md) | Detecção de processos e definição de tempo de uso | Aceito | 2026-10-28 | kiosk |
+| [ADR-004](ADR-004-comunicacao-servico-ui-por-named-pipe.md) | Comunicação serviço ↔ UI por named pipe | Aceito | 2026-10-28 | kiosk |
+| [ADR-005](ADR-005-rede-da-api-de-comando.md) | Topologia de rede da API de comando | Aceito | 2026-10-28 | kiosk |
+| [ADR-006](ADR-006-assinatura-de-requisicoes-e-pareamento.md) | Assinatura de requisições e pareamento de dispositivos | Aceito | 2026-10-28 | kiosk |
 
-**Próximo número livre**: ADR-003.
+**Próximo número livre**: ADR-007.

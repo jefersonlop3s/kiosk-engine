@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Gates explicitamente configurados pelo projeto. Nenhuma stack/forge implícita.
+set -euo pipefail
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+exec python3 .harness/validation.py pre-push
