@@ -419,3 +419,195 @@ async fn limite_uso_e_log_pelo_cli() {
     let ruim = kioskctl(&cred, &["uso", "--perfil", &Uuid::new_v4().to_string()]);
     assert!(!ruim.status.success() && texto(&ruim.stderr).contains("recusou"));
 }
+
+fn id_da_saida(o: &Output) -> Uuid {
+    assert!(o.status.success(), "{}", texto(&o.stderr));
+    Uuid::parse_str(texto(&o.stdout).trim())
+        .unwrap_or_else(|_| panic!("saída inesperada: {}", texto(&o.stdout)))
+}
+
+#[tokio::test]
+async fn administracao_local_de_perfis_e_apps_e_regra_pelo_cli_com_os_ids() {
+    let dir = tempfile::tempdir().unwrap();
+    // a pasta do banco ainda não existe: o kioskd a cria
+    let db_url = format!(
+        "sqlite://{}",
+        dir.path()
+            .join("dados")
+            .join("kiosk")
+            .join("k.db")
+            .display()
+    );
+    let sid = "S-1-5-21-111-222-333-1001";
+
+    let perfil = id_da_saida(&kioskd(
+        &db_url,
+        None,
+        &[
+            "perfil",
+            "criar",
+            "--sid",
+            sid,
+            "--nome",
+            "Ana",
+            "--limite-total",
+            "7200",
+        ],
+    ));
+    let dup = kioskd(
+        &db_url,
+        None,
+        &["perfil", "criar", "--sid", sid, "--nome", "Outra"],
+    );
+    assert!(
+        !dup.status.success() && texto(&dup.stderr).contains("já existe um perfil"),
+        "{}",
+        texto(&dup.stderr)
+    );
+    let ruim = kioskd(
+        &db_url,
+        None,
+        &["perfil", "criar", "--sid", "123", "--nome", "X"],
+    );
+    assert!(!ruim.status.success() && texto(&ruim.stderr).contains("SID inválido"));
+    #[cfg(not(windows))]
+    {
+        let conta = kioskd(
+            &db_url,
+            None,
+            &["perfil", "criar", "--conta", "ana", "--nome", "Ana"],
+        );
+        assert!(!conta.status.success() && texto(&conta.stderr).contains("--sid"));
+    }
+
+    let p = perfil.to_string();
+    assert!(
+        kioskd(
+            &db_url,
+            None,
+            &[
+                "perfil",
+                "janela",
+                &p,
+                "--dias",
+                "seg,ter",
+                "--janela",
+                "08:00-20:00"
+            ]
+        )
+        .status
+        .success()
+    );
+    for (dias, janela, trecho) in [
+        ("xyz", "08:00-20:00", "dia inválido"),
+        ("seg", "20:00-08:00", "anterior"),
+        ("seg", "8h-20h", "hora inválida"),
+    ] {
+        let e = kioskd(
+            &db_url,
+            None,
+            &["perfil", "janela", &p, "--dias", dias, "--janela", janela],
+        );
+        assert!(
+            !e.status.success() && texto(&e.stderr).contains(trecho),
+            "{dias} {janela}: {}",
+            texto(&e.stderr)
+        );
+    }
+    let lista = texto(&kioskd(&db_url, None, &["perfil", "listar"]).stdout);
+    assert!(
+        lista.contains("Ana") && lista.contains(sid) && lista.contains("2h00"),
+        "{lista}"
+    );
+    assert!(
+        lista.contains("seg 08:00-20:00, ter 08:00-20:00"),
+        "{lista}"
+    );
+    assert!(
+        kioskd(&db_url, None, &["perfil", "limite", &p, "--sem-limite"])
+            .status
+            .success()
+    );
+    assert!(texto(&kioskd(&db_url, None, &["perfil", "listar"]).stdout).contains("sem limite"));
+    let inexistente = kioskd(
+        &db_url,
+        None,
+        &[
+            "perfil",
+            "limite",
+            &Uuid::new_v4().to_string(),
+            "--segundos",
+            "60",
+        ],
+    );
+    assert!(
+        !inexistente.status.success() && texto(&inexistente.stderr).contains("perfil inexistente")
+    );
+
+    let jogo = id_da_saida(&kioskd(
+        &db_url,
+        None,
+        &["app", "criar", "--processo", "jogo.exe"],
+    ));
+    id_da_saida(&kioskd(
+        &db_url,
+        None,
+        &["app", "criar", "--processo", "escola.exe", "--isento"],
+    ));
+    let dup = kioskd(&db_url, None, &["app", "criar", "--processo", "JOGO.EXE"]);
+    assert!(!dup.status.success() && texto(&dup.stderr).contains("já está cadastrado"));
+    let apps = texto(&kioskd(&db_url, None, &["app", "listar"]).stdout);
+    assert!(
+        apps.contains("jogo.exe\tMONITORED") && apps.contains("escola.exe\tWHITELISTED"),
+        "{apps}"
+    );
+
+    // com os ids impressos, os pais criam a regra pelo CLI
+    let porta = porta_livre();
+    let _srv = subir_servico(&db_url, porta);
+    let cred = dir.path().join("credenciais.json");
+    let codigo = texto(&kioskd(&db_url, None, &["codigo-pareamento"]).stdout)
+        .trim()
+        .to_owned();
+    assert!(
+        kioskctl(
+            &cred,
+            &[
+                "parear",
+                "--servidor",
+                &format!("127.0.0.1:{porta}"),
+                "--codigo",
+                &codigo
+            ]
+        )
+        .status
+        .success()
+    );
+    let criar = kioskctl(
+        &cred,
+        &[
+            "regra",
+            "criar",
+            "--perfil",
+            &p,
+            "--app",
+            &jogo.to_string(),
+            "--limite",
+            "3600",
+        ],
+    );
+    assert!(criar.status.success(), "{}", texto(&criar.stderr));
+}
+
+#[tokio::test]
+async fn endereco_sem_porta_explica_o_formato() {
+    let m = mundo().await;
+    let s = kioskd(&m.db_url, Some("100.95.52.48"), &["servir"]);
+    assert!(!s.status.success());
+    assert!(
+        texto(&s.stderr).contains("falta a porta")
+            && texto(&s.stderr).contains("100.95.52.48:8443"),
+        "{}",
+        texto(&s.stderr)
+    );
+}

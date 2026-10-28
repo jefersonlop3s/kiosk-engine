@@ -4,6 +4,19 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.2] - 2026-10-28
+
+Ainda **pré-lançamento**, com as mesmas limitações da 0.0.1. Torna possível o primeiro uso real no Windows: antes não havia como cadastrar a criança nem os apps.
+
+### Adicionado
+- `kioskd perfil criar|listar|limite|janela`: cadastro do perfil pela conta Windows (o SID é obtido com `LookupAccountNameW`; grupos são recusados), limite diário total e janelas por dia da semana.
+- `kioskd app criar|listar`: cadastro dos programas controlados, isentos ou ignorados.
+- `kioskd` cria a pasta do banco se ela não existir.
+
+### Corrigido
+- Runbook reescrito para o PowerShell no Windows: a 0.0.1 trazia comandos em sintaxe de bash (`VAR=valor comando`), que não funcionam no Windows, e um `KIOSK_LISTEN` sem porta.
+- `KIOSK_LISTEN` sem porta agora explica o formato (`falta a porta ... use ip:porta`).
+
 ## [0.0.1] - 2026-10-28
 
 Primeira versão, **pré-lançamento**. O motor, o log forense, a API e o CLI estão completos e testados (Linux e Windows no CI); o agente Windows encerra apps em Windows real, mas bloqueio de sessão, logoff e avisos ainda não foram validados em sessão interativa com conta de criança. Não use como única proteção.

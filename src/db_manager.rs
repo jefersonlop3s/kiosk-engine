@@ -659,6 +659,82 @@ impl KioskDbManager {
             .collect::<Result<Vec<_>, sqlx::Error>>()?;
         Ok((u(sessao)?, apps))
     }
+
+    /// Perfis cadastrados, em ordem de nome.
+    pub async fn listar_perfis(&self) -> Result<Vec<ChildProfile>, sqlx::Error> {
+        let rows: Vec<ProfileRow> = sqlx::query_as(
+            "SELECT profile_id, windows_sid, display_name, daily_total_limit_seconds \
+             FROM child_profile ORDER BY display_name, rowid",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(ChildProfile::try_from).collect()
+    }
+
+    /// Apps cadastrados, em ordem de nome do executável.
+    pub async fn listar_apps(&self) -> Result<Vec<AppMetadata>, sqlx::Error> {
+        let rows: Vec<AppRow> = sqlx::query_as(
+            "SELECT app_id, process_name, current_status FROM app_metadata ORDER BY process_name",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(AppMetadata::try_from).collect()
+    }
+
+    /// Janelas de horário do perfil, `(dia da semana 0 = domingo, janela)`.
+    pub async fn janelas_do_perfil(
+        &self,
+        profile_id: Uuid,
+    ) -> Result<Vec<(u8, TimeWindow)>, sqlx::Error> {
+        let rows: Vec<(i64, String, String)> = sqlx::query_as(
+            "SELECT weekday, window_start, window_end FROM profile_time_window \
+             WHERE profile_id = ? ORDER BY weekday",
+        )
+        .bind(profile_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        let hora = |t: &str| {
+            NaiveTime::parse_from_str(t, HHMM).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+        };
+        rows.into_iter()
+            .map(|(d, a, b)| {
+                let dia = u8::try_from(d).map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+                Ok((
+                    dia,
+                    TimeWindow {
+                        start: hora(&a)?,
+                        end: hora(&b)?,
+                    },
+                ))
+            })
+            .collect()
+    }
+
+    /// Altera o limite diário total do perfil (`None` = sem limite), auditado como `MODIFY_LIMIT`.
+    pub async fn set_profile_limit(
+        &self,
+        ctx: &EventContext,
+        profile_id: Uuid,
+        limite: Option<u64>,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.begin_transaction().await?;
+        let r = async {
+            let feito = sqlx::query(
+                "UPDATE child_profile SET daily_total_limit_seconds = ? WHERE profile_id = ?",
+            )
+            .bind(opt_secs(limite)?)
+            .bind(profile_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+            match feito.rows_affected() {
+                0 => Err(sqlx::Error::RowNotFound),
+                _ => Ok(()),
+            }
+        }
+        .await;
+        self.finish(tx, r, ctx, ActionType::ModifyLimit, Some(profile_id))
+            .await
+    }
 }
 
 /// Quem pediu a operação; vai para o `client_ip` do evento.
