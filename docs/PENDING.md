@@ -28,7 +28,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | Épico | Estado | Próximo passo |
 |---|---|---|
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) | em andamento | F1–F4 concluídas e CI verde em Ubuntu e Windows |
-| [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Adaptador Win32 e agente ligado ao `kioskd` prontos; faltam serviço do Windows (SCM), UI de bandeja e teste em sessão interativa |
+| [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Encerramento de app validado em PC real com conta de criança (2026-10-29); faltam validar aviso, bloqueio e logoff, o serviço do Windows (SCM) e a UI de bandeja |
 | [E-005](epics/E-005-api-comando-e-pareamento.md) | em andamento | F1 a F3 concluídas (servidor, assinatura, regras, `modify_limit`, consultas de uso e log, CLI dos pais); sobram o modo LAN (GC-15) e ligar o agente ao serviço (GC-16) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
 

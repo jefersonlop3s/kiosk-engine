@@ -408,3 +408,11 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Pendente**: o teste de bloqueio do Bloco de Notas na conta da criança ainda não foi feito.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-29 — Enforcement validado em PC real com conta de criança
+
+- **Origem**: teste do dono com a 0.0.2 no próprio PC (identificadores, SID e IP do teste não são registrados aqui).
+- **Roteiro**: `kioskd perfil criar --conta` (conta local padrão da criança), `kioskd app criar --processo notepad.exe`, `kioskd servir` num PowerShell de administrador (não como SYSTEM), `kioskd codigo-pareamento` + `kioskctl parear` pelo loopback, `kioskctl regra criar --limite 0` e `kioskctl regra ativar`; depois o Bloco de Notas foi aberto na sessão da criança (troca rápida de usuário).
+- **Resultado**: o `kioskctl log` mostrou `ADD_PROFILE`, `ADD_RULE`, `ACTIVATE_RULE` e três `APP_TERMINATED` com o detalhe `app Notepad.exe (pid …) encerrado: APP_BLOQUEADO`, a cerca de 6 s um do outro (três aberturas encerradas). O agente, rodando como administrador comum, leu o SID de processos de outra conta sem precisar de `SeDebugPrivilege`.
+- **O que isto valida** (E-004 F2, parcial): detecção por SID em sessão de outro usuário, encerramento real, motor com regra de limite 0, log forense e o ciclo de regra pela API a partir de um dispositivo pareado.
+- **Ainda sem validação**: aviso por `WTSSendMessageW`, bloqueio de sessão (`WTSDisconnectSession`), logoff após 2 desbloqueios, limites por tempo (com avisos de 5 e 1 min) e o `kioskd` como serviço do Windows.
+
