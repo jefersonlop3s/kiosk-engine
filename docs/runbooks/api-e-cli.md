@@ -30,19 +30,51 @@ $env:KIOSK_LISTEN = "100.95.52.48:8443"   # o IP do `tailscale ip -4`, com a por
 
 ## 3. Cadastrar a criança e os apps
 
+### 3.1 Três identificadores diferentes
+
+| O quê | Exemplo | De onde vem | Onde é usado |
+|---|---|---|---|
+| **Nome da conta** | `Ana` ou `Nome da Conta` | nome de login no Windows | `perfil criar --conta` |
+| **SID da conta** | `S-1-5-21-…-1001` | identificador interno do Windows | `perfil criar --sid` (alternativa ao nome) |
+| **ID do perfil** | `3f2a9c1e-…` (UUID) | gerado pelo `kioskd` ao criar o perfil | `perfil janela`, `perfil limite`, `kioskctl regra criar --perfil`, `uso`, `log` |
+
+O `--nome` do `perfil criar` é só o nome de exibição (o que aparece nas listagens); não precisa ser igual ao da conta.
+
+### 3.2 Descobrir o nome e o SID da conta da criança
+
+**O nome da pasta em `C:\Users\` não é necessariamente o nome da conta.** Se a conta foi renomeada, a pasta mantém o nome antigo; em conta Microsoft, a pasta costuma ter só as primeiras letras do e-mail. Confira o nome real:
+
 ```powershell
-.\kioskd.exe perfil criar --conta ana --nome "Ana" --limite-total 7200
+Get-LocalUser | Select-Object Name, SID, Enabled
+```
+
+- Use o valor da coluna `Name` em `--conta`, **entre aspas** se tiver espaço.
+- Ou use o valor da coluna `SID` em `--sid`, que não depende do nome.
+
+**Conta Microsoft** (login por e-mail): ela não aparece como as contas locais no `Get-LocalUser`, e o projeto parte do pressuposto de contas locais ([ADR-002](../adr/ADR-002-identidade-por-conta-windows.md)). Para usá-la, entre na conta da criança, rode `whoami /user` e cadastre pelo SID mostrado, com `--sid`.
+
+### 3.3 Cadastrar
+
+```powershell
+.\kioskd.exe perfil criar --conta "Nome da Conta" --nome "Ana" --limite-total 7200
+# ou, pelo SID:
+.\kioskd.exe perfil criar --sid S-1-5-21-XXXXXXXXXX-XXXXXXXXXX-XXXXXXXXXX-1001 --nome "Ana" --limite-total 7200
+
+.\kioskd.exe perfil listar
+```
+
+O `perfil criar` imprime o **ID do perfil**. Confira no `perfil listar` que o SID mostrado é o mesmo do `Get-LocalUser` (ou do `whoami /user`). Contas inexistentes e grupos são recusados; o mesmo SID não pode ter dois perfis.
+
+```powershell
 .\kioskd.exe perfil janela <id-do-perfil> --dias seg,ter,qua,qui,sex --janela 08:00-20:00
 .\kioskd.exe app criar --processo Roblox.exe
 .\kioskd.exe app criar --processo escola.exe --isento
-.\kioskd.exe perfil listar
 .\kioskd.exe app listar
 ```
 
-- `--conta` é o nome da conta Windows da criança; o SID é obtido do próprio Windows. Grupos e contas inexistentes são recusados.
-- `--limite-total` (segundos) é o tempo de computador por dia; `perfil limite <id> --segundos N` ou `--sem-limite` muda depois.
+- `--limite-total` (segundos) é o tempo de computador por dia; `perfil limite <id-do-perfil> --segundos N` ou `--sem-limite` muda depois.
 - Dia sem janela cadastrada não tem restrição de horário.
-- Os comandos `criar` imprimem o id que os outros comandos usam.
+- `app criar` também imprime o ID do app, usado em `kioskctl regra criar --app`.
 - App **monitorado** (padrão) só é restringido por regras; `--isento` nunca é encerrado; `--ignorar` fica fora do controle.
 - O nome do processo é o do `.exe` (veja no Gerenciador de Tarefas, aba Detalhes). Renomear o `.exe` burla a identificação: limitação conhecida.
 
