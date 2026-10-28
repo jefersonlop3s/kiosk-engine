@@ -566,6 +566,17 @@ impl KioskDbManager {
                 .await?;
         Ok(n > 0)
     }
+
+    /// Dispositivos pareados (id, nome, criado em, revogado em), do mais antigo ao mais novo.
+    pub async fn listar_dispositivos(
+        &self,
+    ) -> Result<Vec<(String, String, String, Option<String>)>, sqlx::Error> {
+        sqlx::query_as(
+            "SELECT device_id, display_name, created_at, revoked_at FROM paired_device ORDER BY created_at, rowid",
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
 }
 
 /// Quem pediu a operação; vai para o `client_ip` do evento.

@@ -7,7 +7,7 @@ edition = "2024"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono", "uuid"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 sha2 = "0.10"

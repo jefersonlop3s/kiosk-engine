@@ -1,6 +1,6 @@
 # E-005 — API de comando e pareamento
 
-Estado: em andamento (F1, F2 e o núcleo da F3 prontos em 2026-10-28; falta o CLI dos pais). Responsável: a definir. Repositório: kiosk.
+Estado: em andamento (F1 a F3 prontas em 2026-10-28; faltam `modify_limit` e as consultas de uso e log). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -30,7 +30,8 @@ Estado: em andamento (F1, F2 e o núcleo da F3 prontos em 2026-10-28; falta o CL
 - Recusas respondem com `Rejeicao` genérica; o motivo exato vai para `AUTH_FAIL`/`AUTHZ_FAIL`/`VALIDATION_FAIL`.
 - F1 e núcleo da F3: `api` (axum) com `POST /api/windows/{ação}` atravessando as Camadas 0 a 5; `comandos` valida os parâmetros (esquema fechado, limites, horários `HH:MM`, referências existentes); ações `add_rule` (nasce `PENDING`), `activate_rule` e `revoke_rule`, cada uma com o evento de sucesso na mesma transação. Respostas: `202 {"status":"accepted"}` (com `id` ao criar), `403 {"status":"rejected"}` idêntico para qualquer recusa e `500` genérico; corpo máximo de 16 KiB.
 - Política de rede da ADR-005 aplicada em código: `vincular` só abre loopback e Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) e recusa curinga e LAN antes de abrir qualquer porta.
-- Faltam: CLI dos pais, `modify_limit`, consultas de uso e log, e o `main` do serviço (GC-14 a GC-16 no [PENDING](../PENDING.md)).
+- `POST /api/pair` (o código de uso único é a credencial), `cliente` (HTTP/1.1 simples, credenciais com a chave privada em arquivo `0600`), o serviço `kioskd` (`servir`, `codigo-pareamento`, `dispositivos`, `revogar`) e o CLI `kioskctl` (`parear`, `regra criar|ativar|revogar`). Uso: [runbook](../runbooks/api-e-cli.md).
+- Faltam: `modify_limit`, consultas de uso e log, modo LAN com HTTPS e a ligação do agente ao serviço (GC-14 a GC-16 no [PENDING](../PENDING.md)).
 
 ## Aceites
 

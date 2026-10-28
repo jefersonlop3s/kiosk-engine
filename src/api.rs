@@ -104,6 +104,7 @@ pub async fn vincular(enderecos: &[SocketAddr]) -> Result<Vec<TcpListener>, Erro
 pub fn roteador(db: Arc<KioskDbManager>) -> Router {
     Router::new()
         .route("/api/windows/{acao}", post(comando))
+        .route("/api/pair", post(parear))
         .layer(DefaultBodyLimit::max(MAX_CORPO_BYTES))
         .with_state(db)
 }
@@ -176,6 +177,48 @@ async fn recusar_validacao(
     match db.record_event(&e).await {
         Ok(()) => rejeitada(),
         Err(_) => erro_interno(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PareamentoBruto {
+    codigo: String,
+    chave_publica: String,
+    nome: String,
+}
+
+/// `POST /api/pair`: o código de uso único, mostrado na conta de administrador, é a credencial.
+/// Não passa pelas Camadas 1 e 2 (o dispositivo ainda não existe); o limite de tentativas
+/// vive em `parear_dispositivo`.
+async fn parear(
+    State(db): State<Arc<KioskDbManager>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    corpo: Bytes,
+) -> Response {
+    let ctx = EventContext {
+        client_ip: peer.ip().to_string(),
+    };
+    let bruto: PareamentoBruto = match serde_json::from_slice(&corpo) {
+        Ok(b) => b,
+        Err(e) => {
+            let motivo = format!("corpo de pareamento inválido: {e}");
+            return recusar_validacao(&db, &ctx, ActionType::PairDevice, motivo).await;
+        }
+    };
+    let Some(chave) = crate::pareamento::decodificar_chave_publica(&bruto.chave_publica) else {
+        let motivo = "chave pública de pareamento não é base64".to_string();
+        return recusar_validacao(&db, &ctx, ActionType::PairDevice, motivo).await;
+    };
+    match db
+        .parear_dispositivo(&ctx, &bruto.codigo, &chave, &bruto.nome, Utc::now())
+        .await
+    {
+        Ok(id) => resposta(
+            StatusCode::ACCEPTED,
+            format!(r#"{{"status":"accepted","device_id":"{id}"}}"#),
+        ),
+        Err(r) => de_rejeicao(r),
     }
 }
 

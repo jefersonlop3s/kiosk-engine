@@ -246,3 +246,21 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - testado em Linux; comportamento do firewall do Windows e do Tailscale real não foi exercitado.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-005 F3: serviço executável, pareamento pela API e CLI dos pais
+
+- **Origem**: continuação do pedido do dono; o epic lista o CLI dos pais como parte da F3 e o ciclo só é usável com um executável.
+- **Resultado**:
+  - `POST /api/pair` (corpo `{codigo, chave_publica, nome}`, esquema fechado): o código de uso único é a credencial; responde `202` com o `device_id` ou o mesmo `403` genérico;
+  - `src/cliente.rs`: `post`, `comando`, `parear` (HTTP/1.1 sobre TCP com tempo limite de 10 s) e `Credenciais` (chave privada em arquivo criado já com `0600` no Unix; `Debug` oculta a chave);
+  - `kioskd`: `servir` (exige `KIOSK_LISTEN`, valida os endereços antes de abrir qualquer porta), `codigo-pareamento`, `dispositivos`, `revogar <id>`;
+  - `kioskctl`: `parear`, `regra criar|ativar|revogar`; erros em pt-BR, recusa do serviço sem detalhe, e não sobrescreve credenciais existentes;
+  - [runbook](runbooks/api-e-cli.md) de operação, listado no índice da documentação.
+- **Evidência**: `cargo test --locked` → 108 testes passando; `tests/cli.rs` (6) usa os executáveis como processos reais: sobe o `kioskd servir` em loopback, gera o código, pareia com o `kioskctl`, cria → ativa → revoga uma regra (estado conferido no SQLite), revoga o dispositivo e vê o CLI ser recusado sem vazar o identificador; endereços `0.0.0.0`, `[::]`, `192.168.x`, lista com um endereço de LAN e texto inválido recusados na partida; código errado não grava credenciais. Mutações: credenciais com `0644` e chave no `Debug` reprovaram testes e foram revertidas. Clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - o serviço sobe só a API; o agente não está ligado a ele (GC-16);
+  - `modify_limit` e consultas de uso e log não existem (GC-14); modo LAN com HTTPS não existe (GC-15);
+  - sem TLS: o transporte seguro é o da rede Tailscale (ADR-005);
+  - a chave privada fica em arquivo; no Windows a permissão do arquivo depende da ACL da pasta do usuário (não há `0600`);
+  - Windows real e Tailscale real não foram exercitados.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
