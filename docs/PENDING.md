@@ -35,3 +35,4 @@ Origem: [revisão do estado inicial](insights/2026-10-27-revisao-estado-inicial.
 | Item | Próximo passo |
 |---|---|
 | `.harness.toml` e gates locais | Configurar quando houver build (E-001 F4) |
+| CI no GitHub (`cargo check/test`) e proteção da `main` | Junto de E-001 F4; antes disso não há build para checar |

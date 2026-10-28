@@ -10,6 +10,8 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - Arquitetura movida para `docs/architecture/README.md`; `ARCHITECTURE.md` vira stub.
 - ADR-001 (enforcement ativo e visível) e ADR-002 (perfil por conta Windows, somente Windows) propostas e aceitas em 2026-10-27.
 
+- Repositório publicado em github.com/jefersonlop3s/kiosk-engine; fluxo de trabalho por Pull Request descrito no AGENTS.md.
+
 ### Chore
 - Trabalho em andamento em `src/` (`db_manager.rs`, `security_logger_impl.rs`, `Cargo.toml`) versionado como está; ainda não compila (GC-01 a GC-07).
 - Épicos E-001 a E-006 e roadmap de sprints.

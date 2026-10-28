@@ -14,7 +14,7 @@
 ## Perfil do projeto
 
 - **Produto**: controle parental para uso doméstico. Pais e responsáveis definem quais programas cada criança/adolescente pode usar, por quanto tempo e em quais horários. Um app mobile de administração virá depois ([E-006](docs/epics/E-006-app-mobile-administracao.md)).
-- **Topologia**: repositório único, sem remote configurado. Branch principal: `main` (protegida pelo guard).
+- **Topologia**: repositório único, público em [github.com/jefersonlop3s/kiosk-engine](https://github.com/jefersonlop3s/kiosk-engine) (remote `origin`). Branch principal: `main` (protegida pelo guard).
 - **Stack**: Rust (edition 2024), SQLite via `sqlx`, runtime `tokio`.
 - **Alvo**: somente Windows 10/11 ([ADR-002](docs/adr/ADR-002-identidade-por-conta-windows.md)). O desenvolvimento acontece em macOS; aceite de enforcement exige Windows real.
 - **Validação**: `cargo check` e `cargo test`. Hoje o manifesto não resolve dependências — ver [PENDING](docs/PENDING.md) (GC-01). Até o fim de [E-001](docs/epics/E-001-fundacao-crate-e-dados.md) F1 não há gate executável.
@@ -37,7 +37,8 @@
 1. Uma branch por trabalho: `claude/<slug>` (ou `<agente>/<slug>`). Nunca commitar em `main`.
 2. Nunca `git add -A`/`.`; adicione por caminho e confira `git diff --cached --stat`.
 3. Commits atômicos, mensagem em português com o quê e o porquê.
-4. Sem remote: merge local `--ff-only` em `main` depois da validação aplicável e com autorização do dono.
+4. Todo trabalho chega à `main` por **Pull Request** no GitHub. O merge é do dono, depois da validação aplicável; o agente não faz merge sem pedido explícito.
+5. Repositório público: nada de dados reais de crianças, credenciais ou logs de máquina no Git.
 
 ## Documentação viva
 

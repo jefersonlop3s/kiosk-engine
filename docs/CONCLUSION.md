@@ -26,4 +26,13 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - [ADR-001](adr/ADR-001-enforcement-ativo-e-visivel.md) e [ADR-002](adr/ADR-002-identidade-por-conta-windows.md) passam a **Aceito**; E-001 F2 fica desbloqueada;
   - o trabalho em andamento do dono em `src/` foi commitado como está, num commit próprio. Ele não compila e segue rastreado como GC-07 no [PENDING](PENDING.md).
 - **Limitações**: nenhum código foi corrigido; o build continua quebrado até E-001 F1.
-- **Commit**: branch `claude/aceite-adrs`, integrada em `main` por fast-forward.
+- **Commit**: `cde74c3` (src) e `f1f48d4` (ADRs), integrados em `main` por fast-forward.
+
+## 2026-10-27 — Publicação no GitHub e fluxo por Pull Request
+
+- **Origem**: decisão do dono de continuar via GitHub, com repositório público `jefersonlop3s/kiosk-engine`.
+- **Resultado**:
+  - repositório criado e `main` enviada (`f1f48d4`), depois de varrer o histórico atrás de segredos (nada encontrado);
+  - o [AGENTS.md](../AGENTS.md) passa a exigir PR com merge feito pelo dono e proíbe dados reais de crianças no Git.
+- **Limitações**: não há CI nem proteção de branch no GitHub; os gates locais continuam pendentes (E-001 F4).
+- **Commit**: PR da branch `claude/fluxo-github`.
