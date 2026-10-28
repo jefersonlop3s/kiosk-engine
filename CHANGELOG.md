@@ -16,6 +16,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - Log forense: tipo de evento (migração 0002) e gravação do evento na mesma transação de cada escrita; falhas registram a razão em evento próprio (E-002 F1).
 - `Security_Log` append-only: triggers recusam UPDATE e DELETE (migração 0003, E-002 F2).
 - Retenção de 90 dias do log forense imposta por trigger, `purge_expired_events` e consulta de eventos por período e por perfil (migração 0004, E-002 F3).
+- Motor de decisão puro (`decidir`) e contabilidade de uso por dia local, com guarda de relógio (`TAMPER_SUSPECTED`) (E-003 F1–F3).
 - Harness Sovereign: guard do agente, gates de git (pre-commit/pre-push) e contrato de validação em `.harness.toml` (E-001 F4).
 
 ### Corrigido

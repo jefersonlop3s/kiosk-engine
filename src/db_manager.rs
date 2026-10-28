@@ -1,12 +1,14 @@
 use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
 use crate::database_schema::*;
+use crate::motor::Consumo;
 use crate::security_logger_impl::insert_event;
+use crate::uso::{MAX_INTERVALO_SEGUNDOS, dividir_por_dia_local};
 
 /// Pool de conexão para transações atômicas no SQLite local.
 pub struct KioskDbManager {
@@ -271,6 +273,77 @@ impl KioskDbManager {
         }
         tx.commit().await?;
         Ok(removed)
+    }
+
+    /// Soma ao `usage_ledger` o uso de `app` por `profile_id` em `[inicio, fim)`, dividido pelos
+    /// dias locais de `tz`. Intervalo negativo ou maior que `MAX_INTERVALO_SEGUNDOS` indica relógio
+    /// suspeito: grava `TAMPER_SUSPECTED` e devolve erro, sem contabilizar nada.
+    ///
+    /// A contabilização é medição de alta frequência e não grava um evento por chamada; os eventos
+    /// do log são as ações de enforcement e as anomalias.
+    pub async fn registrar_uso<Tz: TimeZone>(
+        &self,
+        ctx: &EventContext,
+        profile_id: Uuid,
+        app_id: Uuid,
+        inicio: DateTime<Utc>,
+        fim: DateTime<Utc>,
+        tz: &Tz,
+    ) -> Result<(), sqlx::Error> {
+        let duracao = (fim - inicio).num_seconds();
+        if !(0..=MAX_INTERVALO_SEGUNDOS).contains(&duracao) {
+            let detalhe = format!(
+                "intervalo de uso suspeito: {inicio} -> {fim} ({duracao}s; aceito 0..={MAX_INTERVALO_SEGUNDOS}s)"
+            );
+            let e = SecurityEvent::new(
+                &ctx.client_ip,
+                ActionType::System,
+                EventType::TamperSuspected,
+                TransactionStatus::Failure,
+                &detalhe,
+            )
+            .with_profile(Some(profile_id));
+            self.record_event(&e).await?;
+            return Err(sqlx::Error::Protocol(detalhe));
+        }
+        let partes = dividir_por_dia_local(tz, inicio, fim).map_err(sqlx::Error::Protocol)?;
+        let mut tx = self.begin_transaction().await?;
+        for (dia, segundos) in partes {
+            sqlx::query(
+                "INSERT INTO usage_ledger (profile_id, app_id, usage_date, seconds) VALUES (?, ?, ?, ?) \
+                 ON CONFLICT (profile_id, app_id, usage_date) DO UPDATE SET seconds = seconds + excluded.seconds",
+            )
+            .bind(profile_id.to_string())
+            .bind(app_id.to_string())
+            .bind(dia.to_string())
+            .bind(i64::try_from(segundos).map_err(|e| sqlx::Error::Encode(Box::new(e)))?)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await
+    }
+
+    /// Consumo do dia local `dia`: do app e total do perfil (soma dos apps).
+    pub async fn consumo_do_dia(
+        &self,
+        profile_id: Uuid,
+        app_id: Uuid,
+        dia: NaiveDate,
+    ) -> Result<Consumo, sqlx::Error> {
+        let (app, total): (i64, i64) = sqlx::query_as(
+            "SELECT COALESCE(SUM(CASE WHEN app_id = ? THEN seconds END), 0), COALESCE(SUM(seconds), 0) \
+             FROM usage_ledger WHERE profile_id = ? AND usage_date = ?",
+        )
+        .bind(app_id.to_string())
+        .bind(profile_id.to_string())
+        .bind(dia.to_string())
+        .fetch_one(&self.pool)
+        .await?;
+        let u = |v: i64| u64::try_from(v).map_err(|e| sqlx::Error::Decode(Box::new(e)));
+        Ok(Consumo {
+            app_segundos: u(app)?,
+            total_segundos: u(total)?,
+        })
     }
 }
 

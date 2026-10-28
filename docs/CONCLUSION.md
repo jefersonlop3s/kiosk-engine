@@ -123,3 +123,20 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Encerra o E-002**; o hash encadeado fica fora do épico.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-003 F1–F3: motor de decisão e contabilidade de uso
+
+- **Origem**: pedido do dono para prosseguir ([ROADMAP](ROADMAP.md), sprint 3). As decisões de semântica abaixo foram tomadas pelo agente por serem reversíveis (função pura) e estão no PENDING para confirmação.
+- **Resultado**:
+  - `src/motor.rs`: `decidir(perfil, app, instante, consumo) → Permitir | Avisar{restante, motivo} | EncerrarApp{motivo} | BloquearSessao{motivo}`, pura (sem SO, banco ou relógio próprio), testável no macOS;
+  - semântica: `WHITELISTED` e `IGNORE` isentos de regras de app; `MONITORED` só é restringido por regras `ACTIVE` e vigentes do perfil e do app, e sem regra é permitido; limite 0 bloqueia o app; várias regras no mesmo app valem a mais restritiva (menor limite, dentro de todas as janelas); regra `REVOKED`, `PENDING`, expirada ou de outro app/perfil é ignorada; gravidade `BloquearSessao` > `EncerrarApp` > `Avisar` > `Permitir`, e entre avisos o de menor restante; aviso a partir de 300 s; dia sem janela = sem restrição de horário;
+  - `src/uso.rs`: `dividir_por_dia_local` divide o intervalo pelos dias locais de um fuso, em segundos reais (dia de 23 e de 25 horas; meia-noite inexistente);
+  - `KioskDbManager::registrar_uso` (UPSERT em `usage_ledger`, uma transação) e `consumo_do_dia` (app e total do perfil);
+  - guarda de relógio: intervalo negativo ou acima de 600 s grava `TAMPER_SUSPECTED`, devolve erro e não contabiliza (nunca ajuste silencioso).
+- **Evidência**: `cargo test --locked` → 9 + 14 + 14 + 11 passando. O controle negativo do épico varre 08:00–19:53 com consumo 0, 1000 e 3299 s e nunca obtém `EncerrarApp`/`BloquearSessao`; app isento nunca é encerrado em nenhuma hora. Mutação deliberada: trocar `>=` por `>` no limite reprova 5 testes do motor; trocar o dia local pelo dia UTC reprova 4 testes de uso; ambas revertidas. Clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - `registrar_uso` não grava evento por chamada (medição de alta frequência); só anomalias e, no E-004, ações de enforcement geram evento;
+  - o relógio e o fuso vêm de quem chama (`chrono::Local` no agente); testado com `chrono-tz` (Nova York e São Paulo), não com `Local` no Windows;
+  - GC-08 a GC-10 abertos no PENDING;
+  - sem integração ainda: nada lê perfil/regras do banco para montar a decisão.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
