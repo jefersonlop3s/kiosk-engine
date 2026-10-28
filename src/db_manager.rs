@@ -235,16 +235,29 @@ impl KioskDbManager {
         to: DateTime<Utc>,
         profile_id: Option<Uuid>,
     ) -> Result<Vec<SecurityEvent>, sqlx::Error> {
+        self.security_events_limitado(from, to, profile_id, i64::MAX)
+            .await
+    }
+
+    /// Como `security_events`, devolvendo no máximo `limite` eventos (os mais antigos do período).
+    pub async fn security_events_limitado(
+        &self,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        profile_id: Option<Uuid>,
+        limite: i64,
+    ) -> Result<Vec<SecurityEvent>, sqlx::Error> {
         let rows: Vec<EventRow> = sqlx::query_as(
             "SELECT log_id, timestamp, client_ip, action_attempted, event_type, transaction_status, \
              rejection_reason_detail, profile_id FROM security_log \
              WHERE timestamp >= ? AND timestamp <= ? AND (? IS NULL OR profile_id = ?) \
-             ORDER BY timestamp, rowid",
+             ORDER BY timestamp, rowid LIMIT ?",
         )
         .bind(log_ts(from))
         .bind(log_ts(to))
         .bind(profile_id.map(|p| p.to_string()))
         .bind(profile_id.map(|p| p.to_string()))
+        .bind(limite)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(SecurityEvent::try_from).collect()
@@ -576,6 +589,75 @@ impl KioskDbManager {
         )
         .fetch_all(&self.pool)
         .await
+    }
+
+    /// Altera o limite diário de uma regra não revogada (auditado como `MODIFY_LIMIT`).
+    pub async fn set_rule_limit(
+        &self,
+        ctx: &EventContext,
+        rule_id: Uuid,
+        limite_segundos: u64,
+    ) -> Result<(), sqlx::Error> {
+        let limite =
+            i64::try_from(limite_segundos).map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
+        let mut tx = self.begin_transaction().await?;
+        let profile_id: Option<Uuid> = sqlx::query_scalar::<_, String>(
+            "SELECT profile_id FROM active_rules WHERE rule_id = ?",
+        )
+        .bind(rule_id.to_string())
+        .fetch_optional(&mut *tx)
+        .await?
+        .and_then(|p| Uuid::parse_str(&p).ok());
+        let r = sqlx::query(
+            "UPDATE active_rules SET daily_limit_seconds = ? WHERE rule_id = ? AND current_state != 'REVOKED'",
+        )
+        .bind(limite)
+        .bind(rule_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .and_then(|done| match done.rows_affected() {
+            0 => Err(sqlx::Error::RowNotFound),
+            _ => Ok(()),
+        });
+        self.finish(tx, r, ctx, ActionType::ModifyLimit, profile_id)
+            .await
+    }
+
+    /// Uso do dia local `dia`: tempo de sessão ativa do perfil e tempo por app
+    /// `(app_id, process_name, segundos)`, em ordem alfabética.
+    pub async fn uso_do_dia(
+        &self,
+        profile_id: Uuid,
+        dia: NaiveDate,
+    ) -> Result<(u64, Vec<(Uuid, String, u64)>), sqlx::Error> {
+        let sessao: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(seconds), 0) FROM session_usage WHERE profile_id = ? AND usage_date = ?",
+        )
+        .bind(profile_id.to_string())
+        .bind(dia.to_string())
+        .fetch_one(&self.pool)
+        .await?;
+        let linhas: Vec<(String, String, i64)> = sqlx::query_as(
+            "SELECT a.app_id, a.process_name, u.seconds FROM usage_ledger u \
+             JOIN app_metadata a ON a.app_id = u.app_id \
+             WHERE u.profile_id = ? AND u.usage_date = ? ORDER BY a.process_name",
+        )
+        .bind(profile_id.to_string())
+        .bind(dia.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+        let u = |v: i64| u64::try_from(v).map_err(|e| sqlx::Error::Decode(Box::new(e)));
+        let apps = linhas
+            .into_iter()
+            .map(|(id, nome, s)| {
+                Ok((
+                    Uuid::parse_str(&id).map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
+                    nome,
+                    u(s)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()?;
+        Ok((u(sessao)?, apps))
     }
 }
 

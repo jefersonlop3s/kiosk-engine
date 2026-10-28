@@ -31,8 +31,9 @@ pub struct RespostaApi {
 }
 
 impl RespostaApi {
+    /// `202` (comando aceito) ou `200` (consulta respondida).
     pub fn aceita(&self) -> bool {
-        self.status == 202
+        matches!(self.status, 200 | 202)
     }
 }
 

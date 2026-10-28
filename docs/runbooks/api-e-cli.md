@@ -53,6 +53,12 @@ kioskctl regra ativar <id-da-regra>
 kioskctl regra revogar <id-da-regra>
 ```
 
+```bash
+kioskctl regra limite <id-da-regra> --segundos 5400      # altera o limite diário (regra não revogada)
+kioskctl uso --perfil <id-do-perfil> [--data 2026-03-09] # tempo de sessão e por app do dia
+kioskctl log --perfil <id-do-perfil> [--dias 7] [--limite 100]
+```
+
 - A regra nasce **pendente**; só `ativar` a põe em vigor.
 - `--limite` em segundos (até 86400); `--janela` em `HH:MM-HH:MM`; `--ate` em RFC 3339 (no futuro). Todos opcionais.
 - Se o serviço recusar, o CLI diz apenas "recusou o comando": a resposta é genérica de propósito. O motivo exato está no log do PC (`security_log`, eventos `AUTH_FAIL`, `AUTHZ_FAIL` ou `VALIDATION_FAIL`).
@@ -69,6 +75,6 @@ Perdeu o celular: revogue o dispositivo no PC e pareie outro.
 ## Limitações conhecidas
 
 - Sem segundo fator: um dispositivo pareado e desbloqueado nas mãos da criança comanda tudo (ADR-006).
-- Sem `modify_limit`, consultas de uso e de log pela API ainda (GC-14 no [PENDING](../PENDING.md)).
+- O `log` mostra o detalhe dos eventos de enforcement, mas não o das falhas de autenticação, autorização e validação (esse fica só no banco do PC).
 - Sem modo LAN com HTTPS (GC-15).
 - Quem alcança a porta pode errar códigos de pareamento de propósito e bloquear um pareamento novo por 5 minutos (GC-13).

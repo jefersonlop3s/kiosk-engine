@@ -264,3 +264,19 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - Windows real e Tailscale real não foram exercitados.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-005: `modify_limit` e consultas de uso e de log (GC-14)
+
+- **Origem**: GC-14 no [PENDING](PENDING.md); o resultado do E-005 inclui "consulta uso e log pela API".
+- **Resultado**:
+  - `modify_limit` (`set_rule_limit`, auditado como `MODIFY_LIMIT` com o perfil; recusa regra revogada ou inexistente e limite acima de 86400 s);
+  - `usage` (`uso_do_dia`: tempo de sessão ativa e tempo por app de um dia) e `log` (período de até 31 dias, 1 a 500 eventos, filtro por perfil), respondendo `200` com JSON; as consultas exigem as mesmas Camadas 1 a 3 e não geram evento;
+  - decisão do agente: na consulta de log o detalhe exato só sai para eventos de enforcement e de operação; o das falhas de API fica só no banco (coerente com o aceite do E-005 de que nenhuma resposta externa vaza `rejection_reason_detail` das falhas);
+  - CLI: `kioskctl regra limite`, `kioskctl uso` e `kioskctl log`, com durações legíveis (`1h 30min 00s`); runbook atualizado.
+- **Evidência**: `cargo test --locked` → 114 testes passando; 5 testes novos em `tests/api.rs` (limite, regra revogada e 6 parâmetros inválidos, uso, log com filtro/limite/vazamento de detalhe, período e limite inválidos e consulta sem assinatura) e 1 em `tests/cli.rs` (limite, uso e log pelos executáveis reais). Três mutações deliberadas (vazar o detalhe das falhas, permitir alterar regra revogada, sem limite de período) reprovaram testes e foram revertidas. Clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - uma consulta devolve os eventos mais antigos do período até o limite, sem paginação;
+  - as consultas dependem do que o agente grava; sem o agente ligado (GC-16) o uso e os eventos de enforcement ficam vazios;
+  - o Windows real não foi exercitado.
+- **Encerra o E-005** no que não exige Windows; restam GC-15 e GC-16.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

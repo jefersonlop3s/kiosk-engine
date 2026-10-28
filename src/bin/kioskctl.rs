@@ -3,6 +3,9 @@
 //! - `kioskctl parear --servidor HOST:PORTA --codigo CODIGO [--nome NOME]`
 //! - `kioskctl regra criar --perfil ID --app ID [--limite SEGUNDOS] [--janela HH:MM-HH:MM] [--ate RFC3339]`
 //! - `kioskctl regra ativar <id>` e `kioskctl regra revogar <id>`
+//! - `kioskctl regra limite <id> --segundos N`
+//! - `kioskctl uso --perfil ID [--data AAAA-MM-DD]`
+//! - `kioskctl log --perfil ID [--dias N] [--limite N]`
 //!
 //! As credenciais (inclusive a chave privada) ficam em `KIOSK_CREDENCIAIS`, ou em
 //! `~/.config/kiosk/credenciais.json` (`%APPDATA%\kiosk\credenciais.json` no Windows).
@@ -17,7 +20,10 @@ const USO: &str = "uso:\n  \
 kioskctl parear --servidor HOST:PORTA --codigo CODIGO [--nome NOME]\n  \
 kioskctl regra criar --perfil ID --app ID [--limite SEGUNDOS] [--janela HH:MM-HH:MM] [--ate RFC3339]\n  \
 kioskctl regra ativar <id>\n  \
-kioskctl regra revogar <id>";
+kioskctl regra revogar <id>\n  \
+kioskctl regra limite <id> --segundos N\n  \
+kioskctl uso --perfil ID [--data AAAA-MM-DD]\n  \
+kioskctl log --perfil ID [--dias N] [--limite N]";
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -97,6 +103,16 @@ async fn enviar(
     }
 }
 
+/// `3725` -> `1h 02min 05s`.
+fn duracao(segundos: u64) -> String {
+    let (h, m, s) = (segundos / 3600, segundos % 3600 / 60, segundos % 60);
+    match (h, m) {
+        (0, 0) => format!("{s}s"),
+        (0, _) => format!("{m}min {s:02}s"),
+        _ => format!("{h}h {m:02}min {s:02}s"),
+    }
+}
+
 async fn executar(args: &[String]) -> Result<(), String> {
     let partes: Vec<&str> = args.iter().map(String::as_str).collect();
     match partes.as_slice() {
@@ -144,6 +160,76 @@ async fn executar(args: &[String]) -> Result<(), String> {
             )
             .await?;
             println!("regra {id} {feito}");
+            Ok(())
+        }
+        ["regra", "limite", id, ..] => {
+            let id = Uuid::parse_str(id).map_err(|_| format!("identificador inválido: {id:?}"))?;
+            let segundos = exigir(args, "--segundos")?;
+            let segundos: u64 = segundos
+                .parse()
+                .map_err(|_| format!("--segundos inválido: {segundos:?}"))?;
+            let cred = Credenciais::carregar(&caminho_credenciais()?)?;
+            let corpo = serde_json::json!({ "rule_id": id, "daily_limit_seconds": segundos });
+            enviar(&cred, "modify_limit", &corpo.to_string()).await?;
+            println!("regra {id}: limite diário agora é {}", duracao(segundos));
+            Ok(())
+        }
+        ["uso", ..] => {
+            let perfil = exigir(args, "--perfil")?;
+            let data = opcao(args, "--data")
+                .unwrap_or_else(|| chrono::Local::now().date_naive().to_string());
+            let cred = Credenciais::carregar(&caminho_credenciais()?)?;
+            let corpo = serde_json::json!({ "profile_id": perfil, "date": data });
+            let r = enviar(&cred, "usage", &corpo.to_string()).await?;
+            let v: serde_json::Value = serde_json::from_str(&r.corpo)
+                .map_err(|_| "resposta de uso ilegível".to_string())?;
+            println!("uso em {data}");
+            println!(
+                "  sessão ativa: {}",
+                duracao(v["session_seconds"].as_u64().unwrap_or(0))
+            );
+            for a in v["apps"].as_array().into_iter().flatten() {
+                println!(
+                    "  {}: {}",
+                    a["process_name"].as_str().unwrap_or("?"),
+                    duracao(a["seconds"].as_u64().unwrap_or(0))
+                );
+            }
+            Ok(())
+        }
+        ["log", ..] => {
+            let perfil = exigir(args, "--perfil")?;
+            let dias: i64 = opcao(args, "--dias")
+                .map(|d| d.parse().map_err(|_| format!("--dias inválido: {d:?}")))
+                .transpose()?
+                .unwrap_or(1);
+            let agora = chrono::Utc::now();
+            let mut corpo = serde_json::json!({
+                "from": (agora - chrono::Duration::days(dias)).to_rfc3339(),
+                "to": agora.to_rfc3339(),
+                "profile_id": perfil,
+            });
+            if let Some(l) = opcao(args, "--limite") {
+                let l: u32 = l.parse().map_err(|_| format!("--limite inválido: {l:?}"))?;
+                corpo["limit"] = l.into();
+            }
+            let cred = Credenciais::carregar(&caminho_credenciais()?)?;
+            let r = enviar(&cred, "log", &corpo.to_string()).await?;
+            let v: serde_json::Value = serde_json::from_str(&r.corpo)
+                .map_err(|_| "resposta de log ilegível".to_string())?;
+            let eventos = v["events"].as_array().cloned().unwrap_or_default();
+            if eventos.is_empty() {
+                eprintln!("kioskctl: nenhum evento no período");
+            }
+            for e in eventos {
+                println!(
+                    "{}  {}  {}  {}",
+                    e["timestamp"].as_str().unwrap_or("?"),
+                    e["event_type"].as_str().unwrap_or("?"),
+                    e["action"].as_str().unwrap_or("?"),
+                    e["detail"].as_str().unwrap_or("")
+                );
+            }
             Ok(())
         }
         _ => Err(USO.to_string()),

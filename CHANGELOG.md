@@ -24,6 +24,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - Protocolo serviço ↔ UI com decodificação defensiva, limite de taxa e monitor de batimento (ADR-004, parte independente de plataforma).
 - API de comando `POST /api/windows/{ação}` com as Camadas 0 a 5 (criar, ativar e revogar regras), respostas genéricas e escuta restrita a loopback e Tailscale (ADR-005, E-005 F1/F3).
 - Serviço `kioskd` (servir, código de pareamento, dispositivos, revogar), CLI dos pais `kioskctl` (parear e criar, ativar e revogar regras), endpoint `POST /api/pair` e runbook de operação (E-005 F3).
+- `modify_limit` e consultas de uso e de log pela API e pelo CLI (`regra limite`, `uso`, `log`).
 - Harness Sovereign: guard do agente, gates de git (pre-commit/pre-push) e contrato de validação em `.harness.toml` (E-001 F4).
 
 ### Corrigido

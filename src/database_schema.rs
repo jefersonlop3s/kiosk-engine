@@ -257,6 +257,8 @@ pub enum ActionType {
     CreatePairingCode,
     PairDevice,
     RevokeDevice,
+    QueryUsage,
+    QueryLog,
 }
 
 impl ActionType {
@@ -274,6 +276,8 @@ impl ActionType {
             Self::CreatePairingCode => "CREATE_PAIRING_CODE",
             Self::PairDevice => "PAIR_DEVICE",
             Self::RevokeDevice => "REVOKE_DEVICE",
+            Self::QueryUsage => "QUERY_USAGE",
+            Self::QueryLog => "QUERY_LOG",
         }
     }
 
@@ -291,6 +295,8 @@ impl ActionType {
             "CREATE_PAIRING_CODE" => Ok(Self::CreatePairingCode),
             "PAIR_DEVICE" => Ok(Self::PairDevice),
             "REVOKE_DEVICE" => Ok(Self::RevokeDevice),
+            "QUERY_USAGE" => Ok(Self::QueryUsage),
+            "QUERY_LOG" => Ok(Self::QueryLog),
             outro => Err(bad_value("ActionType", outro)),
         }
     }

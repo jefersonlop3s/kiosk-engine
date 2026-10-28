@@ -325,3 +325,97 @@ fn credenciais_ida_e_volta_ocultam_a_chave_no_debug_e_recusam_arquivo_corrompido
     ruim.chave_privada = "curta".into();
     assert!(ruim.chave().is_err());
 }
+
+#[tokio::test]
+async fn limite_uso_e_log_pelo_cli() {
+    let m = mundo().await;
+    let porta = porta_livre();
+    let _srv = subir_servico(&m.db_url, porta);
+    let servidor = format!("127.0.0.1:{porta}");
+    let cred = m.dir.path().join("credenciais.json");
+    let codigo = texto(&kioskd(&m.db_url, None, &["codigo-pareamento"]).stdout)
+        .trim()
+        .to_owned();
+    assert!(
+        kioskctl(
+            &cred,
+            &["parear", "--servidor", &servidor, "--codigo", &codigo]
+        )
+        .status
+        .success()
+    );
+
+    let perfil = m.perfil.to_string();
+    let criar = kioskctl(
+        &cred,
+        &[
+            "regra",
+            "criar",
+            "--perfil",
+            &perfil,
+            "--app",
+            &m.app.to_string(),
+            "--limite",
+            "3600",
+        ],
+    );
+    let saida = texto(&criar.stdout);
+    let id = saida.trim().rsplit(' ').next().unwrap().to_owned();
+
+    let l = kioskctl(&cred, &["regra", "limite", &id, "--segundos", "5400"]);
+    assert!(l.status.success(), "{}", texto(&l.stderr));
+    assert!(
+        texto(&l.stdout).contains("1h 30min 00s"),
+        "{}",
+        texto(&l.stdout)
+    );
+    let db = KioskDbManager::new(&m.db_url).await.unwrap();
+    let r = db
+        .get_active_rule(Uuid::parse_str(&id).unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(r.daily_limit_seconds, Some(5400));
+
+    // uso de um dia conhecido
+    let ini = chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 3, 9, 12, 0, 0).unwrap();
+    let ctx = EventContext::local();
+    db.registrar_uso(
+        &ctx,
+        m.perfil,
+        m.app,
+        ini,
+        ini + chrono::Duration::seconds(300),
+        &chrono::Utc,
+    )
+    .await
+    .unwrap();
+    db.registrar_sessao(
+        &ctx,
+        m.perfil,
+        ini,
+        ini + chrono::Duration::seconds(400),
+        &chrono::Utc,
+    )
+    .await
+    .unwrap();
+    let u = kioskctl(&cred, &["uso", "--perfil", &perfil, "--data", "2026-03-09"]);
+    assert!(u.status.success(), "{}", texto(&u.stderr));
+    let uso = texto(&u.stdout);
+    assert!(
+        uso.contains("sessão ativa: 6min 40s") && uso.contains("jogo.exe: 5min 00s"),
+        "{uso}"
+    );
+
+    let log = kioskctl(&cred, &["log", "--perfil", &perfil, "--dias", "1"]);
+    assert!(log.status.success(), "{}", texto(&log.stderr));
+    let saida = texto(&log.stdout);
+    assert!(
+        saida.contains("ADD_RULE") && saida.contains("MODIFY_LIMIT"),
+        "{saida}"
+    );
+
+    // perfil inexistente: a consulta é recusada sem vazar nada
+    let ruim = kioskctl(&cred, &["uso", "--perfil", &Uuid::new_v4().to_string()]);
+    assert!(!ruim.status.success() && texto(&ruim.stderr).contains("recusou"));
+}

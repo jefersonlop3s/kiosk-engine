@@ -274,9 +274,16 @@ async fn comando(
             ("perfil", db.existe_perfil(r.profile_id).await),
             ("app", db.existe_app(r.app_id).await),
         ],
-        Comando::ActivateRule { rule_id } | Comando::RevokeRule { rule_id } => {
+        Comando::ActivateRule { rule_id }
+        | Comando::RevokeRule { rule_id }
+        | Comando::ModifyLimit { rule_id, .. } => {
             vec![("regra", db.existe_regra(*rule_id).await)]
         }
+        Comando::Usage { profile_id, .. } => vec![("perfil", db.existe_perfil(*profile_id).await)],
+        Comando::Log(c) => match c.profile_id {
+            Some(p) => vec![("perfil", db.existe_perfil(p).await)],
+            None => vec![],
+        },
     };
     for (nome_ref, existe) in referencias {
         match existe {
@@ -314,12 +321,84 @@ async fn comando(
             .set_rule_state(&ctx, rule_id, RuleState::Revoked)
             .await
             .map(|()| None),
+        Comando::ModifyLimit {
+            rule_id,
+            daily_limit_seconds,
+        } => db
+            .set_rule_limit(&ctx, rule_id, daily_limit_seconds)
+            .await
+            .map(|()| None),
+        // consultas: somente leitura, respondem com dados e não geram evento
+        Comando::Usage { profile_id, dia } => return consulta_uso(&db, profile_id, dia).await,
+        Comando::Log(c) => return consulta_log(&db, &c).await,
     };
 
     // Camada 5: resposta genérica
     match resultado {
         Ok(id) => aceita(id),
         Err(sqlx::Error::RowNotFound) => rejeitada(),
+        Err(_) => erro_interno(),
+    }
+}
+
+async fn consulta_uso(db: &KioskDbManager, profile_id: Uuid, dia: chrono::NaiveDate) -> Response {
+    match db.uso_do_dia(profile_id, dia).await {
+        Ok((sessao, apps)) => {
+            let apps: Vec<_> = apps
+                .into_iter()
+                .map(|(id, nome, s)| {
+                    serde_json::json!({ "app_id": id, "process_name": nome, "seconds": s })
+                })
+                .collect();
+            let corpo = serde_json::json!({
+                "profile_id": profile_id,
+                "date": dia.to_string(),
+                "session_seconds": sessao,
+                "apps": apps,
+            });
+            resposta(StatusCode::OK, corpo.to_string())
+        }
+        Err(_) => erro_interno(),
+    }
+}
+
+/// O detalhe exato só sai para eventos de enforcement e de operação; o das falhas das camadas
+/// da API (`AUTH_FAIL`, `AUTHZ_FAIL`, `VALIDATION_FAIL`, `INTERNAL_ERROR`) fica só no banco.
+fn detalhe_publico(tipo: EventType) -> bool {
+    !matches!(
+        tipo,
+        EventType::AuthFail
+            | EventType::AuthzFail
+            | EventType::ValidationFail
+            | EventType::InternalError
+    )
+}
+
+async fn consulta_log(db: &KioskDbManager, c: &crate::comandos::ConsultaLog) -> Response {
+    match db
+        .security_events_limitado(c.de, c.ate, c.profile_id, i64::from(c.limite))
+        .await
+    {
+        Ok(eventos) => {
+            let eventos: Vec<_> = eventos
+                .into_iter()
+                .map(|e| {
+                    serde_json::json!({
+                        "timestamp": log_ts(e.timestamp),
+                        "action": e.action_attempted.as_str(),
+                        "event_type": e.event_type.as_str(),
+                        "status": e.transaction_status.as_str(),
+                        "client_ip": e.client_ip,
+                        "profile_id": e.profile_id,
+                        "detail": detalhe_publico(e.event_type).then_some(e.rejection_reason_detail),
+                    })
+                })
+                .collect();
+            resposta(
+                StatusCode::OK,
+                serde_json::json!({ "events": eventos }).to_string(),
+            )
+        }
         Err(_) => erro_interno(),
     }
 }

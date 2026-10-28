@@ -500,3 +500,256 @@ async fn vincular_recusa_curinga_e_lan_sem_abrir_nenhuma_porta() {
         .unwrap();
     assert_eq!(abertos.len(), 1);
 }
+
+// --- GC-14: modify_limit e consultas de uso e de log
+
+async fn regra_criada(s: &Servico, extra: &str) -> Uuid {
+    let (st, corpo) = s.comando("add_rule", &s.nova_regra(extra)).await;
+    assert_eq!(st, 202, "{corpo}");
+    id_da_resposta(&corpo)
+}
+
+#[tokio::test]
+async fn modify_limit_altera_o_limite_e_grava_o_evento_com_o_perfil() {
+    let s = servico().await;
+    let id = regra_criada(&s, r#","daily_limit_seconds":3600"#).await;
+    let (st, corpo) = s
+        .comando(
+            "modify_limit",
+            &format!(r#"{{"rule_id":"{id}","daily_limit_seconds":1800}}"#),
+        )
+        .await;
+    assert_eq!((st, corpo.as_str()), (202, r#"{"status":"accepted"}"#));
+    assert_eq!(
+        s.db.get_active_rule(id)
+            .await
+            .unwrap()
+            .unwrap()
+            .daily_limit_seconds,
+        Some(1800)
+    );
+    let (acao, perfil): (String, Option<String>) = sqlx::query_as(
+        "SELECT action_attempted, profile_id FROM security_log WHERE action_attempted = 'MODIFY_LIMIT' AND event_type = 'SUCCESS'",
+    )
+    .fetch_one(s.db.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        (acao.as_str(), perfil),
+        ("MODIFY_LIMIT", Some(s.perfil.to_string()))
+    );
+}
+
+#[tokio::test]
+async fn modify_limit_recusa_regra_revogada_regra_inexistente_e_limite_invalido() {
+    let s = servico().await;
+    let id = regra_criada(&s, r#","daily_limit_seconds":3600"#).await;
+    let corpo_id = format!(r#"{{"rule_id":"{id}"}}"#);
+    assert_eq!(s.comando("revoke_rule", &corpo_id).await.0, 202);
+
+    let casos = [
+        format!(r#"{{"rule_id":"{id}","daily_limit_seconds":600}}"#), // revogada
+        format!(
+            r#"{{"rule_id":"{}","daily_limit_seconds":600}}"#,
+            Uuid::new_v4()
+        ), // inexistente
+        format!(r#"{{"rule_id":"{id}","daily_limit_seconds":86401}}"#), // acima do máximo
+        format!(r#"{{"rule_id":"{id}"}}"#),                           // sem limite
+        format!(r#"{{"rule_id":"{id}","daily_limit_seconds":-5}}"#),  // negativo
+        format!(r#"{{"rule_id":"{id}","daily_limit_seconds":600,"x":1}}"#), // campo extra
+    ];
+    for c in casos {
+        let (st, resp) = s.comando("modify_limit", &c).await;
+        assert_eq!((st, resp.as_str()), (403, REJEITADA), "{c}");
+    }
+    assert_eq!(
+        s.db.get_active_rule(id)
+            .await
+            .unwrap()
+            .unwrap()
+            .daily_limit_seconds,
+        Some(3600)
+    );
+}
+
+#[tokio::test]
+async fn usage_devolve_o_consumo_do_dia_e_exige_autenticacao() {
+    let s = servico().await;
+    let ctx = EventContext::local();
+    let dia = chrono::NaiveDate::from_ymd_opt(2026, 3, 9).unwrap();
+    let ini = chrono::TimeZone::with_ymd_and_hms(&Utc, 2026, 3, 9, 12, 0, 0).unwrap();
+    let fim = ini + Duration::seconds(300);
+    s.db.registrar_uso(&ctx, s.perfil, s.app, ini, fim, &Utc)
+        .await
+        .unwrap();
+    s.db.registrar_sessao(&ctx, s.perfil, ini, fim + Duration::seconds(100), &Utc)
+        .await
+        .unwrap();
+
+    let corpo = format!(r#"{{"profile_id":"{}","date":"{dia}"}}"#, s.perfil);
+    let (st, resp) = s.comando("usage", &corpo).await;
+    assert_eq!(st, 200, "{resp}");
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    assert_eq!(v["session_seconds"], 400);
+    assert_eq!(v["apps"][0]["process_name"], "jogo.exe");
+    assert_eq!(v["apps"][0]["seconds"], 300);
+
+    let vazio = format!(r#"{{"profile_id":"{}","date":"2026-03-10"}}"#, s.perfil);
+    let (st, resp) = s.comando("usage", &vazio).await;
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    assert_eq!(
+        (
+            st,
+            v["session_seconds"].as_u64(),
+            v["apps"].as_array().map(Vec::len)
+        ),
+        (200, Some(0), Some(0))
+    );
+
+    // sem assinatura: nenhum dado
+    let (st, resp) = http(
+        s.addr,
+        "POST",
+        "/api/windows/usage",
+        &vec![],
+        corpo.as_bytes(),
+    )
+    .await;
+    assert_eq!((st, resp.as_str()), (403, REJEITADA));
+    // parâmetros inválidos
+    for ruim in [
+        r#"{"profile_id":"x","date":"2026-03-09"}"#.to_string(),
+        format!(r#"{{"profile_id":"{}","date":"09/03/2026"}}"#, s.perfil),
+        format!(
+            r#"{{"profile_id":"{}","date":"2026-03-09"}}"#,
+            Uuid::new_v4()
+        ),
+    ] {
+        assert_eq!(
+            s.comando("usage", &ruim).await,
+            (403, REJEITADA.to_string()),
+            "{ruim}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn log_traz_eventos_filtra_por_perfil_e_omite_o_detalhe_das_falhas_de_api() {
+    let s = servico().await;
+    regra_criada(&s, "").await; // ADD_RULE / SUCCESS com o perfil
+    // falha de autenticação: o detalhe cita o dispositivo e não pode sair pela API
+    let mut h = s.assinado("/api/windows/add_rule", b"{}");
+    h[3].1 = "AAAA".into();
+    http(s.addr, "POST", "/api/windows/add_rule", &h, b"{}").await;
+    s.comando("add_rule", "{}").await; // VALIDATION_FAIL
+    // evento de enforcement: o detalhe sai
+    s.db.record_event(
+        &SecurityEvent::new(
+            "local",
+            ActionType::System,
+            EventType::AppTerminated,
+            TransactionStatus::Success,
+            "app jogo.exe encerrado: LIMITE_DIARIO_APP",
+        )
+        .with_profile(Some(s.perfil)),
+    )
+    .await
+    .unwrap();
+
+    let janela = |extra: &str| {
+        format!(
+            r#"{{"from":"{}","to":"{}"{extra}}}"#,
+            (Utc::now() - Duration::hours(1)).to_rfc3339(),
+            (Utc::now() + Duration::minutes(1)).to_rfc3339()
+        )
+    };
+    let (st, resp) = s.comando("log", &janela("")).await;
+    assert_eq!(st, 200, "{resp}");
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    let eventos = v["events"].as_array().unwrap();
+    let tipos: Vec<&str> = eventos
+        .iter()
+        .map(|e| e["event_type"].as_str().unwrap())
+        .collect();
+    for esperado in ["SUCCESS", "AUTH_FAIL", "VALIDATION_FAIL", "APP_TERMINATED"] {
+        assert!(tipos.contains(&esperado), "falta {esperado} em {tipos:?}");
+    }
+    for e in eventos {
+        let tipo = e["event_type"].as_str().unwrap();
+        if [
+            "AUTH_FAIL",
+            "AUTHZ_FAIL",
+            "VALIDATION_FAIL",
+            "INTERNAL_ERROR",
+        ]
+        .contains(&tipo)
+        {
+            assert!(e["detail"].is_null(), "o detalhe de {tipo} vazou: {e}");
+        }
+        if tipo == "APP_TERMINATED" {
+            assert_eq!(e["detail"], "app jogo.exe encerrado: LIMITE_DIARIO_APP");
+        }
+    }
+    assert!(
+        !resp.contains(&s.device_id.to_string()),
+        "o id do dispositivo vazou pelo detalhe"
+    );
+
+    // por perfil: só os eventos que carregam o perfil
+    let (_, resp) = s
+        .comando("log", &janela(&format!(r#","profile_id":"{}""#, s.perfil)))
+        .await;
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    let tipos: Vec<&str> = v["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["event_type"].as_str().unwrap())
+        .collect();
+    assert!(
+        tipos.contains(&"APP_TERMINATED") && !tipos.contains(&"AUTH_FAIL"),
+        "{tipos:?}"
+    );
+
+    // limite
+    let (_, resp) = s.comando("log", &janela(r#","limit":1"#)).await;
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    assert_eq!(v["events"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn log_recusa_periodo_e_limite_invalidos_e_exige_assinatura() {
+    let s = servico().await;
+    let agora = Utc::now();
+    let corpo = |de: chrono::DateTime<Utc>, ate: chrono::DateTime<Utc>, extra: &str| {
+        format!(
+            r#"{{"from":"{}","to":"{}"{extra}}}"#,
+            de.to_rfc3339(),
+            ate.to_rfc3339()
+        )
+    };
+    let ruins = [
+        corpo(agora, agora - Duration::hours(1), ""), // invertido
+        corpo(agora - Duration::days(32), agora, ""), // período longo demais
+        corpo(agora - Duration::hours(1), agora, r#","limit":0"#), // limite zero
+        corpo(agora - Duration::hours(1), agora, r#","limit":501"#), // limite acima do máximo
+        corpo(agora - Duration::hours(1), agora, r#","profile_id":"x""#), // perfil ilegível
+        corpo(
+            agora - Duration::hours(1),
+            agora,
+            &format!(r#","profile_id":"{}""#, Uuid::new_v4()),
+        ), // inexistente
+        r#"{"from":"ontem","to":"hoje"}"#.to_string(),
+    ];
+    for r in ruins {
+        assert_eq!(
+            s.comando("log", &r).await,
+            (403, REJEITADA.to_string()),
+            "{r}"
+        );
+    }
+    let ok = corpo(agora - Duration::days(31), agora, "");
+    assert_eq!(s.comando("log", &ok).await.0, 200, "31 dias é o limite");
+    let (st, resp) = http(s.addr, "POST", "/api/windows/log", &vec![], ok.as_bytes()).await;
+    assert_eq!((st, resp.as_str()), (403, REJEITADA));
+}
