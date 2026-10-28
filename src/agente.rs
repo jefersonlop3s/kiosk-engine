@@ -14,6 +14,8 @@ use crate::motor::{AVISOS_SEGUNDOS, Decisao, Instante, Motivo};
 
 /// Intervalo mínimo entre dois bloqueios de sessão do mesmo SID.
 pub const REBLOQUEIO_SEGUNDOS: i64 = 30;
+/// Bloqueios desfeitos pela criança antes de o agente passar ao logoff (decisão do dono, 2026-10-28).
+pub const MAX_BLOQUEIOS_ANTES_DO_LOGOFF: u32 = 2;
 /// Tentativas de encerrar o mesmo processo antes de desistir e registrar `TAMPER_SUSPECTED`.
 pub const MAX_TENTATIVAS_ENCERRAR: u32 = 3;
 /// Ticks que um processo encerrado com sucesso pode continuar na lista antes de nova tentativa.
@@ -43,6 +45,10 @@ pub trait Sistema {
     fn encerrar(&mut self, pid: u32) -> Result<(), String>;
     fn bloquear_sessao(&mut self, sid: &str) -> Result<(), String>;
     fn avisar(&mut self, aviso: &Aviso) -> Result<(), String>;
+    /// SIDs das sessões interativas ativas (logadas e desbloqueadas) — ADR-003.
+    fn sessoes_ativas(&mut self) -> Result<Vec<String>, String>;
+    /// Encerra a sessão (logoff) quando o bloqueio simples não basta.
+    fn encerrar_sessao(&mut self, sid: &str) -> Result<(), String>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,6 +65,11 @@ pub enum Acao {
         motivo: Motivo,
     },
     Bloqueou {
+        sid: String,
+        motivo: Motivo,
+    },
+    /// Logoff, depois que a criança desbloqueou a sessão `MAX_BLOQUEIOS_ANTES_DO_LOGOFF` vezes.
+    EncerrouSessao {
         sid: String,
         motivo: Motivo,
     },
@@ -80,6 +91,8 @@ struct GrupoApp {
 
 struct GrupoPerfil {
     sid: String,
+    /// Sessão logada e desbloqueada neste tick.
+    ativa: bool,
     apps: BTreeMap<Uuid, GrupoApp>,
 }
 
@@ -94,6 +107,9 @@ pub struct Agente<'a, S: Sistema, Tz: TimeZone> {
     abandonados: HashSet<u32>,
     aguardando: HashMap<u32, u8>,
     ultimo_bloqueio: HashMap<String, DateTime<Utc>>,
+    ativas_anterior: HashSet<String>,
+    /// Bloqueios emitidos por SID enquanto a restrição de sessão persiste.
+    bloqueios: HashMap<String, u32>,
 }
 
 impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
@@ -109,6 +125,8 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             abandonados: HashSet::new(),
             aguardando: HashMap::new(),
             ultimo_bloqueio: HashMap::new(),
+            ativas_anterior: HashSet::new(),
+            bloqueios: HashMap::new(),
         }
     }
 
@@ -159,8 +177,25 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                 return rel;
             }
         };
+        let sessoes = match self.sistema.sessoes_ativas() {
+            Ok(x) => x,
+            Err(e) => {
+                let msg = format!("falha ao listar sessões: {e}");
+                self.evento(
+                    &mut rel,
+                    None,
+                    EventType::InternalError,
+                    TransactionStatus::Failure,
+                    msg.clone(),
+                )
+                .await;
+                rel.erros.push(msg);
+                Vec::new()
+            }
+        };
+        let ativas: HashSet<String> = sessoes.into_iter().collect();
         let agora = Instante::em(agora_utc, &self.tz);
-        let grupos = self.agrupar(&visto, &mut rel).await;
+        let grupos = self.agrupar(&visto, &ativas, &mut rel).await;
 
         let presentes: HashSet<u32> = visto.iter().map(|p| p.pid).collect();
         self.tentativas.retain(|pid, _| presentes.contains(pid));
@@ -168,6 +203,8 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         self.aguardando.retain(|pid, _| presentes.contains(pid));
 
         let mut ativos: HashSet<ChaveAtiva> = HashSet::new();
+        let mut avaliadas: HashSet<String> = HashSet::new();
+        let mut bloqueando: HashSet<String> = HashSet::new();
         for (perfil_id, grupo) in &grupos {
             // 1. contabilidade do intervalo desde o tick anterior
             if let Some(ini) = anterior {
@@ -180,37 +217,82 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                         rel.erros.push(format!("uso não contabilizado: {e}"));
                     }
                 }
-            }
-            // 2. sessão do perfil
-            match self.db.decidir_para(*perfil_id, None, agora).await {
-                Ok(d) => {
-                    self.aplicar_sessao(&mut rel, &mut ativos, agora_utc, *perfil_id, &grupo.sid, d)
+                // tempo de sessão: só conta se a sessão estava ativa no tick anterior também
+                if grupo.ativa
+                    && self.ativas_anterior.contains(&grupo.sid)
+                    && let Err(e) = self
+                        .db
+                        .registrar_sessao(&self.ctx, *perfil_id, ini, agora_utc, &self.tz)
                         .await
+                {
+                    rel.erros
+                        .push(format!("tempo de sessão não contabilizado: {e}"));
                 }
-                Err(e) => rel.erros.push(format!("decisão de sessão falhou: {e}")),
             }
-            // 3. cada app em execução
-            for (app_id, g) in &grupo.apps {
-                match self.db.decidir_app(*perfil_id, &g.app, agora).await {
+            // 2. sessão do perfil (uma sessão bloqueada já está contida: nada a fazer)
+            if grupo.ativa {
+                match self.db.decidir_para(*perfil_id, None, agora).await {
                     Ok(d) => {
-                        self.aplicar_app(
+                        avaliadas.insert(grupo.sid.clone());
+                        if matches!(d, Decisao::BloquearSessao { .. }) {
+                            bloqueando.insert(grupo.sid.clone());
+                        }
+                        self.aplicar_sessao(
                             &mut rel,
                             &mut ativos,
+                            agora_utc,
                             *perfil_id,
-                            *app_id,
                             &grupo.sid,
-                            g,
                             d,
                         )
                         .await
                     }
+                    Err(e) => rel.erros.push(format!("decisão de sessão falhou: {e}")),
+                }
+            }
+            // 3. cada app em execução
+            for (app_id, g) in &grupo.apps {
+                match self
+                    .decidir_e_aplicar_app(
+                        &mut rel,
+                        &mut ativos,
+                        *perfil_id,
+                        *app_id,
+                        grupo,
+                        g,
+                        agora,
+                    )
+                    .await
+                {
+                    Ok(()) => {}
                     Err(e) => rel.erros.push(format!("decisão de app falhou: {e}")),
                 }
             }
         }
+        // restrição de sessão que acabou (ex.: novo dia) zera a contagem de bloqueios
+        self.bloqueios
+            .retain(|sid, _| !avaliadas.contains(sid) || bloqueando.contains(sid));
+        self.ativas_anterior = ativas;
         self.avisados
             .retain(|(p, a, m, _)| ativos.contains(&(*p, *a, *m)));
         rel
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn decidir_e_aplicar_app(
+        &mut self,
+        rel: &mut Relatorio,
+        ativos: &mut HashSet<ChaveAtiva>,
+        perfil: Uuid,
+        app_id: Uuid,
+        grupo: &GrupoPerfil,
+        g: &GrupoApp,
+        agora: Instante,
+    ) -> Result<(), sqlx::Error> {
+        let d = self.db.decidir_app(perfil, &g.app, agora).await?;
+        self.aplicar_app(rel, ativos, perfil, app_id, &grupo.sid, g, d)
+            .await;
+        Ok(())
     }
 
     /// Associa processos a perfis (por SID) e a apps (por nome). Quem não tem perfil mapeado
@@ -218,6 +300,7 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
     async fn agrupar(
         &self,
         visto: &[ProcessoVisto],
+        ativas: &HashSet<String>,
         rel: &mut Relatorio,
     ) -> BTreeMap<Uuid, GrupoPerfil> {
         let mut perfis: HashMap<String, Option<Uuid>> = HashMap::new();
@@ -239,6 +322,7 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             };
             let grupo = grupos.entry(perfil_id).or_insert_with(|| GrupoPerfil {
                 sid: p.sid.clone(),
+                ativa: ativas.contains(&p.sid),
                 apps: BTreeMap::new(),
             });
 
@@ -266,6 +350,27 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                     .push(p.clone());
             }
         }
+        // sessões ativas sem nenhum processo visto também contam (tempo de sessão)
+        for sid in ativas {
+            if !perfis.contains_key(sid) {
+                match self.db.perfil_por_sid(sid).await {
+                    Ok(x) => {
+                        perfis.insert(sid.clone(), x.map(|c| c.profile_id));
+                    }
+                    Err(e) => {
+                        rel.erros.push(format!("perfil não consultado: {e}"));
+                        continue;
+                    }
+                }
+            }
+            if let Some(perfil_id) = perfis[sid] {
+                grupos.entry(perfil_id).or_insert_with(|| GrupoPerfil {
+                    sid: sid.clone(),
+                    ativa: true,
+                    apps: BTreeMap::new(),
+                });
+            }
+        }
         grupos
     }
 
@@ -280,7 +385,7 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
     ) {
         match decisao {
             Decisao::BloquearSessao { motivo } => {
-                self.bloquear(rel, agora, perfil, sid, motivo).await
+                self.agir_na_sessao(rel, agora, perfil, sid, motivo).await
             }
             Decisao::Avisar {
                 restante_segundos,
@@ -459,7 +564,9 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         }
     }
 
-    async fn bloquear(
+    /// Primeiro bloqueia a sessão; se a criança a desbloquear `MAX_BLOQUEIOS_ANTES_DO_LOGOFF`
+    /// vezes com a restrição ainda valendo, encerra a sessão (logoff).
+    async fn agir_na_sessao(
         &mut self,
         rel: &mut Relatorio,
         agora: DateTime<Utc>,
@@ -472,9 +579,47 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         {
             return;
         }
+        let feitos = self.bloqueios.get(sid).copied().unwrap_or(0);
+        if feitos >= MAX_BLOQUEIOS_ANTES_DO_LOGOFF {
+            match self.sistema.encerrar_sessao(sid) {
+                Ok(()) => {
+                    self.ultimo_bloqueio.insert(sid.to_owned(), agora);
+                    let det = format!(
+                        "sessão encerrada (logoff) após {feitos} bloqueios desfeitos: {}",
+                        motivo.as_str()
+                    );
+                    self.evento(
+                        rel,
+                        Some(perfil),
+                        EventType::SessionLocked,
+                        TransactionStatus::Success,
+                        det,
+                    )
+                    .await;
+                    rel.acoes.push(Acao::EncerrouSessao {
+                        sid: sid.to_owned(),
+                        motivo,
+                    });
+                }
+                Err(e) => {
+                    let msg = format!("sessão não encerrada ({}): {e}", motivo.as_str());
+                    self.evento(
+                        rel,
+                        Some(perfil),
+                        EventType::InternalError,
+                        TransactionStatus::Failure,
+                        msg.clone(),
+                    )
+                    .await;
+                    rel.erros.push(msg);
+                }
+            }
+            return;
+        }
         match self.sistema.bloquear_sessao(sid) {
             Ok(()) => {
                 self.ultimo_bloqueio.insert(sid.to_owned(), agora);
+                self.bloqueios.insert(sid.to_owned(), feitos + 1);
                 let det = format!("sessão bloqueada: {}", motivo.as_str());
                 self.evento(
                     rel,

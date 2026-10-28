@@ -16,8 +16,6 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | ID | Mecanismo | Medido? | Próximo passo |
 |---|---|---|---|
 | GC-08 | Avisos de 5 e 1 min são constante no código (`AVISOS_SEGUNDOS`); a ADR-001 os quer configuráveis por regra e `active_rules` não tem coluna para isso | Por leitura | Migração + campo em `ActiveRule` quando o E-004 F2 definir a UX do aviso |
-| GC-09 | `consumo_do_dia` soma os apps do perfil como "total": dois apps em uso simultâneo contam em dobro contra o limite total | Por leitura | GC-11 | O agente considera a sessão do perfil "viva" quando há qualquer processo do SID na lista; a [ADR-003](adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md) propõe `WTSEnumerateSessions`. Enquanto isso, sessão bloqueada ou sem processos não conta e o total segue sendo a soma dos apps (GC-09) | Por leitura | Trocar a fonte do "total" quando a ADR-003 for aceita (tabela `session_usage`) |
-| GC-12 | Política decidida pelo dono em 2026-10-28: lock e, se a criança desbloquear 2 vezes, logoff. Falta implementar (`Sistema::encerrar_sessao`) | Por decisão | Implementar no agente (próximo commit) |
 
 ## Épicos abertos
 

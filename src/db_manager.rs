@@ -275,21 +275,17 @@ impl KioskDbManager {
         Ok(removed)
     }
 
-    /// Soma ao `usage_ledger` o uso de `app` por `profile_id` em `[inicio, fim)`, dividido pelos
-    /// dias locais de `tz`. Intervalo negativo ou maior que `MAX_INTERVALO_SEGUNDOS` indica relógio
-    /// suspeito: grava `TAMPER_SUSPECTED` e devolve erro, sem contabilizar nada.
-    ///
-    /// A contabilização é medição de alta frequência e não grava um evento por chamada; os eventos
-    /// do log são as ações de enforcement e as anomalias.
-    pub async fn registrar_uso<Tz: TimeZone>(
+    /// Valida o intervalo e o divide pelos dias locais. Intervalo negativo ou maior que
+    /// `MAX_INTERVALO_SEGUNDOS` indica relógio suspeito: grava `TAMPER_SUSPECTED` e devolve erro,
+    /// sem contabilizar nada.
+    async fn partes_do_intervalo<Tz: TimeZone>(
         &self,
         ctx: &EventContext,
         profile_id: Uuid,
-        app_id: Uuid,
         inicio: DateTime<Utc>,
         fim: DateTime<Utc>,
         tz: &Tz,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<Vec<(NaiveDate, i64)>, sqlx::Error> {
         let duracao = (fim - inicio).num_seconds();
         if !(0..=MAX_INTERVALO_SEGUNDOS).contains(&duracao) {
             let detalhe = format!(
@@ -306,7 +302,35 @@ impl KioskDbManager {
             self.record_event(&e).await?;
             return Err(sqlx::Error::Protocol(detalhe));
         }
-        let partes = dividir_por_dia_local(tz, inicio, fim).map_err(sqlx::Error::Protocol)?;
+        dividir_por_dia_local(tz, inicio, fim)
+            .map_err(sqlx::Error::Protocol)?
+            .into_iter()
+            .map(|(dia, s)| {
+                Ok((
+                    dia,
+                    i64::try_from(s).map_err(|e| sqlx::Error::Encode(Box::new(e)))?,
+                ))
+            })
+            .collect()
+    }
+
+    /// Soma ao `usage_ledger` o uso de `app` por `profile_id` em `[inicio, fim)`, dividido pelos
+    /// dias locais de `tz` (ver `partes_do_intervalo` para a guarda de relógio).
+    ///
+    /// A contabilização é medição de alta frequência e não grava um evento por chamada; os eventos
+    /// do log são as ações de enforcement e as anomalias.
+    pub async fn registrar_uso<Tz: TimeZone>(
+        &self,
+        ctx: &EventContext,
+        profile_id: Uuid,
+        app_id: Uuid,
+        inicio: DateTime<Utc>,
+        fim: DateTime<Utc>,
+        tz: &Tz,
+    ) -> Result<(), sqlx::Error> {
+        let partes = self
+            .partes_do_intervalo(ctx, profile_id, inicio, fim, tz)
+            .await?;
         let mut tx = self.begin_transaction().await?;
         for (dia, segundos) in partes {
             sqlx::query(
@@ -316,25 +340,60 @@ impl KioskDbManager {
             .bind(profile_id.to_string())
             .bind(app_id.to_string())
             .bind(dia.to_string())
-            .bind(i64::try_from(segundos).map_err(|e| sqlx::Error::Encode(Box::new(e)))?)
+            .bind(segundos)
             .execute(&mut *tx)
             .await?;
         }
         tx.commit().await
     }
 
-    /// Consumo do dia local `dia`: do app e total do perfil (soma dos apps).
+    /// Soma ao `session_usage` o tempo de sessão ativa do perfil em `[inicio, fim)` (ADR-003).
+    pub async fn registrar_sessao<Tz: TimeZone>(
+        &self,
+        ctx: &EventContext,
+        profile_id: Uuid,
+        inicio: DateTime<Utc>,
+        fim: DateTime<Utc>,
+        tz: &Tz,
+    ) -> Result<(), sqlx::Error> {
+        let partes = self
+            .partes_do_intervalo(ctx, profile_id, inicio, fim, tz)
+            .await?;
+        let mut tx = self.begin_transaction().await?;
+        for (dia, segundos) in partes {
+            sqlx::query(
+                "INSERT INTO session_usage (profile_id, usage_date, seconds) VALUES (?, ?, ?) \
+                 ON CONFLICT (profile_id, usage_date) DO UPDATE SET seconds = seconds + excluded.seconds",
+            )
+            .bind(profile_id.to_string())
+            .bind(dia.to_string())
+            .bind(segundos)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await
+    }
+
+    /// Consumo do dia local `dia`: tempo do app (`usage_ledger`) e tempo de sessão ativa do
+    /// perfil (`session_usage`, ADR-003), que não é a soma dos apps.
     pub async fn consumo_do_dia(
         &self,
         profile_id: Uuid,
         app_id: Uuid,
         dia: NaiveDate,
     ) -> Result<Consumo, sqlx::Error> {
-        let (app, total): (i64, i64) = sqlx::query_as(
-            "SELECT COALESCE(SUM(CASE WHEN app_id = ? THEN seconds END), 0), COALESCE(SUM(seconds), 0) \
-             FROM usage_ledger WHERE profile_id = ? AND usage_date = ?",
+        let app: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(seconds), 0) FROM usage_ledger \
+             WHERE profile_id = ? AND app_id = ? AND usage_date = ?",
         )
+        .bind(profile_id.to_string())
         .bind(app_id.to_string())
+        .bind(dia.to_string())
+        .fetch_one(&self.pool)
+        .await?;
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(SUM(seconds), 0) FROM session_usage WHERE profile_id = ? AND usage_date = ?",
+        )
         .bind(profile_id.to_string())
         .bind(dia.to_string())
         .fetch_one(&self.pool)

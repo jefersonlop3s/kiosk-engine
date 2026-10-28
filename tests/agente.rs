@@ -21,6 +21,9 @@ struct Fake {
     falha_encerrar: bool,
     falha_avisar: bool,
     falha_listar: bool,
+    sessoes: Vec<String>,
+    sessoes_encerradas: Vec<String>,
+    falha_sessoes: bool,
 }
 
 impl Sistema for Fake {
@@ -41,6 +44,17 @@ impl Sistema for Fake {
     }
     fn bloquear_sessao(&mut self, sid: &str) -> Result<(), String> {
         self.bloqueios.push(sid.to_owned());
+        Ok(())
+    }
+    fn sessoes_ativas(&mut self) -> Result<Vec<String>, String> {
+        if self.falha_sessoes {
+            Err("wts indisponível".into())
+        } else {
+            Ok(self.sessoes.clone())
+        }
+    }
+    fn encerrar_sessao(&mut self, sid: &str) -> Result<(), String> {
+        self.sessoes_encerradas.push(sid.to_owned());
         Ok(())
     }
     fn avisar(&mut self, aviso: &Aviso) -> Result<(), String> {
@@ -268,14 +282,15 @@ async fn falha_repetida_ao_encerrar_vira_tamper_e_o_agente_para_de_tentar() {
 }
 
 #[tokio::test]
-async fn limite_total_avisa_a_sessao_uma_vez_bloqueia_e_respeita_o_intervalo() {
+async fn limite_total_avisa_uma_vez_bloqueia_duas_vezes_e_depois_encerra_a_sessao() {
     let m = mundo(Some(700)).await;
     let mut a = agente(&m);
     a.sistema_mut().processos = vec![proc(1, "jogo.exe", SID)]; // sem regra de app: só a sessão conta
+    a.sistema_mut().sessoes = vec![SID.into()];
 
     assert!(a.tick(seg(0)).await.acoes.is_empty());
     assert!(a.tick(seg(300)).await.acoes.is_empty());
-    let r = a.tick(seg(600)).await; // total 600: restam 100
+    let r = a.tick(seg(600)).await; // sessão ativa por 600 s: restam 100
     assert_eq!(
         r.acoes,
         [Acao::Avisou {
@@ -285,7 +300,7 @@ async fn limite_total_avisa_a_sessao_uma_vez_bloqueia_e_respeita_o_intervalo() {
             motivo: Motivo::LimiteDiarioTotal
         }]
     );
-    let r = a.tick(seg(900)).await; // total 900 >= 700
+    let r = a.tick(seg(900)).await; // 900 s >= 700: primeiro bloqueio
     assert_eq!(
         r.acoes,
         [Acao::Bloqueou {
@@ -297,47 +312,195 @@ async fn limite_total_avisa_a_sessao_uma_vez_bloqueia_e_respeita_o_intervalo() {
         a.tick(seg(910)).await.acoes.is_empty(),
         "dentro do intervalo de rebloqueio"
     );
-    let r = a.tick(seg(940)).await;
-    assert_eq!(r.acoes.len(), 1, "passados 30 s, bloqueia de novo");
-    assert_eq!(a.sistema_mut().bloqueios.len(), 2);
+    let r = a.tick(seg(940)).await; // a criança desbloqueou: segundo bloqueio
+    assert!(matches!(r.acoes[..], [Acao::Bloqueou { .. }]));
+    assert!(a.tick(seg(960)).await.acoes.is_empty());
+    let r = a.tick(seg(970)).await; // desbloqueou de novo: logoff
+    assert_eq!(
+        r.acoes,
+        [Acao::EncerrouSessao {
+            sid: SID.into(),
+            motivo: Motivo::LimiteDiarioTotal
+        }]
+    );
+    let f = a.sistema_mut();
+    assert_eq!((f.bloqueios.len(), f.sessoes_encerradas.len()), (2, 1));
     assert_eq!(
         (
             m.eventos("SESSION_LOCKED").await,
             m.eventos("WARNING_SHOWN").await
         ),
-        (2, 1)
+        (3, 1)
     );
+}
+
+#[tokio::test]
+async fn sessao_ja_bloqueada_nao_e_rebloqueada_e_cada_desbloqueio_conta() {
+    let m = mundo(Some(700)).await;
+    let ctx = EventContext::local();
+    let base = seg(0) - Duration::hours(2);
+    for k in 0..2 {
+        let ini = base + Duration::seconds(k * 400);
+        m.db.registrar_sessao(&ctx, m.perfil, ini, ini + Duration::seconds(400), &Utc)
+            .await
+            .unwrap();
+    }
+    let mut a = agente(&m);
+    a.sistema_mut().processos = vec![proc(3, "explorer.exe", SID)]; // a sessão bloqueada segue com processos
+    a.sistema_mut().sessoes = vec![SID.into()];
+    assert!(matches!(
+        a.tick(seg(0)).await.acoes[..],
+        [Acao::Bloqueou { .. }]
+    ));
+
+    a.sistema_mut().sessoes = vec![]; // bloqueada: não está mais ativa
+    assert!(a.tick(seg(60)).await.acoes.is_empty());
+    assert!(a.tick(seg(120)).await.acoes.is_empty());
+
+    a.sistema_mut().sessoes = vec![SID.into()]; // a criança desbloqueou (1)
+    assert!(matches!(
+        a.tick(seg(150)).await.acoes[..],
+        [Acao::Bloqueou { .. }]
+    ));
+    a.sistema_mut().sessoes = vec![];
+    assert!(a.tick(seg(200)).await.acoes.is_empty());
+    a.sistema_mut().sessoes = vec![SID.into()]; // desbloqueou (2)
+    assert!(matches!(
+        a.tick(seg(250)).await.acoes[..],
+        [Acao::EncerrouSessao { .. }]
+    ));
+    assert_eq!(a.sistema_mut().bloqueios.len(), 2);
+}
+
+#[tokio::test]
+async fn restricao_que_acaba_zera_a_contagem_e_o_proximo_bloqueio_nao_vira_logoff() {
+    let m = mundo(Some(700)).await;
+    let ctx = EventContext::local();
+    let base = seg(0) - Duration::hours(2);
+    for k in 0..2 {
+        let ini = base + Duration::seconds(k * 400);
+        m.db.registrar_sessao(&ctx, m.perfil, ini, ini + Duration::seconds(400), &Utc)
+            .await
+            .unwrap();
+    }
+    let mut a = agente(&m);
+    a.sistema_mut().sessoes = vec![SID.into()];
+    assert!(matches!(
+        a.tick(seg(0)).await.acoes[..],
+        [Acao::Bloqueou { .. }]
+    )); // dia 1, bloqueio 1
+    a.sistema_mut().sessoes = vec![];
+    a.tick(seg(50)).await;
+    a.sistema_mut().sessoes = vec![SID.into()];
+    assert!(matches!(
+        a.tick(seg(100)).await.acoes[..],
+        [Acao::Bloqueou { .. }]
+    )); // dia 1, bloqueio 2 (a contagem chega ao limite)
+
+    a.sistema_mut().sessoes = vec![];
+    a.tick(seg(150)).await;
+    let dia2 = 86_400 + 3_600;
+    a.sistema_mut().sessoes = vec![SID.into()];
+    assert!(
+        a.tick(seg(dia2)).await.acoes.is_empty(),
+        "dia novo: total zerado, permitido"
+    );
+
+    let base2 = seg(dia2) - Duration::seconds(800); // 800 s de sessão no dia 2
+    for k in 0..2 {
+        let ini = base2 + Duration::seconds(k * 400);
+        m.db.registrar_sessao(&ctx, m.perfil, ini, ini + Duration::seconds(400), &Utc)
+            .await
+            .unwrap();
+    }
+    let r = a.tick(seg(dia2 + 100)).await;
+    assert!(matches!(r.acoes[..], [Acao::Bloqueou { .. }]), "{r:?}");
+    assert!(a.sistema_mut().sessoes_encerradas.is_empty());
+}
+
+#[tokio::test]
+async fn tempo_de_sessao_so_conta_com_a_sessao_ativa_nos_dois_ticks() {
+    let m = mundo(None).await;
+    let mut a = agente(&m);
+    let dia = Instante::em(seg(0), &Utc).local.date();
+    a.sistema_mut().sessoes = vec![SID.into()];
+    a.tick(seg(0)).await;
+    a.tick(seg(300)).await; // +300
+    a.sistema_mut().sessoes = vec![];
+    a.tick(seg(600)).await; // bloqueada: não conta
+    a.sistema_mut().sessoes = vec![SID.into()];
+    a.tick(seg(900)).await; // acabou de voltar: ainda não conta
+    a.tick(seg(1200)).await; // +300
+    let c =
+        m.db.consumo_do_dia(m.perfil, m.jogo.app_id, dia)
+            .await
+            .unwrap();
+    assert_eq!(c.total_segundos, 600);
+}
+
+#[tokio::test]
+async fn uso_simultaneo_de_dois_apps_nao_conta_em_dobro_no_total() {
+    let m = mundo(None).await;
+    let video = AppMetadata {
+        app_id: Uuid::new_v4(),
+        process_name: "video.exe".into(),
+        status: ProcessStatus::Monitored,
+    };
+    m.db.create_app(&EventContext::local(), &video)
+        .await
+        .unwrap();
+    let mut a = agente(&m);
+    a.sistema_mut().processos = vec![proc(1, "jogo.exe", SID), proc(2, "video.exe", SID)];
+    a.sistema_mut().sessoes = vec![SID.into()];
+    a.tick(seg(0)).await;
+    a.tick(seg(300)).await;
+    let dia = Instante::em(seg(0), &Utc).local.date();
+    let j =
+        m.db.consumo_do_dia(m.perfil, m.jogo.app_id, dia)
+            .await
+            .unwrap();
+    let v =
+        m.db.consumo_do_dia(m.perfil, video.app_id, dia)
+            .await
+            .unwrap();
+    assert_eq!((j.app_segundos, v.app_segundos), (300, 300));
+    assert_eq!(
+        j.total_segundos, 300,
+        "o total é o tempo de sessão, não 600"
+    );
+}
+
+#[tokio::test]
+async fn falha_ao_listar_sessoes_e_reportada_e_o_enforcement_de_apps_continua() {
+    let m = mundo(None).await;
+    m.regra(&m.jogo, Some(0)).await;
+    let mut a = agente(&m);
+    a.sistema_mut().processos = vec![proc(5, "jogo.exe", SID)];
+    a.sistema_mut().falha_sessoes = true;
+    let r = a.tick(seg(0)).await;
+    assert!(
+        r.erros.iter().any(|e| e.contains("sessões")),
+        "{:?}",
+        r.erros
+    );
+    assert!(matches!(r.acoes[..], [Acao::Encerrou { .. }]));
+    assert_eq!(m.eventos("INTERNAL_ERROR").await, 1);
 }
 
 #[tokio::test]
 async fn sessao_e_bloqueada_mesmo_sem_nenhum_app_controlado_em_execucao() {
     let m = mundo(Some(700)).await;
     let ctx = EventContext::local();
-    // 800 s já consumidos hoje (em dois blocos, cada um dentro do limite por intervalo)
     let dia = seg(0) - Duration::hours(2);
-    m.db.registrar_uso(
-        &ctx,
-        m.perfil,
-        m.jogo.app_id,
-        dia,
-        dia + Duration::seconds(400),
-        &Utc,
-    )
-    .await
-    .unwrap();
-    m.db.registrar_uso(
-        &ctx,
-        m.perfil,
-        m.jogo.app_id,
-        dia + Duration::seconds(400),
-        dia + Duration::seconds(800),
-        &Utc,
-    )
-    .await
-    .unwrap();
-
+    for k in 0..2 {
+        let ini = dia + Duration::seconds(k * 400);
+        m.db.registrar_sessao(&ctx, m.perfil, ini, ini + Duration::seconds(400), &Utc)
+            .await
+            .unwrap();
+    }
     let mut a = agente(&m);
-    a.sistema_mut().processos = vec![proc(3, "explorer.exe", SID)]; // app desconhecido: só mantém a sessão viva
+    a.sistema_mut().processos = vec![proc(3, "explorer.exe", SID)]; // app desconhecido
+    a.sistema_mut().sessoes = vec![SID.into()];
     let r = a.tick(seg(0)).await;
     assert_eq!(
         r.acoes,
@@ -354,6 +517,7 @@ async fn aviso_de_app_nao_e_escondido_por_aviso_de_sessao_com_menos_tempo() {
     m.regra(&m.jogo, Some(1200)).await;
     let mut a = agente(&m);
     a.sistema_mut().processos = vec![proc(1, "jogo.exe", SID)];
+    a.sistema_mut().sessoes = vec![SID.into()];
     for i in 0..3 {
         a.tick(seg(i * 300)).await;
     }

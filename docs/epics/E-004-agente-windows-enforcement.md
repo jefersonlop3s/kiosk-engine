@@ -40,6 +40,8 @@ Estado: em andamento (núcleo independente de SO entregue em 2026-10-28; fases F
 
 - `agente::Agente` com a interface `Sistema` (listar processos, encerrar, bloquear sessão, avisar): contabilidade por tick, avisos nos marcos de 5 e 1 min sem repetir, encerramento com tolerância e desistência após 3 falhas (`TAMPER_SUSPECTED`), bloqueio de sessão com intervalo de rebloqueio e eventos de log em cada ação.
 - Leituras do banco para o motor: perfil por SID, app por nome do executável (sem caixa), janela do dia da semana e regras do app (`decidir_para`, `decidir_app`).
+- Tempo de sessão ativa (`session_usage`, [ADR-003](../adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md)): o total do perfil deixa de ser a soma dos apps; só conta quando a sessão estava ativa no tick anterior e no atual.
+- Política de sessão decidida pelo dono: lock e, após 2 desbloqueios com a restrição valendo, logoff (`Sistema::encerrar_sessao`).
 - Testes com `Sistema` falso contra SQLite real. O adaptador Win32, o pipe da UI e o total por sessão ficam para depois do aceite das ADRs.
 
 ## Aceites

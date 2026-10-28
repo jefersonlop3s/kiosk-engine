@@ -97,7 +97,7 @@ async fn banco_com_perfil_e_apps() -> (TempDir, KioskDbManager, Uuid, Uuid, Uuid
 }
 
 #[tokio::test]
-async fn ledger_acumula_por_app_e_por_dia_com_total_do_perfil() {
+async fn ledger_acumula_por_app_e_por_dia() {
     let (_d, db, p, jogo, video) = banco_com_perfil_e_apps().await;
     let ctx = EventContext::local();
     let t0 = utc(2026, 6, 10, 15, 0);
@@ -119,9 +119,30 @@ async fn ledger_acumula_por_app_e_por_dia_com_total_do_perfil() {
         .unwrap();
 
     let c = db.consumo_do_dia(p, jogo, dia(2026, 6, 10)).await.unwrap();
-    assert_eq!((c.app_segundos, c.total_segundos), (500, 600));
+    assert_eq!(c.app_segundos, 500);
     let v = db.consumo_do_dia(p, video, dia(2026, 6, 10)).await.unwrap();
-    assert_eq!((v.app_segundos, v.total_segundos), (100, 600));
+    assert_eq!(v.app_segundos, 100);
+    assert_eq!(c.total_segundos, 0, "o total vem da sessão, não dos apps");
+}
+
+#[tokio::test]
+async fn total_do_perfil_vem_da_sessao_e_nao_da_soma_dos_apps() {
+    let (_d, db, p, jogo, video) = banco_com_perfil_e_apps().await;
+    let ctx = EventContext::local();
+    let t0 = utc(2026, 6, 10, 15, 0);
+    let fim = t0 + Duration::seconds(500);
+    // dois apps ao mesmo tempo durante 500 s de sessão
+    db.registrar_uso(&ctx, p, jogo, t0, fim, &NY).await.unwrap();
+    db.registrar_uso(&ctx, p, video, t0, fim, &NY)
+        .await
+        .unwrap();
+    db.registrar_sessao(&ctx, p, t0, fim, &NY).await.unwrap();
+    db.registrar_sessao(&ctx, p, fim, fim + Duration::seconds(100), &NY)
+        .await
+        .unwrap();
+
+    let c = db.consumo_do_dia(p, jogo, dia(2026, 6, 10)).await.unwrap();
+    assert_eq!((c.app_segundos, c.total_segundos), (500, 600));
 }
 
 #[tokio::test]

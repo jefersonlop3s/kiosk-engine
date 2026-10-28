@@ -186,3 +186,18 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: sem código neste registro; a política de logoff, o tempo de sessão (ADR-003), o protocolo da UI (ADR-004), a verificação de assinatura (ADR-006) e o servidor (ADR-005) vêm em commits próprios.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Tempo de sessão (ADR-003) e política de logoff (GC-12)
+
+- **Origem**: aceite da ADR-003 e resposta do dono sobre lock × logoff em 2026-10-28.
+- **Resultado**:
+  - `migrations/0005_session_usage.sql` e `KioskDbManager::registrar_sessao`; `consumo_do_dia` passa a devolver o total do perfil pelo tempo de sessão ativa, não pela soma dos apps (fecha GC-09 e GC-11); a guarda de relógio (`TAMPER_SUSPECTED`) é a mesma de `registrar_uso`;
+  - `Sistema` ganha `sessoes_ativas` e `encerrar_sessao`; o agente só contabiliza e só age sobre a sessão quando ela está ativa (uma sessão bloqueada não é rebloqueada), e o tempo de sessão exige sessão ativa no tick anterior e no atual;
+  - lock e, depois que a criança desbloqueia `MAX_BLOQUEIOS_ANTES_DO_LOGOFF` (2) vezes com a restrição valendo, logoff (`Acao::EncerrouSessao`, evento `SESSION_LOCKED` com detalhe); a contagem zera quando a restrição acaba (fecha GC-12);
+  - uma sessão ativa sem nenhum processo visto também é contabilizada e avaliada.
+- **Evidência**: `cargo test --locked` → 17 (agente) + 9 + 14 + 14 + 12 passando, contra SQLite real. Mutações deliberadas: logoff nunca (limite 99) reprova 2 testes; não zerar a contagem reprova 1; agir em sessão não ativa reprova 1. Na primeira rodada duas mutações sobreviveram (testes fracos); reforcei os testes e as quatro agora são pegas. Clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - o logoff perde trabalho não salvo (mitigado pelos avisos de 5 e 1 min); o adaptador Windows real de `sessoes_ativas`/`encerrar_sessao` (`WTS*`) não existe ainda;
+  - suspensão/hibernação da máquina gera um intervalo maior que 600 s e registra `TAMPER_SUSPECTED` mesmo sem má-fé; o ruído é conhecido;
+  - GC-08 (avisos configuráveis por regra) segue aberto.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
