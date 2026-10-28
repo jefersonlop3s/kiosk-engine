@@ -280,3 +280,14 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Encerra o E-005** no que não exige Windows; restam GC-15 e GC-16.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — CI do GitHub verde em Ubuntu e Windows
+
+- **Origem**: pendência aberta desde a F4 do E-001; a validação em Windows nunca tinha acontecido.
+- **Achado**: o workflow só disparava em push para `main` e em PR, então a branch de trabalho nunca foi validada (`total_count: 0` execuções). O disparo passou a incluir push em qualquer branch e `workflow_dispatch`.
+- **Resultado**: execução [40681673250](https://github.com/jefersonlop3s/kiosk-engine/actions/runs/40681673250) sobre o commit `216f8da`: `gates (ubuntu-latest)` e `gates (windows-latest)` com `cargo fmt --check`, `cargo clippy --all-targets --locked -- -D warnings` e `cargo test --locked` em sucesso. Os 114 testes rodaram em **Windows nativo**, inclusive os de SQLite real em arquivo, os HTTP em loopback e os que sobem `kioskd` e `kioskctl` como processos.
+- **Limitações**:
+  - o que foi validado em Windows é o código portável com o `Sistema` falso; encerrar processos, bloquear sessão, SIDs, WTS e o firewall reais não foram exercitados (adaptador Win32 não existe);
+  - os testes de permissão `0600` do arquivo de credenciais são só de Unix (`cfg(unix)`);
+  - não li os logs dos passos, só a conclusão por passo.
+- **Commit**: `216f8da` (branch `claude/hopeful-curie-egiw07`).
+
