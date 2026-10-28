@@ -21,6 +21,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | GC-16 | O agente roda dentro do `kioskd servir` no Windows, mas o `kioskd` ainda é um processo de console: falta registrá-lo como serviço do Windows (SCM, conta SYSTEM, recuperação automática) e proteger a pasta do banco | Por leitura | E-004 F1/F4 |
 | GC-17 | Os avisos à criança usam `WTSSendMessageW` (caixa de mensagem na sessão) como solução provisória; a ADR-004 prevê a UI de bandeja com tempo restante | Por decisão (provisório) | E-004 F3 |
 | GC-18 | Bloquear a sessão usa `WTSDisconnectSession` (volta à tela de entrada), não `LockWorkStation`, que só vale para a sessão de quem chama | Por leitura | Confirmar o comportamento em Windows interativo (E-004 F2) |
+| GC-19 | O pré-push do harness (`.harness/validation.py`) compara o SHA de cada ref enviada com o `HEAD`; uma tag anotada envia o SHA do objeto da tag, não o do commit, e é sempre recusada. Contorno atual: tags leves, ou a tag criada pelo workflow de release | Sim: `16501a3` (tag) × `76d8b8f` (commit) | Corrigir no sovereign-harness (`git rev-parse <sha>^{commit}`) e reinstalar |
 
 ## Épicos abertos
 

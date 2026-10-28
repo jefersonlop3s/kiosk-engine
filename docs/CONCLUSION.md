@@ -328,3 +328,15 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: o workflow de release ainda não rodou (só roda com a tag ou manualmente a partir de `main`); "GPL v2" foi registrado como `GPL-2.0-only`.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — PR da 0.0.1 mesclado e publicação pelo workflow
+
+- **Origem**: pedido do dono: abrir PR, mesclar e lançar a 0.0.1.
+- **Resultado**:
+  - [jefersonlop3s/kiosk-engine#2](https://github.com/jefersonlop3s/kiosk-engine/pull/2) mesclado em `main` com commit de merge (`76d8b8f`), preservando os SHAs citados neste registro; CI verde em Ubuntu e Windows nos dois eventos (push e pull_request) do commit `ab0aa0d`;
+  - ensaio manual do `release.yml` em `main` ([40696327422](https://github.com/jefersonlop3s/kiosk-engine/actions/runs/40696327422)): testes, compilação e pacotes `pacote-windows-x86_64` (3,5 MB) e `pacote-linux-x86_64` (3,4 MB) gerados, sem publicar;
+  - a tag não pôde ser enviada desta sessão: (1) o pré-push do harness recusa tag anotada (GC-19); (2) com tag leve os 5 gates passaram, mas o proxy git da sessão respondeu `403` (a credencial só envia à branch de trabalho);
+  - solução: o `release.yml` ganha `workflow_dispatch` com `publicar: true`, que cria a tag `v<versão do Cargo.toml>` no commit escolhido usando o `GITHUB_TOKEN` do repositório e publica o release; recusa se a tag já existir; os pacotes passam a se chamar pela versão, não pela ref.
+- **Evidência**: YAML validado localmente; a publicação é registrada na entrada seguinte.
+- **Erro do agente registrado**: a primeira tentativa de merge foi feita em paralelo com um `expectedHeadSha` inventado; o GitHub recusou (`409`) e o merge foi refeito com o SHA real.
+- **Commit**: branch `claude/hopeful-curie-egiw07` reiniciada a partir de `main`.
+

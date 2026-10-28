@@ -1,11 +1,18 @@
 name: release
 
-# Publica um release ao receber uma tag `vX.Y.Z`. Também pode rodar manualmente
-# (workflow_dispatch) como ensaio: compila e empacota, mas só publica quando é tag.
+# Publica o release da versão do Cargo.toml (tag `vX.Y.Z`).
+# - Em push de tag `v*`: confere tag = versão, compila, empacota e publica.
+# - Manual (workflow_dispatch): ensaio por padrão; com `publicar: true` cria a tag
+#   `v<versão>` no commit escolhido e publica. Recusa se a tag já existir.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Criar a tag v<versão do Cargo.toml> neste commit e publicar o release"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -24,18 +31,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Versão da tag igual à do Cargo.toml
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Versão
+        id: v
         shell: bash
         run: |
           versao=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          test "v${versao}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != Cargo.toml ${versao}"; exit 1; }
+          echo "tag=v${versao}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            test "v${versao}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != Cargo.toml ${versao}"; exit 1; }
+          fi
       - run: cargo test --locked
       - run: cargo build --release --locked --bins
       - name: Empacotar
         shell: bash
         run: |
-          nome="kiosk-engine-${GITHUB_REF_NAME//\//-}-${{ matrix.alvo }}"
+          nome="kiosk-engine-${{ steps.v.outputs.tag }}-${{ matrix.alvo }}"
           mkdir -p "dist/${nome}"
           ext=""; [ "${{ runner.os }}" = "Windows" ] && ext=".exe"
           cp "target/release/kioskd${ext}" "target/release/kioskctl${ext}" "dist/${nome}/"
@@ -55,7 +65,7 @@ jobs:
 
   publicar:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publicar)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,15 +73,27 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Somas SHA-256 e notas da versão
+      - name: Tag, somas SHA-256 e notas da versão
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          versao=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          tag="v${versao}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/${tag}" > /dev/null; then
+              echo "a tag ${tag} já existe: não sobrescrevo um release publicado"; exit 1
+            fi
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
-          versao="${GITHUB_REF_NAME#v}"
           awk -v v="## [${versao}]" 'index($0, v) == 1 {p=1; next} /^## \[/ {p=0} p' CHANGELOG.md > notas.md
           test -s notas.md || { echo "CHANGELOG sem a seção ${versao}"; exit 1; }
       - uses: softprops/action-gh-release@v2
         with:
-          name: ${{ github.ref_name }}
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.v.outputs.tag }}
           body_path: notas.md
           prerelease: true
           files: dist/*
