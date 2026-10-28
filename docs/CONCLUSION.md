@@ -340,3 +340,15 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Erro do agente registrado**: a primeira tentativa de merge foi feita em paralelo com um `expectedHeadSha` inventado; o GitHub recusou (`409`) e o merge foi refeito com o SHA real.
 - **Commit**: branch `claude/hopeful-curie-egiw07` reiniciada a partir de `main`.
 
+## 2026-10-28 — Versão 0.0.1 publicada
+
+- **Origem**: pedido do dono para lançar a 0.0.1.
+- **Resultado**: [jefersonlop3s/kiosk-engine#3](https://github.com/jefersonlop3s/kiosk-engine/pull/3) mesclado (`1559c60`); o `release.yml` disparado em `main` com `publicar: true` ([40698247152](https://github.com/jefersonlop3s/kiosk-engine/actions/runs/40698247152)) testou, compilou e publicou o release [v0.0.1](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.1), marcado como **pré-lançamento**, com a tag `v0.0.1` em `1559c60` criada pelo workflow. Arquivos:
+  - `kiosk-engine-v0.0.1-windows-x86_64.zip` (3 535 404 bytes, `sha256:a0ac9c5b921fc598a8d9737b50061085b2f15506e0339a1ecfc9a05c45adbb3c`);
+  - `kiosk-engine-v0.0.1-linux-x86_64.tar.gz` (3 422 628 bytes, `sha256:4e3d0c9850e0afdca986556570264cab272e692c2e25893b4c901fd10bc7fc56`);
+  - `SHA256SUMS.txt`.
+  As notas do release são a seção `[0.0.1]` do [CHANGELOG](../CHANGELOG.md).
+- **Evidência**: execução do workflow com sucesso; release consultado pela API do GitHub (`prerelease: true`, três arquivos com estado `uploaded`).
+- **Limitações**: os pacotes não foram baixados nem executados depois da publicação; a tag está no merge do PR #3 (inclui o ajuste do workflow), não no merge do PR #2; continuam valendo as limitações da versão (sem validação interativa de bloqueio, logoff e avisos; `kioskd` ainda não é serviço do Windows).
+- **Commit**: este registro (branch `claude/hopeful-curie-egiw07`).
+
