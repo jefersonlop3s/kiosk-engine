@@ -1,7 +1,8 @@
 [package]
 name = "kiosk-engine"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
+license = "GPL-2.0-only"
 
 [dependencies]
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono", "uuid"] }

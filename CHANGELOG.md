@@ -4,6 +4,12 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.1] - 2026-10-28
+
+Primeira versão, **pré-lançamento**. O motor, o log forense, a API e o CLI estão completos e testados (Linux e Windows no CI); o agente Windows encerra apps em Windows real, mas bloqueio de sessão, logoff e avisos ainda não foram validados em sessão interativa com conta de criança. Não use como única proteção.
+
+Binários: `kioskd` (serviço) e `kioskctl` (CLI dos pais); uso em `api-e-cli.md`. Ver as pendências abertas em `docs/PENDING.md`. Licença: GPL-2.0-only (`LICENSE`).
+
 ### Documentação
 - Estrutura documental do método sovereign-harness em `docs/`, com índice, PENDING, ROADMAP e CONCLUSION.
 - `AGENTS.md` como fonte única de instruções para agentes; `CLAUDE.md` passa a ser symlink para ele.
