@@ -304,3 +304,15 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: o `kioskd` ainda não é um serviço do Windows (GC-16); bloqueio, logoff e aviso não podem ser exercitados no CI (sem sessão interativa); a criança pode renomear o `.exe` (risco aceito na ADR-003).
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Adaptador Win32 validado em Windows real (CI)
+
+- **Origem**: evidência pendente da entrada anterior.
+- **Resultado**: execução [40686954735](https://github.com/jefersonlop3s/kiosk-engine/actions/runs/40686954735) sobre `1b4a3e1`, job `gates (windows-latest)` (Rust 1.99.1, `x86_64-pc-windows-msvc`): fmt, clippy `-D warnings` e todos os testes em sucesso. O log mostra `Running tests\windows.rs ... running 5 tests` com os 5 passando:
+  - `lista_processos_com_o_sid_do_dono_igual_ao_do_whoami`: o SID lido pelo `TokenUser` bate com o do `whoami /user`;
+  - `encerra_um_processo_de_verdade`: `TerminateProcess` encerra um `ping` real;
+  - `encerrar_processo_inexistente_falha_alto`;
+  - `consulta_de_sessoes_responde_sem_erro`;
+  - `o_agente_encerra_o_app_bloqueado_e_nao_toca_no_app_isento`: o agente completo, com SQLite real e `SistemaWindows`, encerra o `PING.EXE` bloqueado e deixa vivo o `powershell.exe` isento (controle negativo da ADR-001 em Windows real).
+- **Limitações**: o runner não tem sessão interativa: bloqueio (`WTSDisconnectSession`), logoff, aviso (`WTSSendMessageW`) e a detecção de sessão desbloqueada continuam sem validação de comportamento; a validação em máquina doméstica com conta de criança segue necessária (E-004 F2/F3).
+- **Commit**: este registro; código em `1b4a3e1`.
+
