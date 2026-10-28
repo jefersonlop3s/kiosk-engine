@@ -19,7 +19,7 @@ Todos os comandos abaixo são para o **PowerShell aberto como Administrador**, d
 
 ```powershell
 $env:KIOSK_DB = "sqlite://C:/ProgramData/kiosk/kiosk.db"
-$env:KIOSK_LISTEN = "100.95.52.48:8443"   # o IP do `tailscale ip -4`, com a porta
+$env:KIOSK_LISTEN = "<ip-tailscale>:8443"   # o IP do `tailscale ip -4`, com a porta
 ```
 
 - `KIOSK_DB`: onde fica o banco. A pasta é criada se faltar. O arquivo tem dados de crianças: deixe a pasta acessível só a SYSTEM e Administradores.
@@ -50,7 +50,7 @@ $env:KIOSK_LISTEN = "100.95.52.48:8443"   # o IP do `tailscale ip -4`, com a por
 .\kioskd.exe servir
 ```
 
-Deve aparecer `escutando em 100.95.52.48:8443` e `agente de enforcement ativo (tick de 2s)`. Deixe a janela aberta. O Windows pode pedir permissão de firewall para a porta: libere só para redes privadas (a Tailscale).
+Deve aparecer `escutando em <ip-tailscale>:8443` e `agente de enforcement ativo (tick de 2s)`. Deixe a janela aberta. O Windows pode pedir permissão de firewall para a porta: libere só para redes privadas (a Tailscale).
 
 ## 5. Parear o dispositivo dos pais
 
@@ -63,7 +63,7 @@ Numa **segunda** janela do PowerShell, com o mesmo `$env:KIOSK_DB`:
 O código é de uso único e vale por 5 minutos. No dispositivo dos pais, com o `kioskctl` do pacote:
 
 ```powershell
-.\kioskctl.exe parear --servidor 100.95.52.48:8443 --codigo ABCD2345 --nome "Celular da mãe"
+.\kioskctl.exe parear --servidor <ip-tailscale>:8443 --codigo ABCD2345 --nome "Celular da mãe"
 ```
 
 O CLI gera o par de chaves Ed25519, envia só a chave pública e grava `credenciais.json` com a chave privada (`%APPDATA%\kiosk\credenciais.json` no Windows, `~/.config/kiosk/credenciais.json` no Linux e macOS, ou `KIOSK_CREDENCIAIS`). Dez códigos errados em 5 minutos bloqueiam novos pareamentos por esse período.
