@@ -217,3 +217,15 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - a chave privada do cliente (arquivo com permissão restrita na CLI) ainda não tem implementação.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Protocolo serviço ↔ UI (ADR-004), parte independente de plataforma
+
+- **Origem**: aceite da ADR-004 e pedido do dono para prosseguir.
+- **Resultado**: `src/ipc.rs`:
+  - `ParaUi` (estado e aviso, empurrados pelo serviço; sem o SID da sessão) e `DaUi` (batimento e confirmação de aviso), em uma linha JSON com `{"v":1,...}`;
+  - `decodificar_da_ui` trata a UI como entrada não confiável: máximo de 4096 bytes, UTF-8, objeto JSON, versão exata, esquema fechado (campo ou tipo desconhecido é recusado) e marco de aviso restrito a 300 e 60;
+  - `LimiteDeTaxa` (10 mensagens/s) e `MonitorBatimento` (UI parada após 3 batimentos de 5 s perdidos, alerta uma única vez por parada, recuperação detectada, espera reiniciável após relançar a UI).
+- **Achados na execução**: (1) `serde` não combina `flatten` com `deny_unknown_fields`, então a versão e o esquema são conferidos à mão; (2) `deny_unknown_fields` é ignorado em variante unitária de enum com tag interna, e um campo extra em `batimento` passava; `Batimento {}` fecha o esquema.
+- **Evidência**: `cargo test --locked` → 8 testes novos em `tests/ipc.rs` e 87 no total, todos passando; três mutações deliberadas (3 → 30 batimentos, sem limite de tamanho, qualquer marco) reprovaram testes e foram revertidas; clippy `-D warnings` e fmt limpos.
+- **Limitações**: o named pipe com DACL, a conferência do SID do cliente, o lançamento da UI na sessão (`CreateProcessAsUser`) e a bandeja exigem Windows e não existem; o monitor ainda não está ligado ao agente (o agente não recebe o batimento via `Sistema`).
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
