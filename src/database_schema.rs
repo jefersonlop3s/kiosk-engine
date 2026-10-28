@@ -150,42 +150,115 @@ impl TryFrom<RuleRow> for ActiveRule {
     }
 }
 
-/// ===================================================
-/// 🛡️ TABELA: SecurityLog
-/// O LOG FORENSE ABSOLUTO (Abordagem B). Registra o motivo EXATO de cada tentativa.
-/// Esta tabela é otimizada para imutabilidade e busca forense, não para leitura rápida de status operacional.
-/// ===================================================
-#[derive(Debug, Clone)]
+/// Evento do log forense (`security_log`).
+#[derive(Debug, Clone, PartialEq)]
 pub struct SecurityEvent {
-    // log_id (PK): UUID único para este evento/tentativa. Garante a unicidade do registro.
     pub event_id: Uuid,
-    // timestamp: Momento EXATO do evento/tentativa. A fonte da verdade forense.
+    /// Momento exato do evento (não o da escrita).
     pub timestamp: DateTime<Utc>,
-    // client_ip: IP da origem do comando (ex: "100.x.x.x"). Essencial para rastrear o agente atacante ou administrador.
+    /// Origem do comando; `"local"` para eventos gerados pelo próprio agente.
     pub client_ip: String,
-    // action_attempted: A intenção do cliente (Ex: ADD_RULE, MODIFY_LIMIT, REVOKE). O que ele *tentou* fazer?
     pub action_attempted: ActionType,
-    // status: Resultado da transação (SUCCESS ou FAILURE). Foi aceito ou rejeitado pelo Daemon Core.
+    pub event_type: EventType,
     pub transaction_status: TransactionStatus,
-    // REJECTION_REASON_DETAIL (CRÍTICO): Texto livre detalhado com a razão EXATA do bloqueio/falha.
-    // Este é o campo que armazena os "porquês" forenses e deve ser robusto para textos longos.
+    /// Razão exata, só para o log: nunca vai na resposta externa (arquitetura, Camada 5).
     pub rejection_reason_detail: String,
 }
 
-/// Enum para as ações críticas registradas (a intenção).
-#[derive(Debug, PartialEq, Clone)]
+impl SecurityEvent {
+    pub fn new(
+        client_ip: &str,
+        action_attempted: ActionType,
+        event_type: EventType,
+        transaction_status: TransactionStatus,
+        rejection_reason_detail: &str,
+    ) -> Self {
+        Self {
+            event_id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            client_ip: client_ip.to_owned(),
+            action_attempted,
+            event_type,
+            transaction_status,
+            rejection_reason_detail: rejection_reason_detail.to_owned(),
+        }
+    }
+}
+
+/// Intenção registrada.
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ActionType {
     AddRule,
     ModifyLimit,
     Revoke,
-    // ... outros comandos como ChangeWhitelistStatus, etc.
+    ActivateRule,
+    AddApp,
+    AddProfile,
+    SetProfileWindow,
+    /// Evento gerado pelo próprio agente, sem comando externo.
+    System,
 }
 
-/// Enum para o resultado da transação (o que realmente aconteceu).
-#[derive(Debug, PartialEq, Clone)]
+impl ActionType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AddRule => "ADD_RULE",
+            Self::ModifyLimit => "MODIFY_LIMIT",
+            Self::Revoke => "REVOKE",
+            Self::ActivateRule => "ACTIVATE_RULE",
+            Self::AddApp => "ADD_APP",
+            Self::AddProfile => "ADD_PROFILE",
+            Self::SetProfileWindow => "SET_PROFILE_WINDOW",
+            Self::System => "SYSTEM",
+        }
+    }
+}
+
+/// Classificação do evento: camadas da API, motor e enforcement (ADR-001).
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum EventType {
+    Success,
+    AuthFail,
+    AuthzFail,
+    ValidationFail,
+    InternalError,
+    StaleRule,
+    WarningShown,
+    AppTerminated,
+    SessionLocked,
+    AgentStopped,
+    TamperSuspected,
+}
+
+impl EventType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Success => "SUCCESS",
+            Self::AuthFail => "AUTH_FAIL",
+            Self::AuthzFail => "AUTHZ_FAIL",
+            Self::ValidationFail => "VALIDATION_FAIL",
+            Self::InternalError => "INTERNAL_ERROR",
+            Self::StaleRule => "STALE_RULE",
+            Self::WarningShown => "WARNING_SHOWN",
+            Self::AppTerminated => "APP_TERMINATED",
+            Self::SessionLocked => "SESSION_LOCKED",
+            Self::AgentStopped => "AGENT_STOPPED",
+            Self::TamperSuspected => "TAMPER_SUSPECTED",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TransactionStatus {
-    Success, // A intenção foi executada com sucesso e alterou o estado do sistema corretamente.
-    Failure, // O comando falhou por erro interno ou validação de dados.
+    Success,
+    Failure,
 }
 
-// Nota: As estruturas para a Camada 0 (Recepção) e Camada 1 (Autenticação Criptográfica) serão criadas em arquivos separados (`api_handler.rs` e `crypto_utils.rs`).
+impl TransactionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Success => "SUCCESS",
+            Self::Failure => "FAILURE",
+        }
+    }
+}

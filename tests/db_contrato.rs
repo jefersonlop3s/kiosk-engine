@@ -2,7 +2,7 @@
 
 use chrono::{NaiveTime, Utc};
 use kiosk_engine::database_schema::*;
-use kiosk_engine::db_manager::KioskDbManager;
+use kiosk_engine::db_manager::{EventContext, KioskDbManager};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -76,13 +76,15 @@ async fn banco_novo_tem_migracoes_e_foreign_keys_ativas() {
 async fn regra_criada_e_lida_de_volta_com_campos_nulos_preservados() {
     let (_dir, db) = novo_banco().await;
     let (a, p) = (app("game.exe"), perfil("S-1-5-21-1"));
-    db.create_app(&a).await.unwrap();
-    db.create_profile(&p).await.unwrap();
+    db.create_app(&EventContext::local(), &a).await.unwrap();
+    db.create_profile(&EventContext::local(), &p).await.unwrap();
 
     let mut r = regra(p.profile_id, a.app_id);
     r.daily_limit_seconds = None;
     r.time_window = None;
-    db.create_active_rule(&r).await.unwrap();
+    db.create_active_rule(&EventContext::local(), &r)
+        .await
+        .unwrap();
 
     let lida = db.get_active_rule(r.rule_id).await.unwrap().unwrap();
     assert_eq!(
@@ -96,7 +98,7 @@ async fn regra_criada_e_lida_de_volta_com_campos_nulos_preservados() {
         r.creation_timestamp.timestamp()
     );
 
-    db.set_rule_state(r.rule_id, RuleState::Active)
+    db.set_rule_state(&EventContext::local(), r.rule_id, RuleState::Active)
         .await
         .unwrap();
     assert_eq!(
@@ -109,10 +111,12 @@ async fn regra_criada_e_lida_de_volta_com_campos_nulos_preservados() {
 async fn janela_da_regra_faz_ida_e_volta() {
     let (_dir, db) = novo_banco().await;
     let (a, p) = (app("game.exe"), perfil("S-1-5-21-1"));
-    db.create_app(&a).await.unwrap();
-    db.create_profile(&p).await.unwrap();
+    db.create_app(&EventContext::local(), &a).await.unwrap();
+    db.create_profile(&EventContext::local(), &p).await.unwrap();
     let r = regra(p.profile_id, a.app_id);
-    db.create_active_rule(&r).await.unwrap();
+    db.create_active_rule(&EventContext::local(), &r)
+        .await
+        .unwrap();
     let lida = db.get_active_rule(r.rule_id).await.unwrap().unwrap();
     assert_eq!(lida.time_window, r.time_window);
     assert_eq!(lida.daily_limit_seconds, Some(3600));
@@ -142,37 +146,53 @@ async fn transacao_sem_commit_nao_persiste() {
 async fn fk_para_app_inexistente_e_recusada() {
     let (_dir, db) = novo_banco().await;
     let p = perfil("S-1-5-21-1");
-    db.create_profile(&p).await.unwrap();
+    db.create_profile(&EventContext::local(), &p).await.unwrap();
     let r = regra(p.profile_id, Uuid::new_v4());
-    assert!(db.create_active_rule(&r).await.is_err());
+    assert!(
+        db.create_active_rule(&EventContext::local(), &r)
+            .await
+            .is_err()
+    );
     assert!(db.get_active_rule(r.rule_id).await.unwrap().is_none());
 }
 
 #[tokio::test]
 async fn windows_sid_duplicado_e_recusado() {
     let (_dir, db) = novo_banco().await;
-    db.create_profile(&perfil("S-1-5-21-1")).await.unwrap();
-    assert!(db.create_profile(&perfil("S-1-5-21-1")).await.is_err());
+    db.create_profile(&EventContext::local(), &perfil("S-1-5-21-1"))
+        .await
+        .unwrap();
+    assert!(
+        db.create_profile(&EventContext::local(), &perfil("S-1-5-21-1"))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
 async fn process_name_duplicado_e_recusado_sem_diferenciar_caixa() {
     let (_dir, db) = novo_banco().await;
-    db.create_app(&app("Game.exe")).await.unwrap();
-    assert!(db.create_app(&app("game.EXE")).await.is_err());
+    db.create_app(&EventContext::local(), &app("Game.exe"))
+        .await
+        .unwrap();
+    assert!(
+        db.create_app(&EventContext::local(), &app("game.EXE"))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
 async fn janela_invertida_e_estado_invalido_sao_recusados_pelo_banco() {
     let (_dir, db) = novo_banco().await;
     let p = perfil("S-1-5-21-1");
-    db.create_profile(&p).await.unwrap();
+    db.create_profile(&EventContext::local(), &p).await.unwrap();
     let invertida = TimeWindow {
         start: NaiveTime::from_hms_opt(20, 0, 0).unwrap(),
         end: NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
     };
     assert!(
-        db.set_profile_window(p.profile_id, 1, &invertida)
+        db.set_profile_window(&EventContext::local(), p.profile_id, 1, &invertida)
             .await
             .is_err()
     );
@@ -181,17 +201,17 @@ async fn janela_invertida_e_estado_invalido_sao_recusados_pelo_banco() {
         end: invertida.start,
     };
     assert!(
-        db.set_profile_window(p.profile_id, 7, &valida)
+        db.set_profile_window(&EventContext::local(), p.profile_id, 7, &valida)
             .await
             .is_err(),
         "weekday fora de 0..=6"
     );
-    db.set_profile_window(p.profile_id, 1, &valida)
+    db.set_profile_window(&EventContext::local(), p.profile_id, 1, &valida)
         .await
         .unwrap();
 
     let a = app("game.exe");
-    db.create_app(&a).await.unwrap();
+    db.create_app(&EventContext::local(), &a).await.unwrap();
     let ins = sqlx::query(
         "INSERT INTO active_rules (rule_id, profile_id, app_id, creation_timestamp, current_state) VALUES ('r', ?, ?, 't', 'XYZ')",
     )
@@ -206,7 +226,7 @@ async fn janela_invertida_e_estado_invalido_sao_recusados_pelo_banco() {
 async fn set_rule_state_de_regra_inexistente_falha_alto() {
     let (_dir, db) = novo_banco().await;
     assert!(
-        db.set_rule_state(Uuid::new_v4(), RuleState::Revoked)
+        db.set_rule_state(&EventContext::local(), Uuid::new_v4(), RuleState::Revoked)
             .await
             .is_err()
     );

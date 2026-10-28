@@ -1,6 +1,6 @@
 # E-002 — Log forense (`Security_Log`)
 
-Estado: proposto. Responsável: a definir. Repositório: kiosk.
+Estado: em andamento (F1 concluída em 2026-10-28). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 

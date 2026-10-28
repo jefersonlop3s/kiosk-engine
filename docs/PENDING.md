@@ -17,7 +17,8 @@ Nenhum aberto. GC-01 a GC-07 (origem: [revisão do estado inicial](insights/2026
 | Épico | Estado | Próximo passo |
 |---|---|---|
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) | em andamento | F1–F3 concluídas; F4: `.harness.toml` (CI GitHub já criado) |
-| [E-002](epics/E-002-log-forense.md) a [E-005](epics/E-005-api-comando-e-pareamento.md) | proposto | Ver [ROADMAP](ROADMAP.md) |
+| [E-002](epics/E-002-log-forense.md) | em andamento | F1 concluída; F2 (proteção contra UPDATE/DELETE) é a próxima |
+| [E-003](epics/E-003-motor-de-regras-e-uso.md) a [E-005](epics/E-005-api-comando-e-pareamento.md) | proposto | Ver [ROADMAP](ROADMAP.md) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
 
 ## Infraestrutura do harness

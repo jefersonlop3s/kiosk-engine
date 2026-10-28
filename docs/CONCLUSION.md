@@ -57,3 +57,20 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - testes só em Linux nesta sessão.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — E-002 F1: evento gravado na mesma transação da mudança de estado
+
+- **Origem**: pedido do dono para prosseguir ([ROADMAP](ROADMAP.md), sprint 2).
+- **Resultado**:
+  - `migrations/0002_security_log_event_type.sql`: coluna `event_type` com `CHECK` dos 11 tipos (`SUCCESS`, `AUTH_FAIL`, `AUTHZ_FAIL`, `VALIDATION_FAIL`, `INTERNAL_ERROR`, `STALE_RULE`, `WARNING_SHOWN`, `APP_TERMINATED`, `SESSION_LOCKED`, `AGENT_STOPPED`, `TAMPER_SUSPECTED`);
+  - `EventType`, `ActionType` ampliado, `TransactionStatus` e `SecurityEvent::new` em `database_schema.rs`; `insert_event` em `security_logger_impl.rs`, que opera sobre a conexão da transação do chamador;
+  - toda operação pública de escrita de `KioskDbManager` (`create_app`, `create_profile`, `set_profile_window`, `create_active_rule`, `set_rule_state`) recebe um `EventContext` (IP) e grava o evento `SUCCESS` antes do `commit()`;
+  - em falha, a mudança sofre rollback, um evento `FAILURE`/`INTERNAL_ERROR` com a razão exata é gravado em transação própria e o erro original é devolvido; se o log também falhar, o erro devolvido cita as duas falhas (fail-loud);
+  - `record_event` grava eventos sem mudança de estado (autenticação, motor, enforcement).
+- **Evidência**: `cargo test` → 9 + 6 testes passando (`tests/db_log_forense.rs`): um evento por operação de escrita, rollback descarta o evento, falha registra a razão e não deixa a regra, tipo desconhecido recusado pelo banco; clippy `-D warnings` e fmt limpos.
+- **Limitações**:
+  - o evento de falha usa sempre `INTERNAL_ERROR`; `AUTH_FAIL`/`AUTHZ_FAIL`/`VALIDATION_FAIL` serão gravados pelas camadas da API (E-005) via `record_event`;
+  - a regra "não existe caminho que altere estado sem evento" vale para a API pública de `KioskDbManager`; `pool()` é público e permite SQL direto (usado nos testes), a restringir quando houver consumidor externo;
+  - o log ainda aceita UPDATE/DELETE (E-002 F2); sem retenção nem consulta por período/perfil (F3);
+  - `client_ip` é fornecido pelo chamador e não validado.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
