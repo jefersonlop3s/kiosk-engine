@@ -41,12 +41,12 @@ use crate::agente::{Aviso, ProcessoVisto, Sistema};
 /// Quanto tempo a caixa de aviso fica aberta antes de fechar sozinha.
 const AVISO_TIMEOUT_SEGUNDOS: u32 = 60;
 
-fn ultimo_erro(o_que: &str) -> String {
+pub(crate) fn ultimo_erro(o_que: &str) -> String {
     format!("{o_que}: {}", std::io::Error::last_os_error())
 }
 
 /// Fecha o handle ao sair do escopo.
-struct Handle(HANDLE);
+pub(crate) struct Handle(pub(crate) HANDLE);
 
 impl Drop for Handle {
     fn drop(&mut self) {
@@ -62,14 +62,14 @@ fn de_utf16(buf: &[u16]) -> String {
     String::from_utf16_lossy(&buf[..fim])
 }
 
-fn para_utf16(s: &str) -> Vec<u16> {
+pub(crate) fn para_utf16(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 /// Texto de uma `PWSTR` terminada em zero.
 ///
 /// SAFETY: `p` deve apontar para uma string UTF-16 válida terminada em zero.
-unsafe fn pwstr(p: *const u16) -> String {
+pub(crate) unsafe fn pwstr(p: *const u16) -> String {
     if p.is_null() {
         return String::new();
     }

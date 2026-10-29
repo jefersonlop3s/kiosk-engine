@@ -37,6 +37,11 @@ Estado: em andamento desde 2026-10-29 (ADR-007 a ADR-009 aceitas; começa pela e
 | F2 | `kioskd` como serviço do Windows (SCM, conta SYSTEM, recuperação automática) e remoção limpa | F1, [E-004](E-004-agente-windows-enforcement.md), ADR-008 aceita | Serviço sobrevive a reinício; conta da criança não consegue parar o serviço |
 | F3 | Instalador e lançador | F2, ADR-008 aceita | Instalação e desinstalação num Windows limpo sem passos manuais |
 
+## Progresso
+
+- **F2** (2026-10-29): `kioskd instalar|desinstalar|estado|servico` implementados (`src/servico_windows.rs`) e validados no CI Windows por `tests/servico_windows.rs`. O teste instala, confere o SCM e o registro, chama a API servida pelo serviço, derruba o processo e vê o reinício, prova que uma conta padrão não para nem inicia o serviço e não lê a pasta de dados, reinstala e desinstala com e sem `--apagar-dados`. Falta o reinício do PC real (GC-16 no [PENDING](../PENDING.md)).
+- A F2 veio antes da F1 porque o assistente vai chamar o `instalar` no fim.
+
 ## Aceites
 
 - Num Windows limpo, do zero ao primeiro bloqueio validado sem abrir o runbook.

@@ -14,6 +14,11 @@
 //! - `kioskd regra criar --perfil ID --app ID [--limite S] [--janela HH:MM-HH:MM] [--ate RFC3339] [--ativar]`,
 //!   `regra ativar|revogar <id>`, `regra limite <id> --segundos N` e `regra listar [--perfil ID]`:
 //!   administração local das regras, com a mesma validação e auditoria da API.
+//! - `kioskd instalar --escutar ip:porta[,...]` (Windows, administrador): copia os executáveis
+//!   para `%ProgramFiles%\kiosk`, protege `%ProgramData%\kiosk` e registra e inicia o serviço
+//!   `kiosk` (LocalSystem, início automático, reinício em falha; ADR-008). `kioskd desinstalar
+//!   [--apagar-dados]` desfaz; `kioskd estado` mostra o serviço; `kioskd servico` é o modo
+//!   serviço, chamado pelo Windows.
 //!
 //! Variáveis: `KIOSK_DB` (padrão `sqlite://C:/ProgramData/kiosk/kiosk.db` no Windows e
 //! `sqlite://kiosk.db` nos outros sistemas; o banco em uso é sempre informado) e `KIOSK_LISTEN` (`ip:porta[,ip:porta...]`,
@@ -44,12 +49,23 @@ const USO: &str = "uso:
   kioskd regra revogar <id-da-regra>
   kioskd regra limite <id-da-regra> --segundos N
   kioskd regra listar [--perfil ID]
+  kioskd instalar --escutar ip:porta[,ip:porta...]   (Windows, PowerShell como administrador)
+  kioskd desinstalar [--apagar-dados]
+  kioskd estado
+  kioskd servico   (chamado pelo Windows ao iniciar o serviço; não rode à mão)
 variáveis: KIOSK_DB (padrão no Windows: sqlite://C:/ProgramData/kiosk/kiosk.db), KIOSK_LISTEN (ip:porta[,ip:porta...], obrigatória em `servir`)";
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match executar(&args).await {
+    // o modo serviço entrega a thread principal ao SCM antes de existir qualquer runtime
+    let resultado = if args == ["servico"] {
+        servico()
+    } else {
+        tokio::runtime::Runtime::new()
+            .map_err(|e| format!("runtime: {e}"))
+            .and_then(|rt| rt.block_on(executar(&args)))
+    };
+    match resultado {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
             eprintln!("kioskd: {msg}");
@@ -88,7 +104,12 @@ fn enderecos() -> Result<Vec<SocketAddr>, String> {
     let bruto = std::env::var("KIOSK_LISTEN").map_err(|_| {
         "KIOSK_LISTEN não definida: informe os endereços de escuta (ADR-005)".to_string()
     })?;
-    bruto
+    lista_de_enderecos(&bruto)
+}
+
+/// `ip:porta[,ip:porta...]`, já recusando o que a ADR-005 não permite.
+fn lista_de_enderecos(bruto: &str) -> Result<Vec<SocketAddr>, String> {
+    let lista = bruto
         .split(',')
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -101,7 +122,66 @@ fn enderecos() -> Result<Vec<SocketAddr>, String> {
                 }
             })
         })
-        .collect()
+        .collect::<Result<Vec<SocketAddr>, String>>()?;
+    if lista.is_empty() {
+        return Err("nenhum endereço de escuta informado (use ip:porta)".into());
+    }
+    api::validar_enderecos(&lista).map_err(|e| e.to_string())?;
+    Ok(lista)
+}
+
+/// API, limpeza do log e (no Windows) o agente, até a API parar ou falhar.
+async fn servir(com_agente: bool) -> Result<(), String> {
+    let enderecos = enderecos()?;
+    let db = Arc::new(abrir_banco().await?);
+    iniciar_manutencao(db.clone());
+    if com_agente {
+        iniciar_agente(db.clone());
+    }
+    let lista: Vec<String> = enderecos.iter().map(ToString::to_string).collect();
+    eprintln!("kioskd: escutando em {}", lista.join(", "));
+    api::servir_em(db, &enderecos)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// `kioskd servico`: o processo que o SCM inicia (ADR-008).
+#[cfg(windows)]
+fn servico() -> Result<(), String> {
+    kiosk_engine::servico_windows::despachar(|parar| {
+        let rt = tokio::runtime::Runtime::new().map_err(|e| format!("runtime: {e}"))?;
+        let resultado = rt.block_on(async {
+            tokio::select! {
+                r = servir(true) => r,
+                () = parar.notified() => Ok(()),
+            }
+        });
+        rt.shutdown_timeout(std::time::Duration::from_secs(5));
+        resultado
+    })
+}
+
+#[cfg(not(windows))]
+fn servico() -> Result<(), String> {
+    Err(SO_WINDOWS.into())
+}
+
+#[cfg(not(windows))]
+const SO_WINDOWS: &str = "este comando só existe no Windows (serviço do Windows, ADR-008)";
+
+/// Pede que digitem APAGAR antes de apagar os dados (ADR-008).
+fn confirmar_apagar_dados() -> Result<(), String> {
+    eprint!(
+        "kioskd: isto apaga o banco (perfis, regras, uso e log forense). Digite APAGAR para confirmar: "
+    );
+    let mut linha = String::new();
+    std::io::stdin()
+        .read_line(&mut linha)
+        .map_err(|e| format!("leitura da confirmação: {e}"))?;
+    if linha.trim() != "APAGAR" {
+        return Err("não confirmado: nada foi alterado".into());
+    }
+    Ok(())
 }
 
 /// Limpeza do log forense (retenção de 90 dias), na partida e a cada 24 h.
@@ -217,6 +297,67 @@ fn sid_do_argumento(args: &[String]) -> Result<String, String> {
     }
 }
 
+#[cfg(windows)]
+fn instalar(escutar: &str) -> Result<(), String> {
+    use kiosk_engine::servico_windows as sv;
+    let pid = sv::instalar(escutar)?;
+    eprintln!("kioskd: serviço em execução (pid {pid}), escutando em {escutar}");
+    eprintln!(
+        "kioskd: log do serviço em {}; os comandos de cadastro agora pedem PowerShell como administrador",
+        sv::arquivo_log().display()
+    );
+    Ok(())
+}
+
+#[cfg(windows)]
+fn desinstalar(apagar_dados: bool) -> Result<(), String> {
+    kiosk_engine::servico_windows::desinstalar(apagar_dados)
+}
+
+#[cfg(windows)]
+fn estado() -> Result<(), String> {
+    use kiosk_engine::servico_windows as sv;
+    let Some(e) = sv::estado()? else {
+        println!("serviço: {} não instalado", sv::NOME_SERVICO);
+        return Ok(());
+    };
+    println!("serviço: {}", sv::NOME_SERVICO);
+    if e.pid != 0 {
+        println!("estado: {} (pid {})", sv::nome_estado(e.estado), e.pid);
+    } else {
+        println!("estado: {}", sv::nome_estado(e.estado));
+    }
+    let inicio = if e.inicio_automatico {
+        "automático"
+    } else {
+        "manual ou desativado"
+    };
+    println!("início: {inicio}");
+    println!("conta: {}", e.conta);
+    println!("executável: {}", e.executavel);
+    for v in &e.ambiente {
+        println!("ambiente: {v}");
+    }
+    println!("dados: {}", sv::pasta_dados().display());
+    println!("log: {}", sv::arquivo_log().display());
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn instalar(_escutar: &str) -> Result<(), String> {
+    Err(SO_WINDOWS.into())
+}
+
+#[cfg(not(windows))]
+fn desinstalar(_apagar_dados: bool) -> Result<(), String> {
+    Err(SO_WINDOWS.into())
+}
+
+#[cfg(not(windows))]
+fn estado() -> Result<(), String> {
+    Err(SO_WINDOWS.into())
+}
+
 fn duracao(s: u64) -> String {
     format!("{}h{:02}", s / 3600, s % 3600 / 60)
 }
@@ -234,19 +375,25 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 ["--sem-agente"] => false,
                 _ => return Err(USO.to_string()),
             };
-            let enderecos = enderecos()?;
-            api::validar_enderecos(&enderecos).map_err(|e| e.to_string())?;
-            let db = Arc::new(abrir_banco().await?);
-            iniciar_manutencao(db.clone());
-            if com_agente {
-                iniciar_agente(db.clone());
-            }
-            let lista: Vec<String> = enderecos.iter().map(ToString::to_string).collect();
-            eprintln!("kioskd: escutando em {}", lista.join(", "));
-            api::servir_em(db, &enderecos)
-                .await
-                .map_err(|e| e.to_string())
+            servir(com_agente).await
         }
+        ["instalar", "--escutar", escutar] => {
+            let lista = lista_de_enderecos(escutar)?;
+            let normalizado: Vec<String> = lista.iter().map(ToString::to_string).collect();
+            instalar(&normalizado.join(","))
+        }
+        ["desinstalar", resto @ ..] => {
+            let apagar = match resto {
+                [] => false,
+                ["--apagar-dados"] => true,
+                _ => return Err(USO.to_string()),
+            };
+            if apagar {
+                confirmar_apagar_dados()?;
+            }
+            desinstalar(apagar)
+        }
+        ["estado"] => estado(),
         ["codigo-pareamento"] => {
             let db = abrir_banco().await?;
             let codigo = db

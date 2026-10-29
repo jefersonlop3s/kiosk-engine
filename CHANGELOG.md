@@ -4,8 +4,19 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Adicionado
+- `kioskd instalar --escutar ip:porta[,...]`: instala o kiosk como serviço do Windows (ADR-008, etapa 1). Copia os executáveis para `C:\Program Files\kiosk`, deixa `C:\ProgramData\kiosk` só para SYSTEM e Administradores, registra o serviço `kiosk` (conta SYSTEM, início automático, reinício em falha; conta padrão não consegue parar) e o inicia. Rodar de novo atualiza.
+- `kioskd desinstalar [--apagar-dados]`: remove o serviço e os executáveis; os dados só são apagados depois de digitar `APAGAR`.
+- `kioskd estado`: estado, pid, início, conta, endereço de escuta e log do serviço.
+- `kioskd servico`: modo serviço chamado pelo Windows, com o log em `C:\ProgramData\kiosk\kioskd.log`.
+
+### Alterado
+- Com o serviço instalado, os comandos de cadastro do `kioskd` precisam de PowerShell como Administrador, porque a pasta do banco fica protegida.
+
 ### Documentação
-- ADR-007 a ADR-009 propostas para o E-007 (assistente no terminal, autoinstalação e depois `.msi`, lista de programas pelo menu Iniciar e processos).
+- ADR-007 a ADR-009 aceitas pelo dono; E-007 em andamento.
+- Runbook: instalação como serviço (seção 4.1) e modo console para testes (4.2); fluxogramas dos quatro comandos novos.
+- ADR-007 a ADR-009 redigidas para o E-007 (assistente no terminal, autoinstalação e depois `.msi`, lista de programas pelo menu Iniciar e processos).
 - E-007 "Onboarding e instalador" proposto (assistente de primeira configuração, serviço do Windows e instalador); índice de épicos e roadmap atualizados.
 - Resultados dos testes no Windows real: avisos, limite do app e bloqueio de sessão validados; logoff não ocorreu (GC-20).
 

@@ -2,7 +2,7 @@
 
 Procedimento para pôr o kiosk para funcionar num PC Windows e administrá-lo pelo CLI. Decisões de origem: [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (uma conta por criança), [ADR-005](../adr/ADR-005-rede-da-api-de-comando.md) (rede) e [ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md) (assinatura e pareamento). Épicos: [E-004](../epics/E-004-agente-windows-enforcement.md) e [E-005](../epics/E-005-api-comando-e-pareamento.md). O fluxograma de cada comando, com o caminho da informação entre o cliente e o serviço, está em [fluxos dos comandos](../architecture/fluxos-dos-comandos.md).
 
-> Pré-lançamento: o agente encerra apps em Windows real, mas bloqueio de sessão, logoff e avisos ainda não foram validados com uma criança logada. O `kioskd` ainda roda como programa de console, não como serviço do Windows. Não use como única proteção.
+> Pré-lançamento: o agente encerra apps em Windows real, mas bloqueio de sessão, logoff e avisos ainda não foram validados com uma criança logada. O serviço do Windows (`kioskd instalar`, seção 4) é novo e ainda não foi validado num reinício de PC real. Não use como única proteção.
 
 Todos os comandos abaixo são para o **PowerShell aberto como Administrador**, dentro da pasta extraída do pacote `kiosk-engine-v<versão>-windows-x86_64.zip`.
 
@@ -23,7 +23,7 @@ Todos os comandos abaixo são para o **PowerShell aberto como Administrador**, d
 $env:KIOSK_LISTEN = "100.95.52.48:8443,127.0.0.1:8443"   # IP do `tailscale ip -4` e o loopback, com a porta
 ```
 
-- **Banco:** no Windows o padrão é `C:\ProgramData\kiosk\kiosk.db`, igual em qualquer janela e pasta; a pasta é criada se faltar. Todo comando do `kioskd` mostra na primeira linha qual banco está usando (`kioskd: banco ...`): confira que é sempre o mesmo. Só defina `$env:KIOSK_DB` se quiser outro lugar e, nesse caso, defina-o **em toda janela** (as variáveis `$env:` valem só para a janela em que foram definidas). O arquivo tem dados de crianças: deixe a pasta acessível só a SYSTEM e Administradores.
+- **Banco:** no Windows o padrão é `C:\ProgramData\kiosk\kiosk.db`, igual em qualquer janela e pasta; a pasta é criada se faltar. Todo comando do `kioskd` mostra na primeira linha qual banco está usando (`kioskd: banco ...`): confira que é sempre o mesmo. Só defina `$env:KIOSK_DB` se quiser outro lugar e, nesse caso, defina-o **em toda janela** (as variáveis `$env:` valem só para a janela em que foram definidas). O arquivo tem dados de crianças: o `kioskd instalar` (seção 4) deixa a pasta acessível só a SYSTEM e Administradores; a partir daí, os comandos do `kioskd` só funcionam num PowerShell **aberto como Administrador**.
 - `KIOSK_LISTEN`: `ip:porta[,ip:porta...]`, obrigatória para `servir`. Só são aceitos loopback (`127.0.0.1`, `::1`) e a rede Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`); `0.0.0.0` e endereços de LAN são recusados. O `127.0.0.1` permite parear um `kioskctl` no próprio PC.
 
 ## 3. Cadastrar a criança e os apps
@@ -78,15 +78,42 @@ O `perfil criar` imprime o **ID do perfil**. Confira no `perfil listar` que o SI
 
 ## 4. Subir o serviço
 
+### 4.1 Como serviço do Windows (recomendado)
+
+```powershell
+.\kioskd.exe instalar --escutar "100.95.52.48:8443,127.0.0.1:8443"   # IP do `tailscale ip -4` e o loopback
+```
+
+Num só passo, o `instalar`:
+
+- copia `kioskd.exe` e `kioskctl.exe` para `C:\Program Files\kiosk`;
+- deixa `C:\ProgramData\kiosk` (banco e log) acessível só a SYSTEM e Administradores;
+- registra o serviço `kiosk`: conta SYSTEM, início automático com o Windows e reinício 5 s depois de uma falha. Uma conta padrão, como a da criança, consegue consultar o serviço, mas não pará-lo;
+- grava o endereço de escuta no próprio serviço, sem precisar de `$env:KIOSK_LISTEN`;
+- inicia o serviço.
+
+Rodar de novo atualiza a instalação, por exemplo com uma versão nova do pacote ou outro endereço. Para conferir:
+
+```powershell
+.\kioskd.exe estado          # estado, pid, início automático, conta, endereço e onde fica o log
+Get-Content C:\ProgramData\kiosk\kioskd.log -Tail 20
+```
+
+Para remover, use `.\kioskd.exe desinstalar`: para e apaga o serviço e os executáveis, e **mantém** o banco. Com `--apagar-dados`, apaga também `C:\ProgramData\kiosk`, mas só depois de você digitar `APAGAR`. O Windows pode pedir permissão de firewall para a porta: libere só para redes privadas (a Tailscale).
+
+Depois de instalado, use `C:\Program Files\kiosk\kioskd.exe` (ou o da pasta extraída) para os cadastros, sempre num PowerShell como Administrador.
+
+### 4.2 Num console, para testes
+
 ```powershell
 .\kioskd.exe servir
 ```
 
-Deve aparecer `escutando em 100.95.52.48:8443` e `agente de enforcement ativo (tick de 2s)`. Deixe a janela aberta. O Windows pode pedir permissão de firewall para a porta: libere só para redes privadas (a Tailscale).
+Precisa de `$env:KIOSK_LISTEN` (seção 2). Deve aparecer `escutando em 100.95.52.48:8443` e `agente de enforcement ativo (tick de 2s)`. Funciona só enquanto a janela estiver aberta. Não rode junto com o serviço instalado, porque os dois disputam a mesma porta.
 
 ## 5. Parear o dispositivo dos pais
 
-Numa **segunda** janela do PowerShell (confira que a linha `kioskd: banco ...` mostra o mesmo banco do `servir`):
+Numa janela do PowerShell como Administrador (confira que a linha `kioskd: banco ...` mostra o mesmo banco do serviço; com o serviço instalado, é o padrão):
 
 ```powershell
 .\kioskd.exe codigo-pareamento
