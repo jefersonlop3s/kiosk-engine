@@ -4,6 +4,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Interno
+- `kiosk-ui.exe`, a bandeja da criança (ADR-004, E-004 F3 etapa 2): ícone com o tempo restante e balão para os avisos de 5 e 1 minuto, no idioma da conta, com reconexão ao serviço e batimento. O `kioskd install` e o pacote do Windows já o levam, mas **o serviço ainda não o inicia**: nada muda para quem usa.
+
 ## [0.0.7] - 2026-10-29
 
 Ainda **pré-lançamento**. Traz o rastro das tentativas de comando sem privilégio (ADR-011, visto no PC real com uma conta comum), os comandos `version`, o `AGENT_STOPPED` no log forense e duas correções do pipe de auditoria. O agente, a API e o `kioskctl` da 0.0.6 continuam compatíveis. O serviço aplica sozinho a migração `0007` ao subir; para atualizar, rode `kioskd install --listen ...` da pasta nova (o `kioskd status` mostra a versão instalada e a da pasta).

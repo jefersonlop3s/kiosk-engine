@@ -214,11 +214,11 @@ pub async fn servir(
 
 /// Lê linhas de um fluxo com tamanho máximo, sem perder bytes quando a leitura é cancelada.
 #[derive(Default)]
-struct Linhas {
+pub(crate) struct Linhas {
     buf: Vec<u8>,
 }
 
-enum ErroLinha {
+pub(crate) enum ErroLinha {
     /// Passou de [`MAX_MENSAGEM_BYTES`] sem fim de linha.
     MuitoLonga,
     Io,
@@ -226,7 +226,7 @@ enum ErroLinha {
 
 impl Linhas {
     /// A próxima linha (sem o `\n`); `Ok(None)` se o outro lado fechou.
-    async fn proxima<R: AsyncRead + Unpin>(
+    pub(crate) async fn proxima<R: AsyncRead + Unpin>(
         &mut self,
         leitor: &mut R,
     ) -> Result<Option<Vec<u8>>, ErroLinha> {

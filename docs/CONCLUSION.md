@@ -660,3 +660,10 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - Desvios da ADR-004 (um pipe só; conferência do executável) registrados na própria ADR.
 - `tests/ui_windows.rs` (7 testes) no CI Windows; a conta padrão de teste foi extraída para `tests/comum`.
 
+## 2026-10-30 — Bandeja, etapa 2: `kiosk-ui.exe` (E-004 F3)
+
+- `kiosk-ui.exe` (sem console, sem menu, sem "sair"), `bandeja` (dica e aviso nos três idiomas, puros), `bandeja_windows` (ícone e balão) e `ui_cliente_windows` (conexão com batimento, reconexão e entrega). O protocolo ganhou `codificar_da_ui` e `decodificar_para_ui`.
+- `install` e o pacote do Windows passam a levar o `kiosk-ui.exe`. O serviço ainda não o inicia (etapa 3).
+- Testes: `tests/bandeja.rs` (textos e protocolo, no Linux); no CI Windows, o cliente contra o servidor real (espera o serviço, batimento, aviso, confirmação, serviço que cai e volta) e o `kiosk-ui.exe` de verdade, no modo de teste (texto no idioma da conta e confirmação) e com a bandeja real (sobe, conecta, fica vivo).
+- **Falta ver no PC**: o desenho do ícone e do balão (o runner do CI não tem como mostrar).
+

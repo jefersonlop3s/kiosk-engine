@@ -49,6 +49,8 @@ jobs:
           mkdir -p "dist/${nome}"
           ext=""; [ "${{ runner.os }}" = "Windows" ] && ext=".exe"
           cp "target/release/kioskd${ext}" "target/release/kioskctl${ext}" "dist/${nome}/"
+          # a bandeja só existe no Windows (no Linux o kiosk-ui é só um aviso)
+          [ "${{ runner.os }}" = "Windows" ] && cp "target/release/kiosk-ui.exe" "dist/${nome}/"
           cp LICENSE CHANGELOG.md docs/runbooks/api-e-cli.md docs/runbooks/comandos-em-portugues.md "dist/${nome}/"
           cd dist
           if [ "${{ runner.os }}" = "Windows" ]; then

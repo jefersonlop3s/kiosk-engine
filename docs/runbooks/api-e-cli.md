@@ -103,7 +103,7 @@ O `perfil criar` imprime o **ID do perfil**. Confira no `perfil listar` que o SI
 
 Num só passo, o `instalar`:
 
-- copia `kioskd.exe` e `kioskctl.exe` para `C:\Program Files\kiosk`;
+- copia `kioskd.exe`, `kioskctl.exe` e `kiosk-ui.exe` (a bandeja da criança, que o serviço ainda não inicia) para `C:\Program Files\kiosk`;
 - deixa `C:\ProgramData\kiosk` (banco e log) acessível só a SYSTEM e Administradores;
 - registra o serviço `kiosk`: conta SYSTEM, início automático com o Windows e reinício 5 s depois de uma falha. Uma conta padrão, como a da criança, consegue consultar o serviço, mas não pará-lo;
 - grava o endereço de escuta no próprio serviço, sem precisar de `$env:KIOSK_LISTEN`;

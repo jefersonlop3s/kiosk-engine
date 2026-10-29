@@ -1,6 +1,6 @@
 //! Serviço do Windows e autoinstalação (ADR-008, etapa 1; E-007 F2; resolve o GC-16).
 //!
-//! - `instalar`: copia `kioskd.exe` e `kioskctl.exe` para `%ProgramFiles%\kiosk`, protege
+//! - `instalar`: copia `kioskd.exe`, `kioskctl.exe` e `kiosk-ui.exe` para `%ProgramFiles%\kiosk`, protege
 //!   `%ProgramData%\kiosk` (dono e acesso só de SYSTEM e Administradores), registra o serviço
 //!   `kiosk` no SCM (conta LocalSystem, início automático, reinício em falha), grava
 //!   `KIOSK_LISTEN` no ambiente do serviço (valor `Environment` da chave do serviço no registro)
@@ -69,7 +69,7 @@ const ESPERA_ESTADO: Duration = Duration::from_secs(30);
 /// Log do serviço (stderr redirecionado); gira para `.1` ao passar disto, na partida.
 const LOG_MAXIMO: u64 = 10 * 1024 * 1024;
 
-const EXECUTAVEIS: [&str; 2] = ["kioskd.exe", "kioskctl.exe"];
+const EXECUTAVEIS: [&str; 3] = ["kioskd.exe", "kioskctl.exe", "kiosk-ui.exe"];
 
 /// O processo do serviço informa "parado" e só então sai: por um instante o `.exe` segue travado.
 fn com_tentativas<T>(mut f: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
