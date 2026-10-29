@@ -408,6 +408,67 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     assert_ne!(novo, pid);
     esperar(Duration::from_secs(15), status_do_pareamento).expect("API não voltou");
 
+    // E-004 F4: o agente que sobe depois de um período sem agente registra AGENT_STOPPED. Um
+    // reinício de 5 s (acima) não conta; o intervalo tem de passar de 3 batimentos (30 s)
+    assert!(
+        paradas_do_agente(&dados).is_empty(),
+        "o reinício rápido virou evento"
+    );
+    //  1. parada de propósito (o que o Windows faz ao desligar): marca a parada normal
+    let sc_stop = Command::new("sc").args(["stop", "kiosk"]).output().unwrap();
+    assert!(sc_stop.status.success(), "sc stop: {}", texto(&sc_stop));
+    esperar(Duration::from_secs(20), || {
+        ok(&["estado"]).contains("parado").then_some(())
+    })
+    .expect("o serviço não parou");
+    std::thread::sleep(Duration::from_secs(33));
+    let sc_start = Command::new("sc")
+        .args(["start", "kiosk"])
+        .output()
+        .unwrap();
+    assert!(sc_start.status.success(), "sc start: {}", texto(&sc_start));
+    let pid = esperar(Duration::from_secs(20), pid_em_execucao).expect("o serviço não subiu");
+    let paradas = esperar(Duration::from_secs(15), || {
+        Some(paradas_do_agente(&dados)).filter(|p| !p.is_empty())
+    })
+    .expect("a parada de propósito não virou AGENT_STOPPED");
+    assert_eq!(paradas[0].0, "SUCCESS", "{paradas:?}");
+    assert!(paradas[0].1.contains("\"clean\":true"), "{paradas:?}");
+    //  2. sem aviso: o serviço some à força e o Windows só o reinicia 60 s depois (acima dos 30 s)
+    let sc_falha = Command::new("sc")
+        .args([
+            "failure",
+            "kiosk",
+            "reset=",
+            "0",
+            "actions=",
+            "restart/60000",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        sc_falha.status.success(),
+        "sc failure: {}",
+        texto(&sc_falha)
+    );
+    let kill = Command::new("taskkill")
+        .args(["/F", "/PID", &pid.to_string()])
+        .output()
+        .unwrap();
+    assert!(kill.status.success(), "taskkill: {}", texto(&kill));
+    let novo = esperar(Duration::from_secs(120), || {
+        pid_em_execucao().filter(|p| *p != pid)
+    })
+    .expect("o serviço não voltou sozinho depois de derrubado");
+    assert_ne!(novo, pid);
+    let paradas = esperar(Duration::from_secs(15), || {
+        Some(paradas_do_agente(&dados)).filter(|p| p.len() >= 2)
+    })
+    .expect("o agente que sumiu não virou AGENT_STOPPED");
+    assert_eq!(paradas[1].0, "FAILURE", "{paradas:?}");
+    assert!(paradas[1].1.contains("\"clean\":false"), "{paradas:?}");
+    esperar(Duration::from_secs(15), status_do_pareamento).expect("API não voltou");
+
     // reinstalar atualiza sem duplicar (em português: as duas línguas valem, ADR-010)
     ok(&["instalar", "--escutar", &format!("127.0.0.1:{PORTA}")]);
     assert!(pid_em_execucao().is_some());
@@ -732,6 +793,30 @@ fn grupos_da_thread() -> String {
     // SAFETY: fecha o token aberto acima.
     unsafe { CloseHandle(token) };
     saida
+}
+
+/// Eventos `AGENT_STOPPED` do banco do serviço, do mais antigo ao mais novo: (status, detalhe).
+fn paradas_do_agente(dados: &std::path::Path) -> Vec<(String, String)> {
+    let url = format!(
+        "sqlite://{}",
+        dados
+            .join("kiosk.db")
+            .display()
+            .to_string()
+            .replace('\\', "/")
+    );
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let db = kiosk_engine::db_manager::KioskDbManager::new(&url)
+            .await
+            .unwrap();
+        sqlx::query_as(
+            "SELECT transaction_status, rejection_reason_detail FROM security_log \
+             WHERE event_type = 'AGENT_STOPPED' ORDER BY timestamp, rowid",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap()
+    })
 }
 
 /// Roda `exe` como a conta de teste (`Start-Process -Credential`), com a saída em arquivos que a

@@ -16,6 +16,11 @@ use crate::motor::{AVISOS_SEGUNDOS, Decisao, Instante, Motivo};
 
 /// Intervalo mínimo entre dois bloqueios de sessão do mesmo SID.
 pub const REBLOQUEIO_SEGUNDOS: i64 = 30;
+/// Intervalo entre batimentos gravados no banco (E-004 F4).
+pub const BATIMENTO_SEGUNDOS: i64 = 10;
+/// Sem batimento por mais que isto, o agente anterior é considerado parado (3 batimentos).
+pub const PARADA_MINIMA_SEGUNDOS: i64 = 3 * BATIMENTO_SEGUNDOS;
+
 /// Bloqueios desfeitos pela criança antes de o agente passar ao logoff (decisão do dono, 2026-10-28).
 pub const MAX_BLOQUEIOS_ANTES_DO_LOGOFF: u32 = 2;
 /// Tentativas de encerrar o mesmo processo antes de desistir e registrar `TAMPER_SUSPECTED`.
@@ -104,6 +109,8 @@ pub struct Agente<'a, S: Sistema, Tz: TimeZone> {
     tz: Tz,
     ctx: EventContext,
     ultimo_tick: Option<DateTime<Utc>>,
+    iniciado: bool,
+    ultimo_batimento: Option<DateTime<Utc>>,
     avisados: HashSet<(Uuid, Option<Uuid>, Motivo, u64)>,
     tentativas: HashMap<u32, u32>,
     abandonados: HashSet<u32>,
@@ -122,6 +129,8 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             tz,
             ctx: EventContext::local(),
             ultimo_tick: None,
+            iniciado: false,
+            ultimo_batimento: None,
             avisados: HashSet::new(),
             tentativas: HashMap::new(),
             abandonados: HashSet::new(),
@@ -176,10 +185,76 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         rel.erros.push(d.texto(idioma()));
     }
 
+    /// Ao subir: um intervalo longo desde o último batimento do agente anterior é um período sem
+    /// enforcement e vira `AGENT_STOPPED` (E-004 F4). Falha de `Failure` se o agente sumiu, e
+    /// `Success` se o serviço foi parado de propósito. Primeira execução do banco: nada a dizer.
+    async fn conferir_parada_anterior(&self, rel: &mut Relatorio, agora: DateTime<Utc>) {
+        let (ultimo, limpa) = match self.db.ler_batimento().await {
+            Ok(Some(x)) => x,
+            Ok(None) => return,
+            Err(e) => {
+                self.falha(
+                    rel,
+                    None,
+                    Detalhe::HeartbeatNotRecorded {
+                        error: e.to_string(),
+                    },
+                )
+                .await;
+                return;
+            }
+        };
+        let segundos = (agora - ultimo).num_seconds();
+        if segundos <= PARADA_MINIMA_SEGUNDOS {
+            return;
+        }
+        let d = Detalhe::AgentWasDown {
+            from: ultimo.to_rfc3339(),
+            to: agora.to_rfc3339(),
+            seconds: segundos,
+            clean: limpa,
+        };
+        let status = if limpa {
+            TransactionStatus::Success
+        } else {
+            TransactionStatus::Failure
+        };
+        self.evento(rel, None, EventType::AgentStopped, status, d.codigo())
+            .await;
+    }
+
+    /// Grava o batimento, no máximo a cada [`BATIMENTO_SEGUNDOS`].
+    async fn bater(&mut self, rel: &mut Relatorio, agora: DateTime<Utc>) {
+        if self
+            .ultimo_batimento
+            .is_some_and(|t| (agora - t).num_seconds() < BATIMENTO_SEGUNDOS)
+        {
+            return;
+        }
+        match self.db.gravar_batimento(agora, false).await {
+            Ok(()) => self.ultimo_batimento = Some(agora),
+            Err(e) => {
+                self.falha(
+                    rel,
+                    None,
+                    Detalhe::HeartbeatNotRecorded {
+                        error: e.to_string(),
+                    },
+                )
+                .await;
+            }
+        }
+    }
+
     /// Um ciclo do agente em `agora`.
     pub async fn tick(&mut self, agora_utc: DateTime<Utc>) -> Relatorio {
         let mut rel = Relatorio::default();
         let anterior = self.ultimo_tick.replace(agora_utc);
+        if !self.iniciado {
+            self.iniciado = true;
+            self.conferir_parada_anterior(&mut rel, agora_utc).await;
+        }
+        self.bater(&mut rel, agora_utc).await;
 
         let visto = match self.sistema.processos() {
             Ok(p) => p,

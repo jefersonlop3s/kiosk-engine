@@ -303,6 +303,13 @@ pub fn idioma_da_conta(sid: &str) -> Option<crate::i18n::Idioma> {
     .find_map(|t| Idioma::de_tag(&t))
 }
 
+/// Título e mensagem do aviso à criança, no idioma da conta dela (ADR-010), lido do perfil
+/// carregado; sem ele (conta fora da sessão, ou idioma que o kiosk não traduz), no do serviço.
+pub fn texto_do_aviso(aviso: &crate::agente::Aviso) -> (String, String) {
+    let idioma = idioma_da_conta(&aviso.sid).unwrap_or_else(crate::i18n::idioma);
+    crate::textos::aviso(aviso, idioma)
+}
+
 /// `true` se o token tem o grupo Administradores em qualquer estado: ativo (elevado) ou só para
 /// negação (conta de administrador sem elevação, com o UAC). Conta comum não tem o grupo.
 fn token_e_de_conta_admin(token: HANDLE) -> Result<bool, String> {
@@ -597,9 +604,7 @@ impl Sistema for SistemaWindows {
 
     fn avisar(&mut self, aviso: &Aviso) -> Result<(), String> {
         let id = sessao_do_sid(&aviso.sid)?;
-        // no idioma da conta da criança (ADR-010); sem ele, no do serviço
-        let idioma = idioma_da_conta(&aviso.sid).unwrap_or_else(crate::i18n::idioma);
-        let (titulo, mensagem) = crate::textos::aviso(aviso, idioma);
+        let (titulo, mensagem) = texto_do_aviso(aviso);
         let (t, m) = (para_utf16(&titulo), para_utf16(&mensagem));
         let mut resposta = 0;
         // SAFETY: buffers UTF-16 vivos durante a chamada; tamanhos em bytes sem o zero final;

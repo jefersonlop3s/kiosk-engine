@@ -139,15 +139,22 @@ fn lista_de_enderecos(bruto: &str) -> Result<Vec<SocketAddr>, String> {
     Ok(lista)
 }
 
-/// API, limpeza do log e (no Windows) o agente, até a API parar ou falhar.
-async fn servir(com_agente: bool) -> Result<(), String> {
+/// API, limpeza do log e (no Windows) o agente, até a API parar ou falhar, ou até `parar` (o
+/// pedido de parada do Windows). Numa parada de propósito, o agente é encerrado e o banco guarda
+/// que foi normal; o próximo `kioskd` a subir registra o intervalo sem enforcement (E-004 F4).
+async fn servir(
+    com_agente: bool,
+    parar: impl std::future::Future<Output = ()>,
+) -> Result<(), String> {
     let enderecos = enderecos()?;
     let db = Arc::new(abrir_banco().await?);
     iniciar_manutencao(db.clone());
     iniciar_auditoria(db.clone());
-    if com_agente {
-        iniciar_agente(db.clone());
-    }
+    let agente = if com_agente {
+        iniciar_agente(db.clone())
+    } else {
+        None
+    };
     let lista: Vec<String> = enderecos.iter().map(ToString::to_string).collect();
     eprintln!(
         "kioskd: {}",
@@ -155,9 +162,19 @@ async fn servir(com_agente: bool) -> Result<(), String> {
             lista: lista.join(", ")
         }
     );
-    api::servir_em(db, &enderecos)
-        .await
-        .map_err(|e| e.to_string())
+    let resultado = tokio::select! {
+        r = api::servir_em(db.clone(), &enderecos) => r.map_err(|e| e.to_string()),
+        () = parar => Ok(()),
+    };
+    if let Some(agente) = agente {
+        // sem o agente, ninguém grava um batimento depois da marca de parada normal
+        agente.abort();
+        let _ = agente.await;
+        if let Err(e) = db.gravar_batimento(Utc::now(), true).await {
+            eprintln!("kioskd: {e}");
+        }
+    }
+    resultado
 }
 
 /// `kioskd service`: o processo que o SCM inicia (ADR-008).
@@ -165,12 +182,7 @@ async fn servir(com_agente: bool) -> Result<(), String> {
 fn servico() -> Result<(), String> {
     kiosk_engine::servico_windows::despachar(|parar| {
         let rt = tokio::runtime::Runtime::new().map_err(|e| format!("runtime: {e}"))?;
-        let resultado = rt.block_on(async {
-            tokio::select! {
-                r = servir(true) => r,
-                () = parar.notified() => Ok(()),
-            }
-        });
+        let resultado = rt.block_on(async { servir(true, parar.notified()).await });
         rt.shutdown_timeout(std::time::Duration::from_secs(5));
         resultado
     })
@@ -269,14 +281,14 @@ fn iniciar_manutencao(db: Arc<KioskDbManager>) {
 const TICK_AGENTE: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[cfg(windows)]
-fn iniciar_agente(db: Arc<KioskDbManager>) {
+fn iniciar_agente(db: Arc<KioskDbManager>) -> Option<tokio::task::JoinHandle<()>> {
     eprintln!(
         "kioskd: {}",
         Msg::AgenteAtivo {
             segundos: TICK_AGENTE.as_secs()
         }
     );
-    tokio::spawn(async move {
+    Some(tokio::spawn(async move {
         kiosk_engine::agente::rodar_em_laco(
             &db,
             kiosk_engine::sistema_windows::SistemaWindows,
@@ -290,12 +302,13 @@ fn iniciar_agente(db: Arc<KioskDbManager>) {
             },
         )
         .await;
-    });
+    }))
 }
 
 #[cfg(not(windows))]
-fn iniciar_agente(_db: Arc<KioskDbManager>) {
+fn iniciar_agente(_db: Arc<KioskDbManager>) -> Option<tokio::task::JoinHandle<()>> {
     eprintln!("kioskd: {}", Msg::AgenteSoWindows);
+    None
 }
 
 fn opcao(args: &[String], nome: &str) -> Option<String> {
@@ -638,7 +651,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 ["--no-agent"] => false,
                 _ => return Err(uso()),
             };
-            servir(com_agente).await
+            servir(com_agente, std::future::pending()).await
         }
         ["install", "--listen", escutar] => {
             let lista = lista_de_enderecos(escutar)?;

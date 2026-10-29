@@ -336,8 +336,12 @@ impl Drop for ValorDoRegistro {
     }
 }
 
+/// Os testes que mexem no idioma do `HKCU` não podem rodar ao mesmo tempo: é o mesmo registro.
+static REGISTRO_DO_IDIOMA: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn o_idioma_da_conta_vem_do_perfil_carregado_dela() {
+    let _trava = REGISTRO_DO_IDIOMA.lock().unwrap_or_else(|e| e.into_inner());
     use kiosk_engine::i18n::Idioma;
     use kiosk_engine::sistema_windows::idioma_da_conta;
 
@@ -366,4 +370,45 @@ fn o_idioma_da_conta_vem_do_perfil_carregado_dela() {
 
     // conta que não está logada (SID sem perfil carregado)
     assert_eq!(idioma_da_conta("S-1-5-21-1-2-3-9999"), None);
+}
+
+#[test]
+fn o_aviso_a_crianca_sai_no_idioma_da_conta_dela_com_o_registro_real() {
+    use kiosk_engine::agente::Aviso;
+    use kiosk_engine::i18n::{Idioma, idioma};
+    use kiosk_engine::motor::Motivo;
+    use kiosk_engine::sistema_windows::texto_do_aviso;
+
+    let _trava = REGISTRO_DO_IDIOMA.lock().unwrap_or_else(|e| e.into_inner());
+
+    // simula a criança logada com o Windows em outro idioma: o serviço lê o mesmo lugar do registro
+    let desktop = r"HKCU\Control Panel\Desktop";
+    let internacional = r"HKCU\Control Panel\International";
+    let aviso = Aviso {
+        sid: sid_atual(),
+        app: Some("notepad.exe".into()),
+        restante_segundos: 300,
+        motivo: Motivo::LimiteDiarioApp,
+    };
+    let esperado = |i: Idioma| kiosk_engine::textos::aviso(&aviso, i);
+
+    let _g0 = ValorDoRegistro::apagar(desktop, "PreferredUILanguages");
+    let _g1 = ValorDoRegistro::definir(internacional, "LocaleName", "REG_SZ", "es-ES");
+    assert_eq!(texto_do_aviso(&aviso), esperado(Idioma::EsEs));
+    let _g2 = ValorDoRegistro::definir(internacional, "LocaleName", "REG_SZ", "en-US");
+    assert_eq!(texto_do_aviso(&aviso), esperado(Idioma::EnUs));
+    let _g3 = ValorDoRegistro::definir(internacional, "LocaleName", "REG_SZ", "pt-BR");
+    assert_eq!(texto_do_aviso(&aviso), esperado(Idioma::PtBr));
+    // o idioma de exibição vale mais que o regional
+    let _g4 = ValorDoRegistro::definir(desktop, "PreferredUILanguages", "REG_MULTI_SZ", "es-ES");
+    assert_eq!(texto_do_aviso(&aviso), esperado(Idioma::EsEs));
+
+    // os três textos são de fato diferentes (o teste acima não passa por acaso)
+    assert_ne!(esperado(Idioma::EsEs), esperado(Idioma::EnUs));
+    assert_ne!(esperado(Idioma::PtBr), esperado(Idioma::EnUs));
+
+    // idioma que o kiosk não traduz: cai no idioma do serviço, sem erro
+    let _g5 = ValorDoRegistro::apagar(desktop, "PreferredUILanguages");
+    let _g6 = ValorDoRegistro::definir(internacional, "LocaleName", "REG_SZ", "fr-FR");
+    assert_eq!(texto_do_aviso(&aviso), esperado(idioma()));
 }

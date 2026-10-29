@@ -39,6 +39,8 @@ pub const DIREITOS_DO_CLIENTE: u32 =
 const MAX_INSTANCIAS: usize = 16;
 /// Quanto o serviço espera a linha de um cliente que conectou e não escreve.
 const PRAZO_DO_SERVIDOR: Duration = Duration::from_secs(3);
+/// Quanto o servidor espera o cliente ler a resposta e fechar antes de desconectar.
+const PRAZO_DA_RESPOSTA: Duration = Duration::from_secs(2);
 /// Quanto o `kioskd` espera o serviço.
 const PRAZO_DO_CLIENTE: Duration = Duration::from_secs(5);
 
@@ -153,6 +155,11 @@ async fn atender(
     let _ = s.write_all(montar_resposta(ok).as_bytes()).await;
     let _ = s.write_all(b"\n").await;
     let _ = s.flush().await;
+    // `DisconnectNamedPipe` descarta o que o cliente ainda não leu: sem esperar, a resposta se
+    // perdia de vez em quando e o cliente dizia "não confirmou" de um evento que foi gravado. O
+    // cliente fecha o pipe depois de ler; o prazo evita que quem não lê prenda a instância.
+    let mut resto = [0u8; 1];
+    let _ = tokio::time::timeout(PRAZO_DA_RESPOSTA, s.read(&mut resto)).await;
     let _ = s.disconnect();
 }
 

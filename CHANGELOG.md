@@ -11,10 +11,13 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - **`kioskd version` e `kioskctl version`** (também `--version`, `-V` e, em português, `versao`): versão, commit, data, alvo e perfil da compilação. A primeira linha tem formato fixo (`kioskd 0.0.6 (a1b2c3d)`); o resto sai no idioma de quem lê.
 - `kioskd status` mostra a versão deste executável e a do executável instalado (lida de `kioskd version` do que o serviço roda), e `kioskd install` diz a versão instalada. O log do serviço também grava o commit na linha de início.
 
+- **`AGENT_STOPPED` no log forense** (E-004 F4): o agente grava um batimento no banco a cada 10 s e, ao subir, registra o intervalo sem enforcement quando passa de 30 s: `SUCCESS` se o serviço foi parado de propósito, `FAILURE` se o agente sumiu. `kioskctl log` mostra o intervalo e a causa. Migração `0007_agent_heartbeat`.
+
 ### Alterado
 - Em `kioskctl log`, o detalhe de `AUTHZ_FAIL` continua omitido, exceto o da tentativa sem privilégio.
 
 ### Corrigido
+- O pipe de auditoria desconectava o cliente logo depois de escrever a resposta, e o Windows descarta o que o cliente ainda não leu: de vez em quando o evento era gravado e o `kioskd` dizia que **não** foi registrado. O servidor agora espera o cliente ler e fechar (prazo de 2 s). Achado pelo CI Windows.
 - O serviço registrava `ImpersonateNamedPipeClient ... (os error 1368)` no `kioskd.log` quando algo conectava ao pipe `kiosk-audit` e fechava sem enviar nada (visto no PC real, com `Test-Path \\.\pipe\kiosk-audit`). Uma sondagem assim não é erro e agora é descartada em silêncio; uma linha vazia enviada de verdade continua virando `VALIDATION_FAIL`.
 
 ## [0.0.6] - 2026-10-29
