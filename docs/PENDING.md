@@ -6,6 +6,7 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 | ID / documento | Estado | Próximo passo | Responsável |
 |---|---|---|---|
+| [ADR-007](adr/ADR-007-forma-do-assistente-de-configuracao.md), [ADR-008](adr/ADR-008-formato-do-instalador.md), [ADR-009](adr/ADR-009-origem-da-lista-de-programas.md) | Propostas em 2026-10-29 para o E-007, com recomendação em cada uma | Aceitar, rejeitar ou pedir alternativa; o aceite desbloqueia o E-007 | dono |
 | Hash encadeado no `Security_Log` | Adiado pelo dono em 2026-10-28; retomar só com ADR. O trigger cobre UPDATE/DELETE via SQL, não edição direta do arquivo | dono |
 | AGENTS global em `~/.claude/` | Criado pela sessão `3a84a5f7` fora do repositório; sem efeito | Apagar (a regra já está no AGENTS.md do projeto) | dono |
 
@@ -20,7 +21,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | GC-15 | O modo LAN da ADR-005 (HTTPS com certificado fixado) não existe; a API recusa qualquer endereço fora de loopback e Tailscale | Por decisão (fail-closed) | Implementar TLS se o dono quiser LAN; senão manter só Tailscale |
 | GC-16 | O agente roda dentro do `kioskd servir` no Windows, mas o `kioskd` ainda é um processo de console: falta registrá-lo como serviço do Windows (SCM, conta SYSTEM, recuperação automática) e proteger a pasta do banco | Por leitura | E-004 F1/F4 |
 | GC-17 | Os avisos à criança usam `WTSSendMessageW` (caixa de mensagem na sessão) como solução provisória; a ADR-004 prevê a UI de bandeja com tempo restante | Por decisão (provisório) | E-004 F3 |
-| GC-18 | Bloquear a sessão usa `WTSDisconnectSession` (volta à tela de entrada), não `LockWorkStation`, que só vale para a sessão de quem chama | Por leitura | Confirmar o comportamento em Windows interativo (E-004 F2) |
+| GC-20 | Logoff após 2 desbloqueios não ocorreu no teste real (2026-10-29): houve dois bloqueios por `LIMITE_DIARIO_TOTAL` com 30 s de intervalo e nenhuma ação nem erro registrados depois, até o limite ser removido 7 min mais tarde | Sim: log do teste do dono | Repetir com intervalo de 40 s entre as entradas e a saída da janela do `servir`; se reproduzir, investigar a detecção da sessão reconectada (`WTSSessionInfoEx`) |
 | GC-19 | O pré-push do harness (`.harness/validation.py`) compara o SHA de cada ref enviada com o `HEAD`; uma tag anotada envia o SHA do objeto da tag, não o do commit, e é sempre recusada. Contorno atual: tags leves, ou a tag criada pelo workflow de release | Sim: `16501a3` (tag) × `76d8b8f` (commit) | Corrigir no sovereign-harness (`git rev-parse <sha>^{commit}`) e reinstalar |
 
 ## Épicos abertos
@@ -28,9 +29,10 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | Épico | Estado | Próximo passo |
 |---|---|---|
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) | em andamento | F1–F4 concluídas e CI verde em Ubuntu e Windows |
-| [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Encerramento de app validado em PC real com conta de criança (2026-10-29); faltam validar aviso, bloqueio e logoff, o serviço do Windows (SCM) e a UI de bandeja |
+| [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Validados em PC real com conta de criança (2026-10-29): encerramento de app, avisos de 5 e 1 min, encerramento ao esgotar o limite do app e bloqueio de sessão; falta o logoff (GC-20), o serviço do Windows (GC-16) e a UI de bandeja (GC-17) |
 | [E-005](epics/E-005-api-comando-e-pareamento.md) | em andamento | F1 a F3 concluídas (servidor, assinatura, regras, `modify_limit`, consultas de uso e log, CLI dos pais); sobram o modo LAN (GC-15) e ligar o agente ao serviço (GC-16) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
+| [E-007](epics/E-007-onboarding-e-instalador.md) | proposto (não é para agora) | Aguarda o aceite das ADR-007 a ADR-009 |
 
 ## Infraestrutura do harness
 

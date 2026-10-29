@@ -427,3 +427,38 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: o teste confere a existência do fluxograma, não a fidelidade ao código; a renderização não roda no CI (só localmente, antes do commit, como diz a regra).
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-29 — Versão 0.0.3 publicada
+
+- **Origem**: pedido do dono para mesclar o jefersonlop3s/kiosk-engine#8 e publicar.
+- **Resultado**: o `release.yml` com `publicar: true` publicou o release [v0.0.3](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.3) como pré-lançamento, com a tag em `518ebfb` e os arquivos:
+  - `kiosk-engine-v0.0.3-windows-x86_64.zip` (3 674 075 bytes, `sha256:16e8a58c7a75b3d5aebfd9dcdee841b888b9715e86435432d009450dbbd31307`);
+  - `kiosk-engine-v0.0.3-linux-x86_64.tar.gz` (3 585 994 bytes, `sha256:65911d090121c265c3301535f1fde47d9c1e27ffe9e4703bedcbb6a7e9b2c5a9`);
+  - `SHA256SUMS.txt`.
+- **Evidência**: release consultado pela API do GitHub; o dono usou o pacote no próprio PC (entrada seguinte).
+
+## 2026-10-29 — Testes do dono no Windows com a 0.0.3: aviso, limite, bloqueio e logoff
+
+- **Origem**: roteiro sugerido pelo agente, executado pelo dono no próprio PC com uma conta local padrão de criança (identificadores, SID e IP não são registrados aqui).
+- **Validado em Windows real**:
+  - sem `KIOSK_DB`, o `kioskd` abriu o banco padrão `C:\ProgramData\kiosk\kiosk.db` com os cadastros feitos antes; `kioskd regra criar --ativar` criou a regra já ativa; `regra revogar` e `regra limite` auditados (`REVOKE`, `MODIFY_LIMIT`);
+  - **avisos**: com limite de 360 s no Bloco de Notas, `WARNING_SHOWN` com 299 s restantes, outro com 59 s restantes 4 min 9 s depois, e `APP_TERMINATED` por `LIMITE_DIARIO_APP` 60 s depois; cada aviso apareceu uma vez e o dono confirmou as duas caixas de mensagem na tela da criança (`WTSSendMessageW` validado);
+  - **limite do app esgotado**: o Bloco de Notas reaberto foi encerrado na hora, três vezes, por `LIMITE_DIARIO_APP`;
+  - **bloqueio de sessão**: com limite total de 60 s no perfil, dois `SESSION_LOCKED` por `LIMITE_DIARIO_TOTAL` com 30 s de intervalo; o dono confirmou que a tela voltou para a senha (`WTSDisconnectSession` validado; fecha o GC-18).
+- **Não validado**: o **logoff** após 2 desbloqueios não ocorreu: depois do segundo bloqueio não houve ação nem erro registrados até o limite ser removido, 7 minutos depois. O que o dono percebeu como logoff foi a desconexão. Aberto como GC-20 no [PENDING](PENDING.md).
+
+## 2026-10-29 — E-007 Onboarding e instalador proposto
+
+- **Origem**: ideia do dono depois dos testes: um lançador de primeira execução que crie pastas e configuração, liste as contas locais para escolher os perfis de criança, liste os programas para escolher os controlados e crie as regras iniciais (limite total por criança e limites por app dentro do perfil). Não é para agora.
+- **Resultado**: [E-007](epics/E-007-onboarding-e-instalador.md) registrado como proposto, com resultado, fases (assistente, serviço do Windows, instalador), aceites e as decisões que exigirão ADR; incluído no [ROADMAP](ROADMAP.md) e no PENDING. O índice de épicos, que ainda mostrava E-001 a E-005 como propostos, foi atualizado.
+- **Commit**: branch `claude/hopeful-curie-egiw07` (PR só de documentação).
+
+## 2026-10-29 — ADR-007 a ADR-009 propostas para o E-007
+
+- **Origem**: pedido do dono para registrar já as ADRs que o E-007 deixou em aberto.
+- **Resultado** (todas **Proposto**; o aceite é do dono):
+  - [ADR-007](adr/ADR-007-forma-do-assistente-de-configuracao.md): assistente interativo no terminal (`kioskd configurar`), idempotente, com modo não interativo (`--respostas`) para CI e reinstalação; só orquestra as operações existentes; interface gráfica depois, junto da bandeja da ADR-004;
+  - [ADR-008](adr/ADR-008-formato-do-instalador.md): etapa 1 com autoinstalação (`kioskd instalar|desinstalar`: Program Files, pasta do banco com ACL, serviço SYSTEM no SCM com reinício automático), etapa 2 com `.msi` (WiX) e winget; assinatura de código registrada como risco e decisão do dono;
+  - [ADR-009](adr/ADR-009-origem-da-lista-de-programas.md): atalhos do menu Iniciar e processos em execução, com entrada manual; a lista não é guardada, só as escolhas; histórico de processos rejeitado por coletar mais do que as regras pedem.
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros; E-007, índice de épicos, ROADMAP e PENDING apontam para as ADRs.
+- **Limitações**: nenhuma alternativa foi exercitada; são análise, não medição.
+
