@@ -516,3 +516,11 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - [insight do responsável temporário](insights/2026-10-29-responsavel-temporario.md): delegação de até 5 dias a contas não administrativas, com revisão ao fim. O dono registrou que o raciocínio ainda não fecha, então fica sem épico.
 - **Evidência**: os dois diagramas do README renderizados no mermaid-cli e conferidos visualmente (um rótulo sobreposto foi corrigido); `verificar_refs.py` e `verificar_adr.py` sem erros.
 
+## 2026-10-29 — Serviço do Windows instalado no PC real do dono (0.0.4)
+
+- **Origem**: teste do dono com o pacote da 0.0.4, num PowerShell como administrador.
+- **Resultado**: o `kioskd instalar` protegeu `C:\ProgramData\kiosk`, copiou os executáveis para `C:\Program Files\kiosk`, registrou o serviço e o iniciou. O `kioskd estado` mostrou o serviço em execução, com início automático, conta LocalSystem, o binário instalado em modo `servico` e o `KIOSK_LISTEN` no ambiente do serviço (Tailscale e loopback).
+- **Ainda não visto no PC real**: o serviço subir sozinho depois de reiniciar o Windows e o agente agir como SYSTEM sobre a conta da criança (GC-16 segue aberto). O logoff (GC-20) também segue aberto.
+- **Observação**: definir `KIOSK_DB` e `KIOSK_LISTEN` na janela antes do `instalar` não é necessário; o endereço vai para o serviço pelo `--escutar`, e o banco usa o padrão.
+- Nenhum dado do log do dono (IP, conta, caminhos pessoais) foi copiado para o repositório.
+
