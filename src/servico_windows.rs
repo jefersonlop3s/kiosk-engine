@@ -667,6 +667,27 @@ fn configurar_extras(svc: &Sc) -> Result<(), String> {
 }
 
 /// Instala (ou atualiza) e inicia o serviço. `escutar` já validado (ADR-005).
+/// Encerra as bandejas (`kiosk-ui.exe`) que estiverem rodando nas sessões, para o arquivo não ficar
+/// travado ao atualizar ou remover. Chamada **depois** de parar o serviço, que é quem as relançaria.
+fn encerrar_bandejas() {
+    use crate::agente::Sistema;
+    let mut sistema = crate::sistema_windows::SistemaWindows::default();
+    let Ok(lista) = sistema.processos() else {
+        return;
+    };
+    let mut encerrou = false;
+    for p in lista
+        .iter()
+        .filter(|p| p.process_name.eq_ignore_ascii_case("kiosk-ui.exe"))
+    {
+        encerrou |= sistema.encerrar(p.pid).is_ok();
+    }
+    if encerrou {
+        // o Windows solta o arquivo do executável um instante depois de o processo morrer
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+}
+
 /// Devolve o PID do serviço em execução.
 pub fn instalar(escutar: &str) -> Result<u32, String> {
     let scm = abrir_scm(SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE)?;
@@ -682,6 +703,7 @@ pub fn instalar(escutar: &str) -> Result<u32, String> {
     if let Some(svc) = &existente {
         eprintln!("kioskd: {}", Msg::ServicoJaInstalado);
         parar(svc)?;
+        encerrar_bandejas();
     }
     let destino = copiar_executaveis()?;
     eprintln!(
@@ -809,6 +831,7 @@ pub fn desinstalar(apagar_dados: bool) -> Result<(), String> {
     match abrir_servico(&scm, SERVICE_STOP | SERVICE_QUERY_STATUS | DELETE)? {
         Some(svc) => {
             parar(&svc)?;
+            encerrar_bandejas();
             // SAFETY: handle com DELETE.
             if unsafe { DeleteService(svc.0) } == 0 {
                 return Err(ultimo_erro("DeleteService"));

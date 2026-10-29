@@ -150,8 +150,10 @@ async fn servir(
     let db = Arc::new(abrir_banco().await?);
     iniciar_manutencao(db.clone());
     iniciar_auditoria(db.clone());
+    let bandeja = Bandeja::default();
+    iniciar_pipe_da_bandeja(db.clone(), bandeja.clone());
     let agente = if com_agente {
-        iniciar_agente(db.clone())
+        iniciar_agente(db.clone(), bandeja)
     } else {
         None
     };
@@ -280,8 +282,36 @@ fn iniciar_manutencao(db: Arc<KioskDbManager>) {
 #[cfg(windows)]
 const TICK_AGENTE: std::time::Duration = std::time::Duration::from_secs(2);
 
+/// As UIs (bandejas) conectadas: só no Windows há bandeja.
 #[cfg(windows)]
-fn iniciar_agente(db: Arc<KioskDbManager>) -> Option<tokio::task::JoinHandle<()>> {
+type Bandeja = kiosk_engine::ui_windows::GerenteUi;
+#[cfg(not(windows))]
+#[derive(Default, Clone)]
+#[allow(dead_code)] // fora do Windows não há bandeja: o tipo só mantém a mesma forma de chamada
+struct Bandeja(());
+
+/// Escuta o pipe das bandejas (ADR-004). Se não der (por exemplo, outro `kioskd serve` já o
+/// escuta), o serviço segue sem bandeja e o diz; o agente a relança e registra a ausência.
+#[cfg(windows)]
+fn iniciar_pipe_da_bandeja(db: Arc<KioskDbManager>, bandeja: Bandeja) {
+    use kiosk_engine::servico_windows::pasta_programa;
+    use kiosk_engine::ui_windows::{Configuracao, servir};
+    tokio::spawn(async move {
+        let config = Configuracao::instalada(&pasta_programa());
+        if let Err(erro) = servir(config, bandeja, db).await {
+            eprintln!("kioskd: {}", Msg::BandejaIndisponivel { erro });
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn iniciar_pipe_da_bandeja(_db: Arc<KioskDbManager>, _bandeja: Bandeja) {}
+
+#[cfg(windows)]
+fn iniciar_agente(
+    db: Arc<KioskDbManager>,
+    bandeja: Bandeja,
+) -> Option<tokio::task::JoinHandle<()>> {
     eprintln!(
         "kioskd: {}",
         Msg::AgenteAtivo {
@@ -291,7 +321,10 @@ fn iniciar_agente(db: Arc<KioskDbManager>) -> Option<tokio::task::JoinHandle<()>
     Some(tokio::spawn(async move {
         kiosk_engine::agente::rodar_em_laco(
             &db,
-            kiosk_engine::sistema_windows::SistemaWindows,
+            kiosk_engine::sistema_windows::SistemaWindows::com_ui(
+                bandeja,
+                kiosk_engine::servico_windows::pasta_programa().join("kiosk-ui.exe"),
+            ),
             chrono::Local,
             TICK_AGENTE,
             |rel| {
@@ -306,7 +339,10 @@ fn iniciar_agente(db: Arc<KioskDbManager>) -> Option<tokio::task::JoinHandle<()>
 }
 
 #[cfg(not(windows))]
-fn iniciar_agente(_db: Arc<KioskDbManager>) -> Option<tokio::task::JoinHandle<()>> {
+fn iniciar_agente(
+    _db: Arc<KioskDbManager>,
+    _bandeja: Bandeja,
+) -> Option<tokio::task::JoinHandle<()>> {
     eprintln!("kioskd: {}", Msg::AgenteSoWindows);
     None
 }

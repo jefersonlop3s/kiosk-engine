@@ -18,6 +18,8 @@ jobs:
     env:
       # instala o serviço de verdade (tests/servico_windows.rs); o runner é descartável
       KIOSK_TESTE_SERVICO: ${{ matrix.os == 'windows-latest' && '1' || '' }}
+      # a bandeja precisa de uma sessão interativa: o teste falha, em vez de pular, se não houver
+      KIOSK_TESTE_EXIGE_SESSAO: ${{ matrix.os == 'windows-latest' && '1' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

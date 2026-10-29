@@ -71,6 +71,14 @@ pub enum Detalhe {
     HeartbeatNotRecorded {
         error: String,
     },
+    /// A UI (bandeja) da criança parou de dar sinal: batimentos perdidos (E-004 F4).
+    UiStopped {
+        seconds: i64,
+    },
+    /// O serviço não conseguiu iniciar a UI na sessão da criança.
+    UiNotStarted {
+        error: String,
+    },
     /// Conexão ao pipe da UI recusada (ADR-004): `INVALID_MESSAGE`, `WRONG_IMAGE` ou `RATE_LIMIT`.
     UiRejected {
         reason: String,
@@ -239,6 +247,10 @@ impl Detalhe {
                 }
             }
             Self::HeartbeatNotRecorded { error } => Msg::LogBatimentoNaoGravado { erro: error },
+            Self::UiStopped { seconds } => Msg::LogUiParada {
+                duracao: crate::textos::duracao(seconds.max(0) as u64),
+            },
+            Self::UiNotStarted { error } => Msg::LogUiNaoIniciada { erro: error },
             Self::UiRejected { reason } => Msg::LogUiRecusada {
                 motivo: match reason.as_str() {
                     "WRONG_IMAGE" => Msg::UiMotivoOutroPrograma.em(idioma),

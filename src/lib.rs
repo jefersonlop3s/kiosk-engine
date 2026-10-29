@@ -15,6 +15,8 @@ pub mod db_manager;
 pub mod detalhes;
 pub mod i18n;
 pub mod ipc;
+#[cfg(windows)]
+pub mod lancador_windows;
 pub mod motor;
 pub mod pareamento;
 pub mod security_logger_impl;
