@@ -379,6 +379,8 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     );
     // o administrador (quem roda o teste) pode
     assert_eq!(abrir_servico(SERVICE_STOP), Ok(()));
+
+    tentativas_sem_privilegio_chegam_ao_log(&conta, &dados);
     drop(conta);
 
     // derrubar o processo: o Windows reinicia o serviço sozinho
@@ -455,4 +457,297 @@ fn servico_rodado_a_mao_explica_e_falha() {
     let o = kioskd(&["servico"]);
     assert!(!o.status.success());
     assert!(texto(&o).contains("kioskd install"), "{}", texto(&o));
+}
+
+/// ADR-011: a conta padrão não abre o banco, mas o serviço (SYSTEM) grava a tentativa dela, e o
+/// chamador vem do token da conexão, nunca da mensagem.
+fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::path::Path) {
+    use kiosk_engine::auditoria::NOME_DO_PIPE;
+    // a thread do aviso real não herda a personificação do teste: usa a variante da thread atual
+    use kiosk_engine::auditoria_windows::avisar_tentativa_nesta_thread as avisar_tentativa;
+    use kiosk_engine::detalhes::Detalhe;
+    use kiosk_engine::sistema_windows::sid_de_usuario;
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let db_url = format!(
+        "sqlite://{}",
+        dados
+            .join("kiosk.db")
+            .display()
+            .to_string()
+            .replace('\\', "/")
+    );
+    // eventos de enforcement e de falha que a auditoria grava: (tipo, ação, perfil, detalhe)
+    let eventos = || -> Vec<(String, String, Option<String>, String)> {
+        rt.block_on(async {
+            let db = kiosk_engine::db_manager::KioskDbManager::new(&db_url).await.unwrap();
+            sqlx::query_as(
+                "SELECT event_type, action_attempted, profile_id, rejection_reason_detail \
+                 FROM security_log WHERE event_type IN ('AUTHZ_FAIL', 'VALIDATION_FAIL') ORDER BY rowid",
+            )
+            .fetch_all(db.pool())
+            .await
+            .unwrap()
+        })
+    };
+    let sid = sid_de_usuario(&conta.nome).expect("SID da conta de teste");
+    let antes = eventos().len();
+    // o que o Windows diz dos grupos da conta, para as mensagens de falha abaixo
+    let grupos = como(conta, grupos_da_thread);
+
+    // o serviço abre o pipe logo depois de subir
+    assert!(
+        esperar(Duration::from_secs(20), || std::path::Path::new(
+            NOME_DO_PIPE
+        )
+        .exists()
+        .then_some(()))
+        .is_some(),
+        "o serviço não abriu o pipe de auditoria"
+    );
+
+    // 1. mensagem forjada: tenta se passar por outra conta; é recusada e o serviço responde ok:false
+    let forjada = como(conta, || -> std::io::Result<String> {
+        use std::os::windows::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .access_mode(kiosk_engine::auditoria_windows::DIREITOS_DO_CLIENTE)
+            .open(NOME_DO_PIPE)?;
+        f.write_all(
+            b"{\"v\":1,\"tipo\":\"tentativa_sem_privilegio\",\"comando\":\"pairing-code\",\"sid\":\"S-1-5-18\"}\n",
+        )?;
+        let mut r = String::new();
+        let mut b = [0u8; 1];
+        while f.read(&mut b)? == 1 && b[0] != b'\n' {
+            r.push(b[0] as char);
+        }
+        Ok(r)
+    })
+    .expect("a conta padrão não conseguiu conectar ao pipe");
+    assert!(
+        !kiosk_engine::auditoria::resposta_ok(&forjada),
+        "aceitou mensagem forjada: {forjada}"
+    );
+
+    // 2. aviso válido: o serviço grava, e o SID é o do TOKEN (a conta de teste), sem perfil
+    let r = como(conta, || avisar_tentativa("pairing-code"));
+    assert_eq!(r, Ok(()), "o serviço não confirmou a gravação");
+    let e = eventos();
+    let ultimo = e.last().unwrap();
+    assert_eq!(
+        (ultimo.0.as_str(), ultimo.1.as_str(), ultimo.2.as_deref()),
+        ("AUTHZ_FAIL", "CREATE_PAIRING_CODE", None)
+    );
+    match Detalhe::de_texto(&ultimo.3).expect("detalhe em código") {
+        Detalhe::AdminRequired {
+            command,
+            admin_account,
+            caller_sid,
+            ..
+        } => {
+            assert_eq!(command, "pairing-code");
+            assert!(
+                !admin_account,
+                "conta padrão marcada como administrador; grupos da conta: {grupos}; SID esperado {sid}; \
+                 detalhe gravado: {}",
+                ultimo.3
+            );
+            assert_eq!(
+                caller_sid.as_deref(),
+                Some(sid.as_str()),
+                "o SID tem de ser o do chamador"
+            );
+        }
+        outro => panic!("{outro:?}"),
+    }
+    assert!(
+        !e[antes..].iter().any(|x| x.3.contains("S-1-5-18")),
+        "o SID forjado entrou no log"
+    );
+    assert!(
+        e[antes..].iter().any(|x| x.0 == "VALIDATION_FAIL"),
+        "a mensagem forjada não virou VALIDATION_FAIL"
+    );
+
+    // 3. com perfil cadastrado, o evento leva o perfil e deixa o SID de fora
+    let perfil = kioskd(&["profile", "create", "--sid", &sid, "--name", "Teste"]);
+    assert!(perfil.status.success(), "{}", texto(&perfil));
+    let id_do_perfil = texto(&perfil)
+        .split_whitespace()
+        .find(|p| uuid::Uuid::parse_str(p).is_ok())
+        .expect("id do perfil")
+        .to_owned();
+    let confirmou = como(conta, || avisar_tentativa("rule create"));
+    assert_eq!(
+        confirmou,
+        Ok(()),
+        "log do serviço: {}",
+        std::fs::read_to_string(pasta("ProgramData").join("kioskd.log"))
+            .map(|l| l.lines().rev().take(8).collect::<Vec<_>>().join(" | "))
+            .unwrap_or_else(|e| e.to_string())
+    );
+    let e = eventos();
+    let ultimo = e.last().unwrap();
+    assert_eq!(
+        (ultimo.1.as_str(), ultimo.2.as_deref()),
+        ("ADD_RULE", Some(id_do_perfil.as_str()))
+    );
+    assert!(
+        !ultimo.3.contains(&sid),
+        "o SID não precisa estar no detalhe: {}",
+        ultimo.3
+    );
+
+    // 4. inundação: já foram 3 avisos deste minuto (o forjado conta); só mais 2 viram evento
+    let antes_da_inundacao = eventos().len();
+    for _ in 0..10 {
+        assert_eq!(
+            como(conta, || avisar_tentativa("devices")),
+            Ok(()),
+            "descartado também confirma"
+        );
+    }
+    assert_eq!(
+        eventos().len() - antes_da_inundacao,
+        2,
+        "o limite de 5 avisos por minuto não valeu"
+    );
+
+    // 5. o `kioskd` inteiro, rodando como a conta padrão: recusa antes de abrir qualquer coisa e
+    //    diz se registrou. `Start-Process -Credential` fica pendurado nos runners do GitHub (sem
+    //    saída em 3 minutos), então este passo só roda a pedido: KIOSK_TESTE_PROCESSO_COMO_CONTA=1
+    //    num PC real. No CI, o caminho do `kioskd` é coberto pela chamada do aviso nos passos 2-4.
+    if std::env::var_os("KIOSK_TESTE_PROCESSO_COMO_CONTA").is_none() {
+        return;
+    }
+    let antes_da_cli = eventos().len();
+    let exe = pasta("ProgramFiles").join("kioskd.exe");
+    let (codigo, _, saida_do_kioskd, ps) =
+        rodar_como(conta, &exe.display().to_string(), &["rule", "list"]);
+    assert_eq!(
+        codigo,
+        Some(1),
+        "o kioskd da conta padrão devia recusar (exit 1): ps={ps} erro={saida_do_kioskd}"
+    );
+    assert!(saida_do_kioskd.contains("`rule list`"), "{saida_do_kioskd}");
+    assert!(
+        !saida_do_kioskd.contains("NOT recorded")
+            && !saida_do_kioskd.contains("NÃO foi")
+            && !saida_do_kioskd.contains("NO quedó"),
+        "o serviço estava no ar, devia ter registrado: {saida_do_kioskd}"
+    );
+    assert!(
+        !saida_do_kioskd.contains("database"),
+        "abriu o banco antes de recusar: {saida_do_kioskd}"
+    );
+    let e = eventos();
+    // a cota do minuto pode ter acabado (5 avisos): se o evento não entrou, a cota explica; senão confere
+    if e.len() > antes_da_cli {
+        let ultimo = e.last().unwrap();
+        assert_eq!(ultimo.2.as_deref(), Some(id_do_perfil.as_str()));
+        assert!(ultimo.3.contains("rule list"), "{}", ultimo.3);
+    }
+}
+
+/// Grupos do token da thread atual (SID e atributos), para as mensagens de falha.
+fn grupos_da_thread() -> String {
+    use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TOKEN_GROUPS, TOKEN_QUERY, TokenGroups,
+    };
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, GetCurrentThread, OpenProcessToken, OpenThreadToken,
+    };
+    let mut token: HANDLE = null_mut();
+    // SAFETY: handles pseudo do processo; o token é fechado ao fim.
+    let (de_thread, aberto) = unsafe {
+        if OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut token) != 0 {
+            ("thread", true)
+        } else if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) != 0 {
+            ("processo", true)
+        } else {
+            ("nenhum", false)
+        }
+    };
+    if !aberto {
+        return "token ilegível".into();
+    }
+    let mut n = 0u32;
+    // SAFETY: primeira chamada só mede o buffer.
+    unsafe { GetTokenInformation(token, TokenGroups, null_mut(), 0, &mut n) };
+    let mut buf = vec![0u64; (n as usize).div_ceil(8)];
+    // SAFETY: buffer alinhado com `n` bytes.
+    let lido =
+        unsafe { GetTokenInformation(token, TokenGroups, buf.as_mut_ptr().cast(), n, &mut n) };
+    let mut saida = format!("[token da {de_thread}]");
+    if lido != 0 {
+        // SAFETY: preenchido acima.
+        let g = unsafe { &*(buf.as_ptr() as *const TOKEN_GROUPS) };
+        let grupos =
+            unsafe { std::slice::from_raw_parts(g.Groups.as_ptr(), g.GroupCount as usize) };
+        for e in grupos {
+            let mut t: *mut u16 = null_mut();
+            // SAFETY: SID válido; `t` é liberado com LocalFree.
+            if unsafe { ConvertSidToStringSidW(e.Sid, &mut t) } != 0 {
+                let mut len = 0;
+                while unsafe { *t.add(len) } != 0 {
+                    len += 1;
+                }
+                let sid = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(t, len) });
+                unsafe { LocalFree(t.cast()) };
+                saida.push_str(&format!(" {sid}=0x{:x}", e.Attributes));
+            }
+        }
+    }
+    // SAFETY: fecha o token aberto acima.
+    unsafe { CloseHandle(token) };
+    saida
+}
+
+/// Roda `exe` como a conta de teste (`Start-Process -Credential`), com a saída em arquivos que a
+/// conta consegue escrever. Devolve (código de saída, stdout, stderr, texto do PowerShell).
+fn rodar_como(
+    conta: &ContaPadrao,
+    exe: &str,
+    args: &[&str],
+) -> (Option<i32>, String, String, String) {
+    let saida = PathBuf::from(r"C:\Users\Public\kiosk-teste-saida.txt");
+    let erro = PathBuf::from(r"C:\Users\Public\kiosk-teste-erro.txt");
+    let _ = (std::fs::remove_file(&saida), std::fs::remove_file(&erro));
+    let lista = args
+        .iter()
+        .map(|a| format!("'{a}'"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let script = format!(
+        "$s = ConvertTo-SecureString '{}' -AsPlainText -Force; \
+         $c = New-Object System.Management.Automation.PSCredential('.\\{}', $s); \
+         $p = Start-Process -FilePath '{exe}' -ArgumentList {lista} -Credential $c \
+           -WorkingDirectory 'C:\\Windows\\System32' -LoadUserProfile -RedirectStandardOutput '{}' -RedirectStandardError '{}' -PassThru; \
+         if (-not $p.WaitForExit(60000)) {{ $p.Kill(); Write-Output 'TEMPO ESGOTADO ao rodar como a conta'; exit 124 }}; \
+         exit $p.ExitCode",
+        conta.senha,
+        conta.nome,
+        saida.display(),
+        erro.display()
+    );
+    let mut filho = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // prazo de 3 minutos para o PowerShell inteiro: nunca deixa o CI pendurado
+    let limite = Instant::now() + Duration::from_secs(180);
+    while filho.try_wait().unwrap().is_none() {
+        if Instant::now() > limite {
+            let _ = filho.kill();
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let o = filho.wait_with_output().unwrap();
+    let ler = |p: &PathBuf| std::fs::read_to_string(p).unwrap_or_default();
+    let r = (o.status.code(), ler(&saida), ler(&erro), texto(&o));
+    let _ = (std::fs::remove_file(&saida), std::fs::remove_file(&erro));
+    r
 }

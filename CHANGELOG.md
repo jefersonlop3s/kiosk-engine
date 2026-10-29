@@ -4,6 +4,13 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Adicionado
+- **Rastro das tentativas de comando sem privilégio** (ADR-011): quando uma conta sem elevação (a da criança, por exemplo) tenta um comando administrativo do `kioskd`, ele recusa e avisa o serviço por um named pipe local (`kiosk-audit`); o serviço, que é SYSTEM, grava um `AUTHZ_FAIL` no log forense, ligado ao perfil da criança. O chamador é lido do token da conexão, nunca da mensagem; no máximo 5 avisos por minuto por conta. Administrador que esqueceu de elevar também é registrado, marcado como tal. `kioskctl log --profile` mostra a tentativa (sem o SID).
+- Todo comando do `kioskd` que mexe nos dados (`pairing-code`, `devices`, `revoke`, `profile *`, `app *`, `rule *`, `install`, `uninstall`) confere a elevação antes de abrir o banco e explica a recusa, no lugar do erro cru do SQLite (`unable to open database file (code: 14)`). A mensagem diz se a tentativa foi ou não registrada.
+
+### Alterado
+- Em `kioskctl log`, o detalhe de `AUTHZ_FAIL` continua omitido, exceto o da tentativa sem privilégio.
+
 ## [0.0.6] - 2026-10-29
 
 Ainda **pré-lançamento**. Corrige o que o teste da 0.0.5 no PC real mostrou: opção digitada errada deixa de ser ignorada em silêncio, e o `kioskd` avisa quando uma regra já nasce com o limite menor ou igual ao uso de hoje. A ADR-011 (rastro das tentativas de comando sem privilégio) foi aceita e entra numa próxima versão. Serviço e `kioskctl` da 0.0.5 continuam compatíveis.

@@ -65,6 +65,8 @@ flowchart TD
     B -->|não| E1["erro e saída: nenhuma porta é aberta"]
     B -->|sim| C["abre o banco KIOSK_DB ou o padrão,<br/>cria a pasta e aplica as migrações"]
     C --> D["tarefa de manutenção: purge_expired_events<br/>na partida e a cada 24 h"]
+    C --> AU["tarefa de auditoria (Windows): escuta o pipe kiosk-audit,<br/>só SYSTEM e Administradores criam instâncias"]
+    AU --> AU2["cada aviso: lê uma linha curta de esquema fechado,<br/>descobre o chamador pelo token da conexão,<br/>limita a 5 por minuto por conta, grava AUTHZ_FAIL<br/>com o perfil da criança (ou o SID, se não for perfil)"]
     C --> F{"Windows e sem --no-agent?"}
     F -->|sim| G["tarefa do agente: tick a cada 2 s"]
     F -->|não| H["só a API"]
@@ -90,25 +92,25 @@ flowchart TD
 ```mermaid
 flowchart TD
     A["kioskd pairing-code"] --> W{"Windows: quem chama é administrador elevado?<br/>Administradores ativo no token"}
-    W -->|não| X["abre o banco, se a pasta permitir"]
-    X --> Y["evento AUTHZ_FAIL com ação CREATE_PAIRING_CODE"]
-    Y --> E1["erro: só administrador gera o código;<br/>nenhum código é criado"]
-    X -->|"banco inacessível"| E2["erro, avisando que a recusa não foi registrada"]
-    W -->|"sim, ou fora do Windows"| B["abre o banco e informa qual"]
+    W -->|não| X["avisa o serviço pelo pipe kiosk-audit<br/>(o serviço descobre quem chamou pelo token da conexão)"]
+    X --> Y{"o serviço confirmou a gravação?"}
+    Y -->|sim| E1["erro: só administrador gera o código;<br/>a tentativa foi registrada no log forense"]
+    Y -->|não| E2["erro: só administrador gera o código;<br/>a tentativa NÃO foi registrada, com o motivo"]
+    W -->|"sim, ou fora do Windows"| B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C["gera 8 caracteres sem símbolos ambíguos"]
     C --> D["grava só o SHA-256 em pairing_code,<br/>com validade de 5 minutos"]
     D --> E["evento CREATE_PAIRING_CODE"]
     E --> F["imprime o código em claro, uma única vez"]
-    F --> G["o código é digitado no kioskctl pair"]
+    F --> G["o código é digitado no kioskctl parear"]
 ```
 
-Só quem administra o PC do serviço gera código; por isso só ele pareia clientes (regra do dono, [E-008](../epics/E-008-cliente-grafico-dos-pais.md)). No Linux e no macOS, a exigência de `sudo` virá com o [E-009](../epics/E-009-servico-linux.md) e o [E-010](../epics/E-010-servico-macos.md).
+Só quem administra o PC do serviço gera código; por isso só ele pareia clientes (regra do dono, [E-008](../epics/E-008-cliente-grafico-dos-pais.md)). A tentativa de quem não é administrador é gravada pelo **serviço**, não pelo comando, porque a conta sem privilégio não abre o banco ([ADR-011](../adr/ADR-011-rastro-de-tentativas-sem-privilegio.md)); o fluxo do aviso está em [`kioskd serve`](#kioskd-serve). No Linux e no macOS, a exigência de `sudo` virá com o [E-009](../epics/E-009-servico-linux.md) e o [E-010](../epics/E-010-servico-macos.md).
 
 ### `kioskd devices`
 
 ```mermaid
 flowchart TD
-    A["kioskd devices"] --> B["abre o banco e informa qual"]
+    A["kioskd devices"] --> B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C["lê paired_device"]
     C --> D["imprime id, nome, criado em e estado:<br/>ativo ou revogado em"]
 ```
@@ -117,7 +119,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd revoke id-do-dispositivo"] --> B["abre o banco e informa qual"]
+    A["kioskd revoke id-do-dispositivo"] --> B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C{"dispositivo existe e não está revogado?"}
     C -->|não| E["erro: inexistente ou já revogado"]
     C -->|sim| D["transação: revoked_at = agora<br/>e evento REVOKE_DEVICE"]
@@ -134,7 +136,7 @@ flowchart TD
     B -->|não| D["Windows: LookupAccountNameW da conta"]
     D --> D2{"é conta de usuário?"}
     D2 -->|não| E2["erro: conta inexistente ou não é usuário"]
-    C -->|sim| F["abre o banco e informa qual"]
+    C -->|sim| F["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     D2 -->|sim| F
     F --> G{"já existe perfil com esse SID?"}
     G -->|sim| E3["erro: já existe um perfil para o SID"]
@@ -146,7 +148,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd profile list"] --> B["abre o banco e informa qual"]
+    A["kioskd profile list"] --> B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C["lê child_profile"]
     C --> D["para cada perfil, lê profile_time_window"]
     D --> E["imprime ID, nome, SID, limite diário e janelas por dia"]
@@ -156,7 +158,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd profile limit id-do-perfil --seconds N ou --no-limit"] --> B["abre o banco e informa qual"]
+    A["kioskd profile limit id-do-perfil --seconds N ou --no-limit"] --> B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C{"perfil existe?"}
     C -->|não| E["erro: perfil inexistente<br/>evento de falha no log"]
     C -->|sim| D["transação: daily_total_limit_seconds<br/>e evento MODIFY_LIMIT com o perfil"]
@@ -172,7 +174,7 @@ flowchart TD
 flowchart TD
     A["kioskd profile window id-do-perfil --days seg,ter --window HH:MM-HH:MM"] --> B{"dias e horários válidos,<br/>início antes do fim?"}
     B -->|não| E1["erro com o motivo"]
-    B -->|sim| C["abre o banco e informa qual"]
+    B -->|sim| C["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     C --> D["para cada dia: grava ou substitui em profile_time_window<br/>e evento SET_PROFILE_WINDOW"]
     D --> F["o agente bloqueia a sessão fora da janela do dia"]
 ```
@@ -182,7 +184,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     A["kioskd app create --process nome.exe, --exempt ou --ignore"] --> B["define o estado:<br/>MONITORED, WHITELISTED ou IGNORE"]
-    B --> C["abre o banco e informa qual"]
+    B --> C["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     C --> D{"nome do exe já cadastrado,<br/>sem diferenciar maiúsculas?"}
     D -->|sim| E["erro: já está cadastrado"]
     D -->|não| F["transação: INSERT app_metadata<br/>e evento ADD_APP"]
@@ -193,7 +195,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd app list"] --> B["abre o banco e informa qual"]
+    A["kioskd app list"] --> B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C["lê app_metadata"]
     C --> D["imprime ID, nome do exe e estado"]
 ```
@@ -207,7 +209,7 @@ flowchart TD
     A2 -->|não| B["monta o mesmo corpo JSON da API add_rule"]
     B --> C{"Camada 3 da API: limite até 86400,<br/>janela válida, data no futuro?"}
     C -->|não| E1["erro com o motivo exato"]
-    C -->|sim| D["abre o banco e informa qual"]
+    C -->|sim| D["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     D --> F{"perfil e app existem?"}
     F -->|não| E2["erro: perfil ou app inexistente"]
     F -->|sim| G["transação: INSERT active_rules PENDING<br/>e evento ADD_RULE"]
@@ -225,7 +227,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd rule activate id-da-regra"] --> B["abre o banco e informa qual"]
+    A["kioskd rule activate id-da-regra"] --> B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C{"regra existe?"}
     C -->|não| E["erro: regra inexistente<br/>evento de falha no log"]
     C -->|sim| D["transação: estado ACTIVE<br/>e evento ACTIVATE_RULE com o perfil"]
@@ -239,7 +241,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd rule revoke id-da-regra"] --> B["abre o banco e informa qual"]
+    A["kioskd rule revoke id-da-regra"] --> B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C{"regra existe?"}
     C -->|não| E["erro: regra inexistente<br/>evento de falha no log"]
     C -->|sim| D["transação: estado REVOKED<br/>e evento REVOKE com o perfil"]
@@ -252,7 +254,7 @@ flowchart TD
 flowchart TD
     A["kioskd rule limit id-da-regra --seconds N"] --> B{"N até 86400?"}
     B -->|não| E1["erro com o máximo"]
-    B -->|sim| C["abre o banco e informa qual"]
+    B -->|sim| C["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     C --> D{"regra existe e não está revogada?"}
     D -->|não| E2["erro: inexistente ou revogada"]
     D -->|sim| F["transação: daily_limit_seconds<br/>e evento MODIFY_LIMIT com o perfil"]
@@ -264,7 +266,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd rule list, opcional --profile"] --> B["abre o banco e informa qual"]
+    A["kioskd rule list, opcional --profile"] --> B["confere administrador elevado (senão: avisa o serviço e recusa)<br/>e abre o banco informando qual"]
     B --> C["lê active_rules, filtradas pelo perfil se houver"]
     C --> D["lê app_metadata para mostrar o nome do exe"]
     D --> E["imprime ID, perfil, app, estado, limite e janela"]
@@ -274,7 +276,9 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd install --listen ip:porta, num PowerShell como administrador"] --> B{"cada endereço tem porta<br/>e é loopback ou Tailscale?"}
+    A["kioskd install --listen ip:porta, num PowerShell como administrador"] --> A0{"administrador elevado? (senão: avisa o serviço e recusa)"}
+    A0 -->|não| E0["erro: exige administrador; a tentativa é gravada pelo serviço, se ele estiver no ar,<br/>ou o erro diz que não foi registrada"]
+    A0 -->|sim| B{"cada endereço tem porta<br/>e é loopback ou Tailscale?"}
     B -->|não| E1["erro e saída: nada é alterado"]
     B -->|sim| C{"SCM aceita criar serviço?"}
     C -->|"não: acesso negado"| E2["erro: rode como administrador"]
@@ -300,7 +304,9 @@ O banco não é tocado pela instalação; o serviço o abre e aplica as migraç�
 
 ```mermaid
 flowchart TD
-    A["kioskd uninstall, com ou sem --purge-data"] --> B{"--purge-data?"}
+    A["kioskd uninstall, com ou sem --purge-data"] --> A0{"administrador elevado? (senão: avisa o serviço e recusa)"}
+    A0 -->|não| E0["erro: exige administrador; a tentativa é gravada pelo serviço, se ele estiver no ar"]
+    A0 -->|sim| B{"--purge-data?"}
     B -->|sim| C{"digitou APAGAR?"}
     C -->|não| E1["erro: nada foi alterado"]
     C -->|sim| D

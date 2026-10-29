@@ -435,15 +435,40 @@ catalogo! {
         pt: "código válido por 5 minutos, de uso único:",
         es: "código válido durante 5 minutos, de un solo uso:",
     },
-    SoAdministrador => {
-        en: "only an administrator can generate the pairing code: open PowerShell with \"Run as administrator\"",
-        pt: "só um administrador gera o código de pareamento: abra o PowerShell com \"Executar como administrador\"",
-        es: "solo un administrador genera el código de emparejamiento: abra PowerShell con \"Ejecutar como administrador\"",
+    SoAdministrador { comando: String } => {
+        en: "`{comando}` needs an administrator: open PowerShell with \"Run as administrator\"",
+        pt: "`{comando}` exige administrador: abra o PowerShell com \"Executar como administrador\"",
+        es: "`{comando}` exige un administrador: abra PowerShell con \"Ejecutar como administrador\"",
+    },
+    RecusaRegistrada { base: String } => {
+        en: "{base} (the attempt was recorded in the forensic log)",
+        pt: "{base} (a tentativa foi registrada no log forense)",
+        es: "{base} (el intento quedó registrado en el registro forense)",
     },
     RecusaSemRegistro { base: String, erro: String } => {
-        en: "{base} (the refusal was not recorded in the forensic log: {erro})",
-        pt: "{base} (a recusa não foi registrada no log forense: {erro})",
-        es: "{base} (la denegación no quedó registrada en el registro forense: {erro})",
+        en: "{base} (the attempt was NOT recorded in the forensic log: {erro})",
+        pt: "{base} (a tentativa NÃO foi registrada no log forense: {erro})",
+        es: "{base} (el intento NO quedó registrado en el registro forense: {erro})",
+    },
+    ServicoNaoResponde => {
+        en: "the kiosk service is not running or did not answer",
+        pt: "o serviço kiosk não está rodando ou não respondeu",
+        es: "el servicio kiosk no está en ejecución o no respondió",
+    },
+    PipeNaoEDoServico => {
+        en: "the audit pipe is not served by the kiosk service",
+        pt: "o pipe de auditoria não é servido pelo serviço kiosk",
+        es: "el pipe de auditoría no lo sirve el servicio kiosk",
+    },
+    ServicoNaoGravou => {
+        en: "the service did not confirm that it recorded the attempt",
+        pt: "o serviço não confirmou que gravou a tentativa",
+        es: "el servicio no confirmó que registró el intento",
+    },
+    AuditoriaIndisponivel { erro: String } => {
+        en: "attempt audit channel unavailable: {erro}",
+        pt: "canal de auditoria de tentativas indisponível: {erro}",
+        es: "canal de auditoría de intentos no disponible: {erro}",
     },
     DispositivoRevogado { id: String } => {
         en: "device {id} revoked",
@@ -1019,6 +1044,26 @@ catalogo! {
         en: "retention: {removidos} events older than 90 days removed",
         pt: "retenção: {removidos} eventos com mais de 90 dias removidos",
         es: "retención: {removidos} eventos de más de 90 días eliminados",
+    },
+    LogTentativaSemPrivilegio { comando: String, quem: String, extra: String } => {
+        en: "`{comando}` needs an elevated administrator; attempted by {quem}{extra}",
+        pt: "`{comando}` exige administrador elevado; tentativa de {quem}{extra}",
+        es: "`{comando}` exige un administrador elevado; intento de {quem}{extra}",
+    },
+    QuemContaComum => {
+        en: "a standard account",
+        pt: "uma conta comum",
+        es: "una cuenta estándar",
+    },
+    QuemAdminSemElevar => {
+        en: "an administrator account that was not elevated",
+        pt: "uma conta de administrador sem elevação",
+        es: "una cuenta de administrador sin elevar",
+    },
+    ExtraSuprimidas { n: u64 } => {
+        en: " (+{n} more attempts in the last minute were not recorded)",
+        pt: " (+{n} tentativas no último minuto não foram registradas)",
+        es: " (+{n} intentos en el último minuto no se registraron)",
     },
     LogCodigoSemAdmin => {
         en: "pairing code requested without an elevated administrator",

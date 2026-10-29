@@ -218,6 +218,21 @@ fn distancia(a: &str, b: &str) -> usize {
     linha[b.len()]
 }
 
+/// A forma cujas palavras abrem `args` (a mais longa, se mais de uma).
+fn achar_forma<'a>(args: &[String], formas: &'a [Forma]) -> Option<&'a Forma> {
+    formas
+        .iter()
+        .filter(|f| {
+            f.comando.len() <= args.len() && f.comando.iter().zip(args).all(|(c, a)| c == a)
+        })
+        .max_by_key(|f| f.comando.len())
+}
+
+/// O nome do comando (por exemplo `rule create`), se `args` abre uma das formas.
+pub fn nome_do_comando(args: &[String], formas: &[Forma]) -> Option<String> {
+    achar_forma(args, formas).map(|f| f.comando.join(" "))
+}
+
 /// Recusa opção desconhecida, opção sem valor e argumento sobrando, em vez de ignorá-los em
 /// silêncio (um `--activete` digitado errado criava uma regra pendente sem avisar). `args` já em
 /// inglês ([`em_ingles`]). Se as palavras não casam com nenhum comando, não diz nada: quem

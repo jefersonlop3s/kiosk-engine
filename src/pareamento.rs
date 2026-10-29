@@ -265,23 +265,6 @@ impl KioskDbManager {
         Ok(codigo)
     }
 
-    /// Registra a recusa de gerar código por falta de autoridade: no PC do serviço, só
-    /// administrador elevado gera código (regra do dono, E-008). Grava `AUTHZ_FAIL`.
-    pub async fn recusar_codigo_pareamento(
-        &self,
-        ctx: &EventContext,
-        motivo: &str,
-    ) -> Result<(), sqlx::Error> {
-        let e = SecurityEvent::new(
-            &ctx.client_ip,
-            ActionType::CreatePairingCode,
-            EventType::AuthzFail,
-            TransactionStatus::Failure,
-            motivo,
-        );
-        self.record_event(&e).await
-    }
-
     /// Pareia um dispositivo: valida o código de uso único e grava a chave pública. Falhas
     /// respondem de forma genérica e gravam o motivo; muitas falhas seguidas bloqueiam o pareamento.
     pub async fn parear_dispositivo(

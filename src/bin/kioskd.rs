@@ -144,6 +144,7 @@ async fn servir(com_agente: bool) -> Result<(), String> {
     let enderecos = enderecos()?;
     let db = Arc::new(abrir_banco().await?);
     iniciar_manutencao(db.clone());
+    iniciar_auditoria(db.clone());
     if com_agente {
         iniciar_agente(db.clone());
     }
@@ -180,34 +181,46 @@ fn servico() -> Result<(), String> {
     Err(Msg::SoNoWindows.to_string())
 }
 
-/// Só administrador elevado gera código de pareamento no PC do serviço (regra do dono, E-008):
-/// sem isto, a barreira era só a ACL da pasta do banco, que não existe antes do `instalar` nem
-/// com `KIOSK_DB` em outro lugar. A recusa vai para o log forense quando o banco abre.
+/// Todo comando que mexe nos dados exige administrador elevado no PC do serviço (regra do dono,
+/// E-008). Sem elevação, recusa **antes de tocar em qualquer coisa** e avisa o serviço, que grava
+/// a tentativa no log forense (ADR-011): quem recusa não abre o banco, porque a conta sem
+/// privilégio não consegue. Sem o serviço, diz que a tentativa não foi registrada.
 #[cfg(windows)]
-async fn exigir_administrador() -> Result<(), String> {
+fn exigir_administrador(comando: &str) -> Result<(), String> {
     if kiosk_engine::sistema_windows::administrador_elevado()? {
         return Ok(());
     }
-    let motivo = kiosk_engine::detalhes::Detalhe::PairingCodeNotAdmin.codigo();
-    let registro = match abrir_banco().await {
-        Ok(db) => db
-            .recusar_codigo_pareamento(&EventContext::local(), &motivo)
-            .await
-            .map_err(|e| e.to_string()),
-        Err(e) => Err(e),
-    };
-    let base = Msg::SoAdministrador.to_string();
-    Err(match registro {
-        Ok(()) => base,
-        Err(erro) => Msg::RecusaSemRegistro { base, erro }.to_string(),
-    })
+    let base = Msg::SoAdministrador {
+        comando: comando.to_owned(),
+    }
+    .to_string();
+    Err(
+        match kiosk_engine::auditoria_windows::avisar_tentativa(comando) {
+            Ok(()) => Msg::RecusaRegistrada { base }.to_string(),
+            Err(erro) => Msg::RecusaSemRegistro { base, erro }.to_string(),
+        },
+    )
 }
 
 /// Fora do Windows não há serviço (ADR-002); a exigência de `sudo` vem com o E-009 e o E-010.
 #[cfg(not(windows))]
-async fn exigir_administrador() -> Result<(), String> {
+fn exigir_administrador(_comando: &str) -> Result<(), String> {
     Ok(())
 }
+
+/// Escuta o pipe de auditoria (ADR-011) enquanto o serviço roda. Falha alta: se não der para
+/// escutar, o serviço segue e o diz, e os comandos recusados dizem que não registraram.
+#[cfg(windows)]
+fn iniciar_auditoria(db: Arc<KioskDbManager>) {
+    tokio::spawn(async move {
+        if let Err(erro) = kiosk_engine::auditoria_windows::servir(db).await {
+            eprintln!("kioskd: {}", Msg::AuditoriaIndisponivel { erro });
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn iniciar_auditoria(_db: Arc<KioskDbManager>) {}
 
 /// Pede que digitem a palavra de confirmação (do idioma) antes de apagar os dados (ADR-008).
 fn confirmar_apagar_dados() -> Result<(), String> {
@@ -556,6 +569,12 @@ async fn avisar_total_ja_ultrapassado(db: &KioskDbManager, perfil: Uuid, limite:
 }
 
 async fn executar(args: &[String]) -> Result<(), String> {
+    // um único ponto confere a elevação de todo comando administrativo (lista fechada, ADR-011)
+    if let Some(nome) = kiosk_engine::cli::nome_do_comando(args, kiosk_engine::cli::FORMAS_KIOSKD)
+        && kiosk_engine::auditoria::COMANDOS.contains(&nome.as_str())
+    {
+        exigir_administrador(&nome)?;
+    }
     match args
         .iter()
         .map(String::as_str)
@@ -588,7 +607,6 @@ async fn executar(args: &[String]) -> Result<(), String> {
         }
         ["status"] => estado(),
         ["pairing-code"] => {
-            exigir_administrador().await?;
             let db = abrir_banco().await?;
             let codigo = db
                 .criar_codigo_pareamento(&EventContext::local(), Utc::now())

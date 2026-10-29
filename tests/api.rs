@@ -753,3 +753,102 @@ async fn log_recusa_periodo_e_limite_invalidos_e_exige_assinatura() {
     let (st, resp) = http(s.addr, "POST", "/api/windows/log", &vec![], ok.as_bytes()).await;
     assert_eq!((st, resp.as_str()), (403, REJEITADA));
 }
+
+#[tokio::test]
+async fn log_mostra_a_tentativa_sem_privilegio_sem_o_sid_e_continua_omitindo_o_resto_do_authz_fail()
+{
+    use kiosk_engine::auditoria::{Chamador, Limitador, montar_aviso, registrar};
+    let s = servico().await;
+    let mut l = Limitador::default();
+    // a criança (perfil cadastrado) e uma conta qualquer tentam gerar código de pareamento
+    let crianca = Chamador {
+        sid: "S-1-5-21-1".into(),
+        conta_admin: false,
+    };
+    let outra = Chamador {
+        sid: "S-1-5-21-777-8-9-1100".into(),
+        conta_admin: false,
+    };
+    for c in [&crianca, &outra] {
+        registrar(
+            &s.db,
+            &mut l,
+            c,
+            montar_aviso("pairing-code").as_bytes(),
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    }
+    // e um AUTHZ_FAIL de outra origem, que cita o dispositivo e não pode sair
+    s.db.record_event(
+        &SecurityEvent::new(
+            "local",
+            ActionType::AddRule,
+            EventType::AuthzFail,
+            TransactionStatus::Failure,
+            &format!("device {} lacks permission for ADD_RULE", s.device_id),
+        )
+        .with_profile(Some(s.perfil)),
+    )
+    .await
+    .unwrap();
+
+    let janela = |extra: &str| {
+        format!(
+            r#"{{"from":"{}","to":"{}"{extra}}}"#,
+            (Utc::now() - Duration::hours(1)).to_rfc3339(),
+            (Utc::now() + Duration::minutes(1)).to_rfc3339()
+        )
+    };
+    let (st, resp) = s.comando("log", &janela("")).await;
+    assert_eq!(st, 200, "{resp}");
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    let authz: Vec<&serde_json::Value> = v["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["event_type"] == "AUTHZ_FAIL")
+        .collect();
+    assert_eq!(authz.len(), 3, "{resp}");
+    let com_detalhe: Vec<&&serde_json::Value> =
+        authz.iter().filter(|e| !e["detail"].is_null()).collect();
+    assert_eq!(
+        com_detalhe.len(),
+        2,
+        "só as duas tentativas sem privilégio mostram o detalhe: {resp}"
+    );
+    for e in &com_detalhe {
+        let d = e["detail"].as_str().unwrap();
+        assert!(
+            d.contains("ADMIN_REQUIRED") && d.contains("pairing-code"),
+            "{d}"
+        );
+        assert!(
+            !d.contains("S-1-5") && !d.contains("caller_sid"),
+            "o SID vazou: {d}"
+        );
+    }
+    assert!(
+        !resp.contains("S-1-5-21-777"),
+        "o SID da conta desconhecida vazou: {resp}"
+    );
+    assert!(
+        !resp.contains(&s.device_id.to_string()),
+        "o dispositivo vazou: {resp}"
+    );
+
+    // filtrado por perfil, a tentativa da criança aparece e a da conta desconhecida não
+    let (_, resp) = s
+        .comando("log", &janela(&format!(r#","profile_id":"{}""#, s.perfil)))
+        .await;
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    let nesse: Vec<&str> = v["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["event_type"] == "AUTHZ_FAIL" && !e["detail"].is_null())
+        .map(|e| e["action"].as_str().unwrap())
+        .collect();
+    assert_eq!(nesse, ["CREATE_PAIRING_CODE"], "{resp}");
+}

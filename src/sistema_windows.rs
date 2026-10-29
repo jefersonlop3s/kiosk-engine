@@ -21,13 +21,14 @@ use windows_sys::Win32::Foundation::{
 };
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows_sys::Win32::Security::{
-    CreateWellKnownSid, EqualSid, GetTokenInformation, LookupAccountNameW, PSID,
+    CreateWellKnownSid, EqualSid, GetTokenInformation, LookupAccountNameW, PSID, RevertToSelf,
     SECURITY_MAX_SID_SIZE, SID_NAME_USE, SidTypeUser, TOKEN_GROUPS, TOKEN_QUERY, TOKEN_USER,
     TokenGroups, TokenUser, WinBuiltinAdministratorsSid,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
+use windows_sys::Win32::System::Pipes::{GetNamedPipeServerProcessId, ImpersonateNamedPipeClient};
 use windows_sys::Win32::System::Registry::{
     HKEY, HKEY_USERS, RRF_RT_REG_MULTI_SZ, RRF_RT_REG_SZ, RegGetValueW,
 };
@@ -106,6 +107,31 @@ unsafe fn sid_em_texto(sid: PSID) -> Result<String, String> {
 
 /// SID do dono do processo `pid`, ou `None` se o processo não puder ser aberto (protegido ou já
 /// encerrado).
+/// SID do dono de um token.
+fn sid_do_token(token: HANDLE) -> Option<String> {
+    // SAFETY: token válido com TOKEN_QUERY; buffer alinhado para TOKEN_USER.
+    unsafe {
+        let mut tamanho = 0u32;
+        GetTokenInformation(token, TokenUser, null_mut(), 0, &mut tamanho);
+        if tamanho == 0 {
+            return None;
+        }
+        let mut buf = vec![0u64; (tamanho as usize).div_ceil(8)];
+        if GetTokenInformation(
+            token,
+            TokenUser,
+            buf.as_mut_ptr() as *mut c_void,
+            tamanho,
+            &mut tamanho,
+        ) == FALSE
+        {
+            return None;
+        }
+        let usuario = &*(buf.as_ptr() as *const TOKEN_USER);
+        sid_em_texto(usuario.User.Sid).ok()
+    }
+}
+
 fn sid_do_processo(pid: u32) -> Option<String> {
     // SAFETY: chamadas Win32 com argumentos válidos; handles fechados por `Handle`.
     unsafe {
@@ -118,25 +144,7 @@ fn sid_do_processo(pid: u32) -> Option<String> {
             return None;
         }
         let token = Handle(token);
-        let mut tamanho = 0u32;
-        GetTokenInformation(token.0, TokenUser, null_mut(), 0, &mut tamanho);
-        if tamanho == 0 {
-            return None;
-        }
-        // buffer alinhado para TOKEN_USER
-        let mut buf = vec![0u64; (tamanho as usize).div_ceil(8)];
-        if GetTokenInformation(
-            token.0,
-            TokenUser,
-            buf.as_mut_ptr() as *mut c_void,
-            tamanho,
-            &mut tamanho,
-        ) == FALSE
-        {
-            return None;
-        }
-        let usuario = &*(buf.as_ptr() as *const TOKEN_USER);
-        sid_em_texto(usuario.User.Sid).ok()
+        sid_do_token(token.0)
     }
 }
 
@@ -293,6 +301,99 @@ pub fn idioma_da_conta(sid: &str) -> Option<crate::i18n::Idioma> {
     .iter()
     .filter_map(|(sub, valor)| texto_do_registro(HKEY_USERS, &format!(r"{sid}\{sub}"), valor))
     .find_map(|t| Idioma::de_tag(&t))
+}
+
+/// `true` se o token tem o grupo Administradores em qualquer estado: ativo (elevado) ou só para
+/// negação (conta de administrador sem elevação, com o UAC). Conta comum não tem o grupo.
+fn token_e_de_conta_admin(token: HANDLE) -> Result<bool, String> {
+    let mut admins = [0u8; SECURITY_MAX_SID_SIZE as usize];
+    let mut tamanho = SECURITY_MAX_SID_SIZE;
+    // SAFETY: buffer do tamanho máximo de um SID.
+    let ok = unsafe {
+        CreateWellKnownSid(
+            WinBuiltinAdministratorsSid,
+            null_mut(),
+            admins.as_mut_ptr().cast(),
+            &mut tamanho,
+        )
+    };
+    if ok == 0 {
+        return Err(ultimo_erro("CreateWellKnownSid(Administradores)"));
+    }
+    let mut tamanho = 0u32;
+    // SAFETY: primeira chamada só mede o buffer.
+    unsafe { GetTokenInformation(token, TokenGroups, null_mut(), 0, &mut tamanho) };
+    if tamanho == 0 {
+        return Err(ultimo_erro("GetTokenInformation(TokenGroups)"));
+    }
+    let mut buf = vec![0u64; (tamanho as usize).div_ceil(8)];
+    // SAFETY: buffer alinhado com `tamanho` bytes.
+    if unsafe {
+        GetTokenInformation(
+            token,
+            TokenGroups,
+            buf.as_mut_ptr().cast(),
+            tamanho,
+            &mut tamanho,
+        )
+    } == FALSE
+    {
+        return Err(ultimo_erro("GetTokenInformation(TokenGroups)"));
+    }
+    // SAFETY: preenchido acima; `GroupCount` entradas seguem o cabeçalho dentro de `buf`.
+    let grupos = unsafe {
+        let g = &*(buf.as_ptr() as *const TOKEN_GROUPS);
+        std::slice::from_raw_parts(g.Groups.as_ptr(), g.GroupCount as usize)
+    };
+    // SAFETY: SIDs válidos (do token e o criado acima).
+    Ok(grupos
+        .iter()
+        .any(|g| unsafe { EqualSid(g.Sid, admins.as_mut_ptr().cast()) } != FALSE))
+}
+
+/// Quem está do outro lado de um named pipe, lido do **token da conexão**, nunca da mensagem
+/// (ADR-011). Só vale depois de o servidor ter lido do pipe. Personifica o cliente apenas para
+/// abrir o token e volta à própria identidade na hora.
+pub fn identidade_do_cliente_do_pipe(
+    pipe: &impl std::os::windows::io::AsRawHandle,
+) -> Result<crate::auditoria::Chamador, String> {
+    let pipe: HANDLE = pipe.as_raw_handle();
+    /// Volta à identidade do serviço ao sair do escopo, aconteça o que acontecer.
+    struct Reverter;
+    impl Drop for Reverter {
+        fn drop(&mut self) {
+            // SAFETY: desfaz a personificação da thread atual.
+            unsafe { RevertToSelf() };
+        }
+    }
+    // SAFETY: `pipe` é o handle de um pipe do servidor, vivo durante a chamada.
+    if unsafe { ImpersonateNamedPipeClient(pipe) } == 0 {
+        return Err(ultimo_erro("ImpersonateNamedPipeClient"));
+    }
+    let _reverter = Reverter;
+    let mut token: HANDLE = null_mut();
+    // SAFETY: `openasself` (TRUE) abre o token com a identidade do serviço, porque a do cliente
+    // não pode abri-lo; o token é fechado por `Handle`.
+    if unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &mut token) } == FALSE {
+        return Err(ultimo_erro("OpenThreadToken"));
+    }
+    let token = Handle(token);
+    let sid = sid_do_token(token.0).ok_or("SID do cliente ilegível")?;
+    let conta_admin = token_e_de_conta_admin(token.0)?;
+    Ok(crate::auditoria::Chamador { sid, conta_admin })
+}
+
+/// PID do processo que serve um pipe (para o cliente conferir que é o serviço).
+pub fn pid_do_servidor_do_pipe(
+    pipe: &impl std::os::windows::io::AsRawHandle,
+) -> Result<u32, String> {
+    let pipe: HANDLE = pipe.as_raw_handle();
+    let mut pid = 0u32;
+    // SAFETY: `pipe` é o handle de um pipe do cliente, vivo durante a chamada.
+    if unsafe { GetNamedPipeServerProcessId(pipe, &mut pid) } == 0 {
+        return Err(ultimo_erro("GetNamedPipeServerProcessId"));
+    }
+    Ok(pid)
 }
 
 /// Quem chama é administrador **elevado**: o grupo Administradores está ativo no token

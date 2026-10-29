@@ -69,3 +69,15 @@ Alternativas rejeitadas:
 - Consome: GC-21 do [PENDING](../PENDING.md); [E-004](../epics/E-004-agente-windows-enforcement.md) F4 (antiadulteração).
 - Relaciona-se com: [ADR-001](ADR-001-enforcement-ativo-e-visivel.md), [ADR-004](ADR-004-comunicacao-servico-ui-por-named-pipe.md) (mesmo molde de pipe e de protocolo, canal e confiança diferentes), [ADR-006](ADR-006-assinatura-de-requisicoes-e-pareamento.md) (o que a API dos pais mostra do log), [ADR-008](ADR-008-formato-do-instalador.md) (proteção da pasta de dados), [ADR-010](ADR-010-idiomas-e-comandos-em-ingles.md) (detalhe em código).
 - Fora do escopo: o que a conta da criança faz contra o serviço pelo gerenciador de serviços (por exemplo `sc stop`, que a DACL do serviço já nega). Registrar essas negativas depende da auditoria de acesso a objetos do próprio Windows, que fica como possível reforço em E-004 F4, junto com o Log de Eventos do Windows como segundo destino.
+
+## Implementação e desvios (2026-10-29)
+
+A decisão não mudou. Ao implementar, ficaram estes detalhes:
+
+1. **O cliente confere o servidor pelo PID do serviço, e não pelo SID do processo.** A ADR previa `GetNamedPipeServerProcessId` + SID do processo, mas uma conta comum não consegue abrir o processo SYSTEM do serviço para ler o token. O cliente compara o PID do servidor do pipe com o PID que o gerenciador de serviços informa para o serviço `kiosk` (qualquer conta consulta, a DACL do serviço deixa). Um processo que ocupou o nome antes não tem o PID do serviço, e o cliente recusa. O serviço continua criando a primeira instância com `FILE_FLAG_FIRST_PIPE_INSTANCE`.
+2. **Direitos da conta comum no pipe**: `FILE_GENERIC_READ` + `FILE_WRITE_DATA` + `FILE_WRITE_ATTRIBUTES` (`0x12018b`), e não `GENERIC_WRITE`, porque o `FILE_GENERIC_WRITE` inclui `FILE_APPEND_DATA`, que no pipe é o `FILE_CREATE_PIPE_INSTANCE` e deixaria qualquer conta criar instâncias. Por isso o cliente também **não pode** abrir o pipe com leitura e escrita genéricas (`OpenOptions::read(true).write(true)` pede `GENERIC_WRITE` e recebe "acesso negado", visto no primeiro teste no CI Windows): ele pede só `FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE`.
+3. **A personificação abre o token com a identidade do serviço** (`OpenThreadToken` com `openasself`) e o cliente abre o pipe no nível `SECURITY_IDENTIFICATION`, o mínimo para o serviço saber quem é. Foi o mesmo erro que o teste do `administrador_elevado` já tinha mostrado: abrir o token com a identidade da conta comum dá "acesso negado".
+4. **Mensagem inválida também gasta a cota** do limite de taxa (e vira `VALIDATION_FAIL`), para não dar para encher o log com lixo. Aviso descartado por excesso responde `ok:true`, porque o que importa ao `kioskd` é que o serviço está no ar; a contagem sai no próximo evento.
+5. **A lista fechada de comandos** inclui `install` e `uninstall`: sem elevação, eles também recusam antes de tocar no gerenciador de serviços. Sem o serviço no ar (primeira instalação), a recusa diz que a tentativa não foi registrada.
+6. **`Detalhe::PairingCodeNotAdmin`** continua existindo só para ler linhas gravadas pela 0.0.5; nada novo o grava.
+

@@ -61,6 +61,16 @@ pub enum Detalhe {
         max: i64,
     },
     PairingCodeNotAdmin,
+    /// Comando administrativo tentado sem elevação (ADR-011). `caller_sid` só quando a conta não
+    /// é um perfil de criança; a API dos pais o omite.
+    AdminRequired {
+        command: String,
+        admin_account: bool,
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        caller_sid: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        suppressed: Option<u64>,
+    },
     RetentionPurged {
         removed: u64,
     },
@@ -193,6 +203,23 @@ impl Detalhe {
                 max,
             },
             Self::PairingCodeNotAdmin => Msg::LogCodigoSemAdmin,
+            Self::AdminRequired {
+                command,
+                admin_account,
+                suppressed,
+                ..
+            } => Msg::LogTentativaSemPrivilegio {
+                comando: command,
+                quem: if admin_account {
+                    Msg::QuemAdminSemElevar
+                } else {
+                    Msg::QuemContaComum
+                }
+                .em(idioma),
+                extra: suppressed
+                    .map(|n| Msg::ExtraSuprimidas { n }.em(idioma))
+                    .unwrap_or_default(),
+            },
             Self::RetentionPurged { removed } => Msg::LogRetencao { removidos: removed },
             Self::ListProcessesFailed { error } => Msg::LogFalhaListarProcessos { erro: error },
             Self::ListSessionsFailed { error } => Msg::LogFalhaListarSessoes { erro: error },
@@ -213,6 +240,27 @@ impl Detalhe {
 
     pub fn texto(&self, idioma: Idioma) -> String {
         self.msg(idioma).em(idioma)
+    }
+}
+
+/// O detalhe como a API o entrega aos pais: só o que não identifica contas que não são perfis.
+pub fn para_os_pais(detalhe: &str) -> Option<String> {
+    match Detalhe::de_texto(detalhe)? {
+        Detalhe::AdminRequired {
+            command,
+            admin_account,
+            suppressed,
+            ..
+        } => Some(
+            Detalhe::AdminRequired {
+                command,
+                admin_account,
+                caller_sid: None,
+                suppressed,
+            }
+            .codigo(),
+        ),
+        _ => None,
     }
 }
 

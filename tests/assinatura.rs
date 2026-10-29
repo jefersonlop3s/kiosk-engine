@@ -480,32 +480,3 @@ fn string_canonica_e_codigo_sao_estaveis() {
     assert!(c.len() == TAMANHO_CODIGO && !c.contains(['0', '1', 'O', 'I']));
     assert_eq!(normalizar_codigo(" ab-cd 23 "), "ABCD23");
 }
-
-#[tokio::test]
-async fn recusa_de_codigo_sem_administrador_grava_authz_fail_e_nao_cria_codigo() {
-    let (_d, db) = banco().await;
-    db.recusar_codigo_pareamento(
-        &ctx(),
-        "código de pareamento pedido sem administrador elevado",
-    )
-    .await
-    .unwrap();
-    let eventos: Vec<(String, String, String)> =
-        sqlx::query_as("SELECT action_attempted, event_type, transaction_status FROM security_log")
-            .fetch_all(db.pool())
-            .await
-            .unwrap();
-    assert_eq!(
-        eventos,
-        vec![(
-            "CREATE_PAIRING_CODE".to_string(),
-            "AUTHZ_FAIL".to_string(),
-            "FAILURE".to_string()
-        )]
-    );
-    let codigos: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pairing_code")
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-    assert_eq!(codigos, 0);
-}
