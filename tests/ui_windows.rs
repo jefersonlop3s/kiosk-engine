@@ -5,11 +5,10 @@
 mod comum;
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
 use std::os::windows::fs::OpenOptionsExt;
+use std::os::windows::io::IntoRawHandle;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use comum::{ContaPadrao, como};
@@ -19,6 +18,9 @@ use kiosk_engine::detalhes::Detalhe;
 use kiosk_engine::ipc::ParaUi;
 use kiosk_engine::ui_windows::{Configuracao, GerenteUi, servir};
 use tempfile::TempDir;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::windows::named_pipe::NamedPipeClient;
+use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OVERLAPPED;
 
 const BATIMENTO: &str = "{\"v\":1,\"tipo\":\"batimento\"}\n";
 
@@ -69,20 +71,25 @@ enum Chegou {
 }
 
 /// Cliente do pipe como o `kiosk-ui` o abriria: só os direitos que a DACL concede.
+///
+/// Aberto com `FILE_FLAG_OVERLAPPED`: num handle síncrono, uma leitura pendente trava qualquer
+/// escrita no mesmo handle, e o teste ficaria esperando para sempre.
 struct Cliente {
-    escrita: File,
-    linhas: mpsc::Receiver<String>,
+    leitor: BufReader<tokio::io::ReadHalf<NamedPipeClient>>,
+    escritor: tokio::io::WriteHalf<NamedPipeClient>,
 }
 
 impl Cliente {
-    fn conectar(nome: &str) -> std::io::Result<Self> {
+    /// Abre o pipe (com algumas tentativas se o servidor ainda está recriando a instância).
+    fn abrir(nome: &str) -> std::io::Result<File> {
         let fim = Instant::now() + Duration::from_secs(10);
-        let arquivo = loop {
+        loop {
             match std::fs::OpenOptions::new()
                 .access_mode(DIREITOS_DO_CLIENTE)
+                .custom_flags(FILE_FLAG_OVERLAPPED)
                 .open(nome)
             {
-                Ok(f) => break f,
+                Ok(f) => return Ok(f),
                 // 231: todas as instâncias ocupadas (o servidor recria a próxima logo em seguida)
                 Err(e)
                     if (e.raw_os_error() == Some(231)
@@ -93,39 +100,35 @@ impl Cliente {
                 }
                 Err(e) => return Err(e),
             }
-        };
-        let leitura = arquivo.try_clone()?;
-        let (tx, linhas) = mpsc::channel();
-        std::thread::spawn(move || {
-            let mut leitor = BufReader::new(leitura);
-            loop {
-                let mut l = String::new();
-                match leitor.read_line(&mut l) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {
-                        if tx.send(l).is_err() {
-                            break;
-                        }
-                    }
-                }
-            }
-        });
+        }
+    }
+
+    /// Entrega o handle ao tokio. Tem de ser chamado dentro do runtime.
+    fn de_arquivo(arquivo: File) -> std::io::Result<Self> {
+        // SAFETY: o handle é de um pipe aberto com FILE_FLAG_OVERLAPPED e passa a ser do cliente.
+        let cliente = unsafe { NamedPipeClient::from_raw_handle(arquivo.into_raw_handle())? };
+        let (leitor, escritor) = tokio::io::split(cliente);
         Ok(Self {
-            escrita: arquivo,
-            linhas,
+            leitor: BufReader::new(leitor),
+            escritor,
         })
     }
 
-    fn enviar(&mut self, texto: &str) -> std::io::Result<()> {
-        self.escrita.write_all(texto.as_bytes())?;
-        self.escrita.flush()
+    async fn conectar(nome: &str) -> std::io::Result<Self> {
+        Self::de_arquivo(Self::abrir(nome)?)
     }
 
-    fn proxima(&self, prazo: Duration) -> Chegou {
-        match self.linhas.recv_timeout(prazo) {
-            Ok(l) => Chegou::Linha(l),
-            Err(mpsc::RecvTimeoutError::Disconnected) => Chegou::Fechou,
-            Err(mpsc::RecvTimeoutError::Timeout) => Chegou::Silencio,
+    async fn enviar(&mut self, texto: &str) -> std::io::Result<()> {
+        self.escritor.write_all(texto.as_bytes()).await?;
+        self.escritor.flush().await
+    }
+
+    async fn proxima(&mut self, prazo: Duration) -> Chegou {
+        let mut l = String::new();
+        match tokio::time::timeout(prazo, self.leitor.read_line(&mut l)).await {
+            Err(_) => Chegou::Silencio,
+            Ok(Ok(0)) | Ok(Err(_)) => Chegou::Fechou,
+            Ok(Ok(_)) => Chegou::Linha(l),
         }
     }
 }
@@ -188,14 +191,14 @@ async fn a_ui_conecta_manda_batimento_e_recebe_aviso() {
     assert!(!s.gerente.conectada(&sid));
     assert!(!s.gerente.enviar(&sid, aviso()), "sem UI, nada é entregue");
 
-    let mut c = Cliente::conectar(&s.nome).unwrap();
-    c.enviar(BATIMENTO).unwrap();
+    let mut c = Cliente::conectar(&s.nome).await.unwrap();
+    c.enviar(BATIMENTO).await.unwrap();
     assert!(esperar(|| s.gerente.conectada(&sid)).await);
     let primeiro = s.gerente.ultimo_batimento(&sid).unwrap();
 
     // serviço -> UI
     assert!(s.gerente.enviar(&sid, aviso()));
-    let Chegou::Linha(l) = c.proxima(Duration::from_secs(5)) else {
+    let Chegou::Linha(l) = c.proxima(Duration::from_secs(5)).await else {
         panic!("o aviso não chegou");
     };
     assert!(l.starts_with("{\"v\":1,\"tipo\":\"aviso\""), "{l}");
@@ -203,8 +206,9 @@ async fn a_ui_conecta_manda_batimento_e_recebe_aviso() {
 
     // UI -> serviço: batimento e confirmação do aviso exibido
     tokio::time::sleep(Duration::from_millis(30)).await;
-    c.enviar(BATIMENTO).unwrap();
+    c.enviar(BATIMENTO).await.unwrap();
     c.enviar("{\"v\":1,\"tipo\":\"aviso_exibido\",\"marco\":300}\n")
+        .await
         .unwrap();
     assert!(esperar(|| s.gerente.ultimo_aviso_exibido(&sid) == Some(300)).await);
     assert!(s.gerente.ultimo_batimento(&sid).unwrap() >= primeiro);
@@ -224,10 +228,10 @@ async fn a_primeira_mensagem_tem_de_ser_um_batimento() {
         "{\"v\":2,\"tipo\":\"batimento\"}\n", // versão errada
         "{\"v\":1,\"tipo\":\"batimento\",\"extra\":1}\n", // campo a mais
     ] {
-        let mut c = Cliente::conectar(&s.nome).unwrap();
-        c.enviar(lixo).unwrap();
+        let mut c = Cliente::conectar(&s.nome).await.unwrap();
+        c.enviar(lixo).await.unwrap();
         assert!(
-            matches!(c.proxima(Duration::from_secs(5)), Chegou::Fechou),
+            matches!(c.proxima(Duration::from_secs(5)).await, Chegou::Fechou),
             "devia ter sido descartada: {lixo}"
         );
         assert!(!s.gerente.conectada(&sid_atual()));
@@ -256,12 +260,12 @@ async fn lixo_depois_do_batimento_derruba_a_ui() {
         ),
         ("x".repeat(5000), "linha enorme sem fim"),
     ] {
-        let mut c = Cliente::conectar(&s.nome).unwrap();
-        c.enviar(BATIMENTO).unwrap();
+        let mut c = Cliente::conectar(&s.nome).await.unwrap();
+        c.enviar(BATIMENTO).await.unwrap();
         assert!(esperar(|| s.gerente.conectada(&sid)).await, "{nome}");
-        c.enviar(&lixo).unwrap();
+        c.enviar(&lixo).await.unwrap();
         assert!(
-            matches!(c.proxima(Duration::from_secs(5)), Chegou::Fechou),
+            matches!(c.proxima(Duration::from_secs(5)).await, Chegou::Fechou),
             "{nome}: devia ter caído"
         );
         assert!(esperar(|| !s.gerente.conectada(&sid)).await, "{nome}");
@@ -273,14 +277,14 @@ async fn lixo_depois_do_batimento_derruba_a_ui() {
 async fn rajada_de_mensagens_derruba_a_ui() {
     let s = subir(None).await;
     let sid = sid_atual();
-    let mut c = Cliente::conectar(&s.nome).unwrap();
-    c.enviar(BATIMENTO).unwrap();
+    let mut c = Cliente::conectar(&s.nome).await.unwrap();
+    c.enviar(BATIMENTO).await.unwrap();
     assert!(esperar(|| s.gerente.conectada(&sid)).await);
     // o limite é de 10 por segundo
     let rajada = BATIMENTO.repeat(60);
-    let _ = c.enviar(&rajada);
+    let _ = c.enviar(&rajada).await;
     assert!(
-        matches!(c.proxima(Duration::from_secs(5)), Chegou::Fechou),
+        matches!(c.proxima(Duration::from_secs(5)).await, Chegou::Fechou),
         "a rajada devia derrubar a UI"
     );
     assert!(esperar(|| !s.gerente.conectada(&sid)).await);
@@ -293,9 +297,12 @@ async fn so_o_executavel_esperado_vale_como_ui() {
     let sid = sid_atual();
     // outro programa: recusado e registrado
     let s = subir(Some(PathBuf::from(r"C:\Windows\System32\notepad.exe"))).await;
-    let mut c = Cliente::conectar(&s.nome).unwrap();
-    c.enviar(BATIMENTO).unwrap();
-    assert!(matches!(c.proxima(Duration::from_secs(5)), Chegou::Fechou));
+    let mut c = Cliente::conectar(&s.nome).await.unwrap();
+    c.enviar(BATIMENTO).await.unwrap();
+    assert!(matches!(
+        c.proxima(Duration::from_secs(5)).await,
+        Chegou::Fechou
+    ));
     assert!(!s.gerente.conectada(&sid));
     assert_eq!(
         recusas(&s.db).await,
@@ -306,8 +313,8 @@ async fn so_o_executavel_esperado_vale_como_ui() {
     let este = std::env::current_exe().unwrap();
     let outra_caixa = PathBuf::from(este.to_string_lossy().to_uppercase().replace('\\', "/"));
     let s = subir(Some(outra_caixa)).await;
-    let mut c = Cliente::conectar(&s.nome).unwrap();
-    c.enviar(BATIMENTO).unwrap();
+    let mut c = Cliente::conectar(&s.nome).await.unwrap();
+    c.enviar(BATIMENTO).await.unwrap();
     assert!(esperar(|| s.gerente.conectada(&sid)).await);
     assert!(recusas(&s.db).await.is_empty());
 }
@@ -316,21 +323,21 @@ async fn so_o_executavel_esperado_vale_como_ui() {
 async fn uma_ui_nova_da_mesma_conta_toma_o_lugar_da_anterior() {
     let s = subir(None).await;
     let sid = sid_atual();
-    let mut velha = Cliente::conectar(&s.nome).unwrap();
-    velha.enviar(BATIMENTO).unwrap();
+    let mut velha = Cliente::conectar(&s.nome).await.unwrap();
+    velha.enviar(BATIMENTO).await.unwrap();
     assert!(esperar(|| s.gerente.conectada(&sid)).await);
 
-    let mut nova = Cliente::conectar(&s.nome).unwrap();
-    nova.enviar(BATIMENTO).unwrap();
+    let mut nova = Cliente::conectar(&s.nome).await.unwrap();
+    nova.enviar(BATIMENTO).await.unwrap();
     assert!(
-        matches!(velha.proxima(Duration::from_secs(5)), Chegou::Fechou),
+        matches!(velha.proxima(Duration::from_secs(5)).await, Chegou::Fechou),
         "a UI anterior devia ser largada"
     );
     // a nova segue de pé e recebe
     assert!(s.gerente.conectada(&sid));
     assert!(s.gerente.enviar(&sid, aviso()));
     assert!(matches!(
-        nova.proxima(Duration::from_secs(5)),
+        nova.proxima(Duration::from_secs(5)).await,
         Chegou::Linha(_)
     ));
 }
@@ -349,8 +356,9 @@ async fn conta_padrao_conecta_e_so_recebe_o_que_e_dela() {
     assert_ne!(sid_conta, sid_runner);
 
     let nome = s.nome.clone();
-    let mut c = como(&conta, || Cliente::conectar(&nome)).expect("a conta padrão devia conectar");
-    c.enviar(BATIMENTO).unwrap();
+    let arquivo = como(&conta, || Cliente::abrir(&nome)).expect("a conta padrão devia conectar");
+    let mut c = Cliente::de_arquivo(arquivo).unwrap();
+    c.enviar(BATIMENTO).await.unwrap();
     assert!(esperar(|| s.gerente.conectada(&sid_conta)).await);
     assert!(
         !s.gerente.conectada(&sid_runner),
@@ -361,7 +369,7 @@ async fn conta_padrao_conecta_e_so_recebe_o_que_e_dela() {
     assert!(!s.gerente.enviar(&sid_runner, aviso()));
     assert!(s.gerente.enviar(&sid_conta, aviso()));
     assert!(matches!(
-        c.proxima(Duration::from_secs(5)),
+        c.proxima(Duration::from_secs(5)).await,
         Chegou::Linha(_)
     ));
     // a conta padrão não consegue criar outra instância do pipe (servidor falso)

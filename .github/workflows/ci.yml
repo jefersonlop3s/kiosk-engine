@@ -13,6 +13,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # um teste travado não pode prender o runner por horas (o normal é menos de 10 minutos)
+    timeout-minutes: 25
     env:
       # instala o serviço de verdade (tests/servico_windows.rs); o runner é descartável
       KIOSK_TESTE_SERVICO: ${{ matrix.os == 'windows-latest' && '1' || '' }}
