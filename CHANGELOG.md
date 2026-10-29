@@ -4,6 +4,10 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.4] - 2026-10-29
+
+Ainda **pré-lançamento**. O `kioskd` passa a rodar como serviço do Windows (ADR-008, etapa 1), sem depender de uma janela aberta. O reinício do PC com o serviço instalado ainda não foi validado em máquina real (GC-16).
+
 ### Adicionado
 - `kioskd instalar --escutar ip:porta[,...]`: instala o kiosk como serviço do Windows (ADR-008, etapa 1). Copia os executáveis para `C:\Program Files\kiosk`, deixa `C:\ProgramData\kiosk` só para SYSTEM e Administradores, registra o serviço `kiosk` (conta SYSTEM, início automático, reinício em falha; conta padrão não consegue parar) e o inicia. Rodar de novo atualiza.
 - `kioskd desinstalar [--apagar-dados]`: remove o serviço e os executáveis; os dados só são apagados depois de digitar `APAGAR`.
