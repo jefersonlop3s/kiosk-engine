@@ -20,7 +20,7 @@ use kiosk_engine::ui_windows::{Configuracao, GerenteUi, servir};
 use tempfile::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::NamedPipeClient;
-use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OVERLAPPED;
+use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_OVERLAPPED, SECURITY_IDENTIFICATION};
 
 const BATIMENTO: &str = "{\"v\":1,\"tipo\":\"batimento\"}\n";
 
@@ -86,6 +86,9 @@ impl Cliente {
         loop {
             match std::fs::OpenOptions::new()
                 .access_mode(DIREITOS_DO_CLIENTE)
+                // o serviço só precisa saber quem somos; sem a QoS, o Windows nem usa o token da
+                // thread personificada (a conta padrão do teste) e entrega o do processo
+                .security_qos_flags(SECURITY_IDENTIFICATION)
                 .custom_flags(FILE_FLAG_OVERLAPPED)
                 .open(nome)
             {
