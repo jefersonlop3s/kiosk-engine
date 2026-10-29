@@ -21,6 +21,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | GC-16 | Serviço do Windows validado no PC do dono: instalação (2026-10-29) e **retorno sozinho depois de reiniciar o Windows** (novo PID, em execução, início automático). Falta ver o agente, rodando como SYSTEM, aplicar uma regra na conta da criança (por exemplo um limite curto) | Por execução no PC real | E-004 F1/F4, E-007 F2 |
 | GC-17 | Os avisos à criança usam `WTSSendMessageW` (caixa de mensagem na sessão) como solução provisória; a ADR-004 prevê a UI de bandeja com tempo restante | Por decisão (provisório) | E-004 F3 |
 | GC-20 | Logoff após 2 desbloqueios não ocorreu no teste real (2026-10-29): houve dois bloqueios por `LIMITE_DIARIO_TOTAL` com 30 s de intervalo e nenhuma ação nem erro registrados depois, até o limite ser removido 7 min mais tarde | Sim: log do teste do dono | Repetir com intervalo de 40 s entre as entradas e a saída da janela do `servir`; se reproduzir, investigar a detecção da sessão reconectada (`WTSSessionInfoEx`) |
+| GC-21 | Uma conta sem privilégio (a da criança, por exemplo) que roda `kioskd pairing-code` é recusada, mas **a tentativa não fica no log forense**: a recusa é gravada no banco, e a pasta do banco só abre para SYSTEM e Administradores. O comando avisa isso na própria mensagem (visto no PC real com a 0.0.5, 2026-10-29). Os outros comandos que abrem o banco falham pelo erro cru do SQLite, sem explicação e sem rastro. O bloqueio funciona; falta o rastro | Sim: teste do dono com a 0.0.5, janela sem elevação | **[ADR-011](adr/ADR-011-rastro-de-tentativas-sem-privilegio.md) aceita em 2026-10-29**: o comando avisa o serviço por named pipe local e o serviço grava no banco. Falta implementar (E-004 F4) e validar no CI Windows com conta padrão real |
 | GC-19 | O pré-push do harness (`.harness/validation.py`) compara o SHA de cada ref enviada com o `HEAD`; uma tag anotada envia o SHA do objeto da tag, não o do commit, e é sempre recusada. Contorno atual: tags leves, ou a tag criada pelo workflow de release | Sim: `16501a3` (tag) × `76d8b8f` (commit) | Corrigir no sovereign-harness (`git rev-parse <sha>^{commit}`) e reinstalar |
 
 ## Épicos abertos
@@ -36,7 +37,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | [E-009](epics/E-009-servico-linux.md) | congelado | Condição de retomada no épico |
 | [E-010](epics/E-010-servico-macos.md) | congelado | Condição de retomada no épico |
 | [E-011](epics/E-011-servico-android.md) | congelado | Condição de retomada no épico |
-| [E-012](epics/E-012-internacionalizacao.md) | em andamento | F1 e F2 feitas; F3 implementada. Falta ver no PC real o aviso à criança no idioma da conta dela (conta em en-US ou es-ES) |
+| [E-012](epics/E-012-internacionalizacao.md) | em andamento | F1 e F2 validadas no PC real (0.0.5). F3 implementada: falta ver o aviso à criança no idioma da conta dela (conta em en-US ou es-ES) |
 
 ## Infraestrutura do harness
 

@@ -581,3 +581,45 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Falta**: ver no PC real o aviso à criança no idioma da conta dela.
 - **Quebra**: o log gravado pela 0.0.4 tem texto em português; o `kioskctl log` o mostra como está.
 
+## 2026-10-29 — v0.0.5 publicada e validada no PC real do dono
+
+- **Origem**: publicação da 0.0.5 ([release](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.5), pré-lançamento, gerada de `01c8556`) e teste do dono no próprio PC.
+- **Resultado**:
+  - **Pacote**: o SHA-256 do `.zip` do Windows bateu com o do `SHA256SUMS.txt`.
+  - **Atualização**: `kioskd install` sobre a 0.0.4 parou o serviço, trocou os executáveis em `Program Files\kiosk`, pôs a pasta no PATH do sistema, registrou o serviço como `service` e o reiniciou, sem outro passo.
+  - **PATH**: em janela nova do PowerShell, `kioskd` funciona de qualquer pasta.
+  - **Comandos**: `kioskd status` e `kioskd estado` dão o mesmo resultado, com `KIOSK_LANG=pt-BR` (o idioma de quem instalou) no ambiente do serviço.
+  - **Idiomas**: a saída muda na hora com `KIOSK_LANG` e foi vista em pt-BR, en-US e es-ES.
+  - **Segurança do pareamento**: sem elevação, `kioskd pairing-code` recusa; elevado, gera o código, nos dois idiomas.
+- **Achado**: a recusa sem elevação **não foi registrada no log forense**, porque a conta comum não abre o banco protegido. Registrado como GC-21 no [PENDING](PENDING.md).
+- **Ainda por ver no PC real**: o aviso à criança no idioma da conta dela ([E-012](epics/E-012-internacionalizacao.md) F3) e o agente aplicando uma regra na conta da criança como SYSTEM (GC-16).
+- Nenhum dado do log do dono (IP, conta, caminhos pessoais) foi copiado para o repositório.
+
+## 2026-10-29 — ADR-011 proposta: rastro das tentativas sem privilégio (GC-21)
+
+- **Origem**: achado do teste da 0.0.5 (a recusa de `pairing-code` sem elevação não chega ao log) e pedido do dono para seguir com uma ADR para o canal entre o comando e o serviço.
+- **Resultado**: [ADR-011](adr/ADR-011-rastro-de-tentativas-sem-privilegio.md) **proposta**, ainda sem código:
+  - o comando avisa o serviço por named pipe local (`\\.\pipe\kiosk-audit`) e o serviço grava no banco, ligado ao perfil da criança quando o chamador é um;
+  - o chamador é descoberto pelo token da conexão e nunca pelo conteúdo da mensagem;
+  - esquema fechado, limite de taxa por conta, falha alta quando o serviço não responde;
+  - todo comando que abre o banco confere a elevação primeiro e explica a recusa, no lugar do erro cru do SQLite (outro achado do teste);
+  - alternativas rejeitadas (Log de Eventos do Windows, pasta de entrada, HTTP sem assinatura, abrir o banco) e o plano de testes no CI Windows.
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros.
+
+## 2026-10-29 — Opção desconhecida deixa de ser ignorada; aviso de limite já ultrapassado
+
+- **Origem**: log do dono no teste da 0.0.5: `--activete` (digitado errado) criou uma regra pendente sem erro, e a regra ativa de 3 min fechava o Bloco de Notas na hora porque ele já tinha 11min09s de uso hoje. As revogações (`d9712d1f` e `be76246e`) eram de regras **pendentes**, que nunca valeram; a que valia (`14b04946`) continuava ativa. Não era defeito da revogação.
+- **Resultado**:
+  - `cli::validar` e as tabelas `FORMAS_KIOSKD` e `FORMAS_KIOSKCTL`: opção desconhecida, opção sem valor e argumento sobrando são recusados, com sugestão por distância de edição, antes de abrir o banco ou gravar. `--help` e `-h` mostram o uso;
+  - `kioskd rule create`, `rule activate`, `rule limit` e `profile limit` avisam quando a regra ativa (ou o limite total) já nasce com limite menor ou igual ao uso de hoje;
+  - a duração das listagens passa de `0h03` para `3min 00s`;
+  - runbook com a explicação (limite por dia, uso já contado, revogar por ID) e fluxogramas atualizados.
+- **Evidência local**: 151 testes; um teste confere a tabela de argumentos contra o texto de uso nos três idiomas (uma opção nova só no uso, ou só na tabela, reprova o build); o caso do `--activete` em três idiomas e em português; aviso de limite em cada idioma, sem aviso para regra pendente, limite folgado e limite 0; clippy no Linux e cruzado para Windows; 30 diagramas validados.
+- **ADR-011**: o dono confirmou as duas decisões abertas (registrar também o administrador sem elevação; `sc stop` fora do escopo). O aceite da ADR como um todo está pendente.
+- Nenhum dado do log do dono (IDs, SID, conta) foi copiado.
+
+## 2026-10-29 — ADR-011 aceita
+
+- **Origem**: aceite explícito do dono ("ADR-011 aceita"), depois de confirmar as duas decisões abertas.
+- **Resultado**: [ADR-011](adr/ADR-011-rastro-de-tentativas-sem-privilegio.md) passa a **Aceito**. O GC-21 segue aberto até a implementação (named pipe `kiosk-audit`, personificação do cliente para ler o SID, evento `AUTHZ_FAIL` com o perfil da criança, limite de taxa por conta, conferência de elevação em todo comando que abre o banco) e a validação no CI Windows.
+

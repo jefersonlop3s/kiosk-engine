@@ -4,6 +4,21 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.6] - 2026-10-29
+
+Ainda **pré-lançamento**. Corrige o que o teste da 0.0.5 no PC real mostrou: opção digitada errada deixa de ser ignorada em silêncio, e o `kioskd` avisa quando uma regra já nasce com o limite menor ou igual ao uso de hoje. A ADR-011 (rastro das tentativas de comando sem privilégio) foi aceita e entra numa próxima versão. Serviço e `kioskctl` da 0.0.5 continuam compatíveis.
+
+### Corrigido
+- `kioskd` e `kioskctl` ignoravam em silêncio opção desconhecida, opção sem valor e argumento sobrando: um `--activete` digitado errado criava uma regra pendente sem avisar. Agora recusam, com sugestão quando há uma opção parecida (`você quis dizer --activate?`), antes de abrir o banco ou gravar. `--help` e `-h` mostram o uso.
+- A duração nas listagens do `kioskd` (`0h03`) passa a `3min 00s`, o mesmo formato do `kioskctl`.
+
+### Adicionado
+- `kioskd rule create`, `rule activate`, `rule limit` e `profile limit` avisam quando a regra ativa (ou o limite total) já nasce com o limite menor ou igual ao uso de hoje: o app seria fechado, ou a sessão bloqueada, assim que abrisse. Visto no PC real: o limite de 3 min num app que já tinha 11 min de uso hoje parecia "regra que não revoga".
+
+### Documentação
+- ADR-011 proposta: rastro das tentativas de comando administrativo sem privilégio (GC-21). O comando avisa o serviço por named pipe local, o serviço descobre o chamador pelo token e grava o evento no banco; todo comando que abre o banco passa a conferir a elevação.
+- Registro do teste da 0.0.5 no PC real do dono e do GC-21: a recusa de `kioskd pairing-code` por conta sem privilégio não fica no log forense, porque o banco só abre para administradores.
+
 ## [0.0.5] - 2026-10-29
 
 Ainda **pré-lançamento**. Idiomas (en-US, pt-BR, es-ES), comandos em inglês com o português equivalente, pasta do kiosk no PATH e exigência de administrador para gerar o código de pareamento. **Atualize o `kioskd` e o `kioskctl` juntos**: o corpo do pareamento mudou e um `kioskctl` 0.0.4 não pareia com um serviço 0.0.5. Dispositivos já pareados continuam funcionando. O log gravado pela 0.0.4 mantém o texto em português.

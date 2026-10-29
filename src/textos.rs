@@ -96,3 +96,13 @@ pub fn aviso(a: &Aviso, idioma: Idioma) -> (String, String) {
     };
     (titulo(idioma).into(), corpo)
 }
+
+/// `3725` -> `1h 02min 05s`, `180` -> `3min 00s`, `0` -> `0s`. Igual nos três idiomas.
+pub fn duracao(segundos: u64) -> String {
+    let (h, m, s) = (segundos / 3600, segundos % 3600 / 60, segundos % 60);
+    match (h, m) {
+        (0, 0) => format!("{s}s"),
+        (0, _) => format!("{m}min {s:02}s"),
+        _ => format!("{h}h {m:02}min {s:02}s"),
+    }
+}

@@ -44,6 +44,7 @@ Estado: em andamento desde 2026-10-29 ([ADR-010](../adr/ADR-010-idiomas-e-comand
   - mensagens do `kioskd`, do `kioskctl`, do cliente, do serviço (instalação, remoção, estado, log do serviço, nome e descrição no Windows) e o texto de uso nos três idiomas;
   - dias da semana aceitos em inglês, português e espanhol; palavra de confirmação por idioma (`DELETE`, `APAGAR`, `BORRAR`);
   - o `install` grava `KIOSK_LANG` no serviço.
+- **F1 e F2 validadas no PC real do dono** (0.0.5, 2026-10-29): comandos em inglês e em português com o mesmo resultado, mensagens vistas em pt-BR, en-US e es-ES, serviço com o idioma de quem o instalou, atualização do serviço pelo `install`.
 - **F3** (2026-10-29), implementada; falta ver num Windows real:
   - avisos à criança nos três idiomas (`textos`), no idioma da conta dela, lido do perfil carregado (`HKEY_USERS\<SID>`);
   - o detalhe do log forense do enforcement vira código JSON (`detalhes`), traduzido na hora por `kioskctl log`. Linhas antigas aparecem como estão;

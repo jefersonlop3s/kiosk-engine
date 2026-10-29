@@ -278,6 +278,36 @@ catalogo! {
     },
 
     // ---- valores e rótulos das listagens ----
+    OpcaoDesconhecida { opcao: String, comando: String } => {
+        en: "unknown option {opcao} for `{comando}`",
+        pt: "opção desconhecida {opcao} em `{comando}`",
+        es: "opción desconocida {opcao} en `{comando}`",
+    },
+    OpcaoDesconhecidaSugestao { opcao: String, comando: String, sugestao: String } => {
+        en: "unknown option {opcao} for `{comando}` (did you mean {sugestao}?)",
+        pt: "opção desconhecida {opcao} em `{comando}` (você quis dizer {sugestao}?)",
+        es: "opción desconocida {opcao} en `{comando}` (¿quiso decir {sugestao}?)",
+    },
+    OpcaoSemValor { opcao: String, comando: String } => {
+        en: "{opcao} needs a value in `{comando}`",
+        pt: "{opcao} precisa de um valor em `{comando}`",
+        es: "{opcao} necesita un valor en `{comando}`",
+    },
+    ArgumentoSobrando { valor: String, comando: String } => {
+        en: "unexpected argument {valor:?} for `{comando}`",
+        pt: "argumento inesperado {valor:?} em `{comando}`",
+        es: "argumento inesperado {valor:?} en `{comando}`",
+    },
+    LimiteJaUltrapassado { app: String, usado: String, limite: String } => {
+        en: "warning: {app} has already used {usado} today, which is at or above this rule's limit of {limite}: it will be closed as soon as it opens (raise the limit with `rule limit`, or revoke the rule)",
+        pt: "atenção: {app} já usou {usado} hoje, o que é igual ou maior que o limite desta regra, {limite}: ele será fechado assim que abrir (aumente o limite com `rule limit` ou revogue a regra)",
+        es: "atención: {app} ya usó {usado} hoy, lo que iguala o supera el límite de esta regla, {limite}: se cerrará en cuanto se abra (suba el límite con `rule limit` o revoque la regla)",
+    },
+    LimiteTotalJaUltrapassado { usado: String, limite: String } => {
+        en: "warning: the account has already spent {usado} in an active session today, at or above the total limit of {limite}: the session will be locked right away (raise it with `profile limit`, or use --no-limit)",
+        pt: "atenção: a conta já ficou {usado} em sessão ativa hoje, o que é igual ou maior que o limite total, {limite}: a sessão será bloqueada em seguida (aumente com `profile limit` ou use --no-limit)",
+        es: "atención: la cuenta ya pasó {usado} en sesión activa hoy, lo que iguala o supera el límite total, {limite}: la sesión se bloqueará enseguida (súbalo con `profile limit` o use --no-limit)",
+    },
     SemLimite => {
         en: "no limit",
         pt: "sem limite",

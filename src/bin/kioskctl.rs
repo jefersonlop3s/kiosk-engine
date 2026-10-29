@@ -16,6 +16,7 @@ use std::process::ExitCode;
 
 use kiosk_engine::cliente::{self, Credenciais};
 use kiosk_engine::i18n::{Msg, idioma};
+use kiosk_engine::textos::duracao;
 use uuid::Uuid;
 
 fn uso() -> String {
@@ -26,6 +27,17 @@ fn uso() -> String {
 async fn main() -> ExitCode {
     // português e inglês equivalem; daqui em diante, só inglês (ADR-010)
     let args = kiosk_engine::cli::em_ingles(&std::env::args().skip(1).collect::<Vec<_>>());
+    match kiosk_engine::cli::validar(&args, kiosk_engine::cli::FORMAS_KIOSKCTL) {
+        Ok(()) => {}
+        Err(kiosk_engine::cli::ErroArgumentos::PedeAjuda) => {
+            println!("{}", uso());
+            return ExitCode::SUCCESS;
+        }
+        Err(e) => {
+            eprintln!("kioskctl: {}", e.msg());
+            return ExitCode::FAILURE;
+        }
+    }
     match executar(&args).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
@@ -122,16 +134,6 @@ async fn enviar(
     } else {
         // a recusa é genérica de propósito; o motivo exato está no log do PC
         Err(Msg::ServicoRecusou { status: r.status }.to_string())
-    }
-}
-
-/// `3725` -> `1h 02min 05s`.
-fn duracao(segundos: u64) -> String {
-    let (h, m, s) = (segundos / 3600, segundos % 3600 / 60, segundos % 60);
-    match (h, m) {
-        (0, 0) => format!("{s}s"),
-        (0, _) => format!("{m}min {s:02}s"),
-        _ => format!("{h}h {m:02}min {s:02}s"),
     }
 }
 
