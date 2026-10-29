@@ -286,7 +286,7 @@ flowchart TD
     D --> F{"serviço kiosk já existe?"}
     F -->|sim| G["para o serviço e espera parar"]
     F -->|não| H["segue"]
-    G --> I["copia kioskd.exe e kioskctl.exe para Program Files\kiosk"]
+    G --> I["copia kioskd.exe, kioskctl.exe e kiosk-ui.exe para Program Files\kiosk"]
     H --> I
     I --> P["registro: Path do sistema ganha Program Files\kiosk, se faltar;<br/>aviso WM_SETTINGCHANGE para janelas novas"]
     P --> J["SCM: cria ou reconfigura o serviço<br/>LocalSystem, início automático, binário kioskd service"]
@@ -315,7 +315,7 @@ flowchart TD
     D -->|não| G["avisa que não estava instalado"]
     F --> Q["registro: tira Program Files\kiosk do Path do sistema,<br/>mantendo as outras entradas"]
     G --> Q
-    Q --> H["remove kioskd.exe e kioskctl.exe de Program Files\kiosk"]
+    Q --> H["remove kioskd.exe, kioskctl.exe e kiosk-ui.exe de Program Files\kiosk"]
     H --> I{"o kioskd em uso está nessa pasta?"}
     I -->|sim| J["agenda a remoção dele e da pasta para o próximo reinício"]
     I -->|não| K["remove a pasta"]

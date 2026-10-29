@@ -386,3 +386,213 @@ async fn conta_padrao_conecta_e_so_recebe_o_que_e_dela() {
     });
     assert!(falso.is_err(), "a conta padrão criou uma instância do pipe");
 }
+
+/// Um servidor do pipe com runtime próprio: largá-lo derruba todas as conexões, como um serviço
+/// que cai de verdade (largar só a tarefa de `servir` deixaria as conexões abertas).
+struct ServicoIsolado {
+    gerente: GerenteUi,
+    rt: Option<tokio::runtime::Runtime>,
+    _dir: TempDir,
+}
+
+impl Drop for ServicoIsolado {
+    fn drop(&mut self) {
+        // `shutdown_background` pode ser chamado de dentro de código assíncrono (largar o runtime
+        // ali é proibido pelo tokio); derruba as conexões como um serviço que cai
+        if let Some(rt) = self.rt.take() {
+            rt.shutdown_background();
+        }
+    }
+}
+
+fn subir_isolado(nome: &str) -> ServicoIsolado {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let gerente = GerenteUi::default();
+    let (g, n) = (gerente.clone(), nome.to_owned());
+    let db_url = format!("sqlite://{}", dir.path().join("k.db").display());
+    rt.spawn(async move {
+        let db = Arc::new(KioskDbManager::new(&db_url).await.unwrap());
+        let config = Configuracao {
+            nome_do_pipe: n,
+            imagem_esperada: None,
+        };
+        let _ = servir(config, g, db).await;
+    });
+    ServicoIsolado {
+        gerente,
+        rt: Some(rt),
+        _dir: dir,
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn o_cliente_da_ui_espera_o_servico_manda_batimento_entrega_avisos_confirma_e_reconecta() {
+    use kiosk_engine::ipc::DaUi;
+    use kiosk_engine::ui_cliente_windows::manter;
+
+    let nome = format!(r"\\.\pipe\kiosk-ui-teste-{}", uuid::Uuid::new_v4().simple());
+    let sid = sid_atual();
+    let (recebido_tx, recebido) = std::sync::mpsc::channel();
+    let (confirma_tx, mut confirma_rx) = tokio::sync::mpsc::unbounded_channel();
+    let n = nome.clone();
+    let cliente = tokio::spawn(async move {
+        manter(
+            &n,
+            Duration::from_millis(200),
+            move |m| {
+                let _ = recebido_tx.send(m);
+            },
+            &mut confirma_rx,
+        )
+        .await;
+    });
+
+    // 1. o serviço ainda não existe: a UI espera e conecta quando ele sobe
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let servico = subir_isolado(&nome);
+    assert!(
+        esperar(|| servico.gerente.conectada(&sid)).await,
+        "a UI devia conectar quando o serviço subiu"
+    );
+
+    // 2. o batimento segue chegando
+    let primeiro = servico.gerente.ultimo_batimento(&sid).unwrap();
+    assert!(
+        esperar(|| servico.gerente.ultimo_batimento(&sid).unwrap() > primeiro).await,
+        "o batimento periódico não chegou"
+    );
+
+    // 3. serviço -> UI, e a confirmação da UI -> serviço
+    assert!(servico.gerente.enviar(&sid, aviso()));
+    let chegou = recebido
+        .recv_timeout(Duration::from_secs(5))
+        .expect("o aviso não chegou");
+    assert_eq!(chegou, aviso());
+    confirma_tx.send(DaUi::AvisoExibido { marco: 300 }).unwrap();
+    assert!(esperar(|| servico.gerente.ultimo_aviso_exibido(&sid) == Some(300)).await);
+
+    // 4. o serviço cai de verdade: a UI não desiste e volta quando ele sobe de novo
+    drop(servico);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let novo = subir_isolado(&nome);
+    assert!(
+        esperar(|| novo.gerente.conectada(&sid)).await,
+        "a UI devia reconectar ao serviço reiniciado"
+    );
+    assert!(novo.gerente.enviar(&sid, aviso()));
+    assert_eq!(
+        recebido
+            .recv_timeout(Duration::from_secs(5))
+            .expect("o aviso depois de reconectar"),
+        aviso()
+    );
+    cliente.abort();
+}
+
+/// O `kiosk-ui.exe` de verdade, morto ao sair do teste.
+struct Programa(std::process::Child);
+
+impl Drop for Programa {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn kiosk_ui(nome: &str, extra: &[(&str, &str)]) -> Programa {
+    let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_kiosk-ui"));
+    c.env("KIOSK_UI_PIPE", nome)
+        .env("KIOSK_LANG", "es-ES")
+        .stdin(std::process::Stdio::null());
+    for (k, v) in extra {
+        c.env(k, v);
+    }
+    Programa(c.spawn().expect("kiosk-ui.exe devia iniciar"))
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn o_kiosk_ui_mostra_o_estado_e_o_aviso_no_idioma_da_conta_e_confirma_ao_servico() {
+    let s = subir(None).await;
+    let sid = sid_atual();
+    let dir = tempfile::tempdir().unwrap();
+    let saida = dir.path().join("saida.txt");
+    let _ui = kiosk_ui(
+        &s.nome,
+        &[
+            ("KIOSK_UI_SEM_BANDEJA", "1"),
+            ("KIOSK_UI_SAIDA", saida.to_str().unwrap()),
+        ],
+    );
+    assert!(
+        esperar(|| s.gerente.conectada(&sid)).await,
+        "o kiosk-ui não conectou"
+    );
+    let lido = || std::fs::read_to_string(&saida).unwrap_or_default();
+
+    // o estado vira a dica do ícone
+    assert!(s.gerente.enviar(
+        &sid,
+        ParaUi::Estado {
+            restante_segundos: Some(4_800),
+            motivo: None
+        }
+    ));
+    assert!(
+        esperar(|| lido().contains("DICA\tControl parental: quedan 1h 20min 00s")).await,
+        "{}",
+        lido()
+    );
+
+    // o aviso chega no idioma da conta (es-ES), e o serviço recebe a confirmação
+    assert!(s.gerente.enviar(&sid, aviso()));
+    assert!(
+        esperar(|| lido().contains("AVISO\tControl parental\tFaltan 5 minutos")).await,
+        "{}",
+        lido()
+    );
+    assert!(
+        esperar(|| s.gerente.ultimo_aviso_exibido(&sid) == Some(300)).await,
+        "o serviço não recebeu a confirmação"
+    );
+
+    // motivo fora do esquema: a UI não inventa texto e não confirma
+    let antes = lido();
+    assert!(s.gerente.enviar(
+        &sid,
+        ParaUi::Aviso {
+            restante_segundos: 60,
+            motivo: "<inventado>".into(),
+            app: None
+        }
+    ));
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(lido(), antes, "mostrou algo para um motivo desconhecido");
+    assert_eq!(s.gerente.ultimo_aviso_exibido(&sid), Some(300));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn o_kiosk_ui_com_a_bandeja_real_sobe_conecta_e_fica_vivo() {
+    // o desenho do ícone só se vê num PC com a barra de tarefas; aqui prova-se que a janela e o
+    // laço de mensagens sobem e que a UI conecta e segue viva
+    let s = subir(None).await;
+    let sid = sid_atual();
+    let mut ui = kiosk_ui(&s.nome, &[]);
+    assert!(
+        esperar(|| s.gerente.conectada(&sid)).await,
+        "o kiosk-ui com bandeja não conectou (saiu? {:?})",
+        ui.0.try_wait()
+    );
+    // um aviso não derruba nem faz a UI sair
+    assert!(s.gerente.enviar(&sid, aviso()));
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert!(
+        ui.0.try_wait().unwrap().is_none(),
+        "o kiosk-ui saiu sozinho"
+    );
+    assert!(s.gerente.conectada(&sid));
+    eprintln!(
+        "balão aceito pelo Windows neste runner: {}",
+        s.gerente.ultimo_aviso_exibido(&sid).is_some()
+    );
+}

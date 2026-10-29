@@ -64,7 +64,12 @@ Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam
 
 - `ui_windows` (servidor do pipe `kiosk-ui` e `GerenteUi`, que o agente usará para empurrar avisos e conferir o batimento) e `ipc` (protocolo) estão prontos. Desvios da ADR-004, na seção "Implementação e desvios" dela: um pipe só com roteamento pelo SID do token, e conferência do executável do cliente.
 - Testes no CI Windows (`tests/ui_windows.rs`): UI conecta e troca batimento, aviso e confirmação; primeira mensagem inválida, lixo depois do batimento e rajada derrubam e registram; outro executável é recusado; UI nova toma o lugar da antiga; uma conta padrão real conecta, só recebe o que é dela e não cria uma instância do pipe.
-- Próximas etapas: o serviço iniciar o `kiosk-ui.exe` na sessão da criança (`WTSQueryUserToken` + `CreateProcessAsUser`), o `kiosk-ui.exe` (bandeja), o agente usar o canal, e o `TAMPER_SUSPECTED` por batimento perdido.
+- Próximas etapas: o serviço iniciar o `kiosk-ui.exe` na sessão da criança (`WTSQueryUserToken` + `CreateProcessAsUser`), o agente usar o canal, e o `TAMPER_SUSPECTED` por batimento perdido.
+
+## Bandeja, etapa 2: o `kiosk-ui.exe` (2026-10-30)
+
+- `src/bin/kiosk-ui.rs`, `bandeja` (textos, puros), `bandeja_windows` (ícone `Shell_NotifyIconW` numa janela escondida) e `ui_cliente_windows` (conexão com batimento e reconexão). O `install` e o pacote do Windows já levam o `kiosk-ui.exe`; o serviço ainda não o inicia.
+- Detalhes e o que o CI não prova (o desenho do ícone) na seção da etapa 2 da [ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md).
 
 ## Aceites
 

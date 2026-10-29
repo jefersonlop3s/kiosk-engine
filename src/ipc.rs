@@ -76,8 +76,9 @@ impl std::fmt::Display for ErroIpc {
 
 impl std::error::Error for ErroIpc {}
 
-/// Decodifica uma linha recebida da UI.
-pub fn decodificar_da_ui(linha: &[u8]) -> Result<DaUi, ErroIpc> {
+/// Confere tamanho, UTF-8, objeto JSON e versão exata, e devolve o objeto sem o campo `v`. É o
+/// que os dois lados fazem antes de olhar o tipo da mensagem.
+fn desembrulhar(linha: &[u8]) -> Result<serde_json::Value, ErroIpc> {
     if linha.len() > MAX_MENSAGEM_BYTES {
         return Err(ErroIpc::MuitoGrande(linha.len()));
     }
@@ -96,6 +97,12 @@ pub fn decodificar_da_ui(linha: &[u8]) -> Result<DaUi, ErroIpc> {
             u32::try_from(versao).unwrap_or(u32::MAX),
         ));
     }
+    Ok(valor)
+}
+
+/// Decodifica uma linha recebida da UI.
+pub fn decodificar_da_ui(linha: &[u8]) -> Result<DaUi, ErroIpc> {
+    let valor = desembrulhar(linha)?;
     let msg: DaUi = serde_json::from_value(valor).map_err(|e| ErroIpc::Json(e.to_string()))?;
     if let DaUi::AvisoExibido { marco } = msg
         && !crate::motor::AVISOS_SEGUNDOS.contains(&marco)
@@ -103,6 +110,24 @@ pub fn decodificar_da_ui(linha: &[u8]) -> Result<DaUi, ErroIpc> {
         return Err(ErroIpc::MarcoInvalido(marco));
     }
     Ok(msg)
+}
+
+/// Decodifica uma linha recebida do serviço, do lado da UI. O serviço é de confiança, mas a UI
+/// confere do mesmo jeito: uma linha ruim não pode derrubá-la nem mostrar texto fora do esquema.
+pub fn decodificar_para_ui(linha: &[u8]) -> Result<ParaUi, ErroIpc> {
+    let valor = desembrulhar(linha)?;
+    serde_json::from_value(valor).map_err(|e| ErroIpc::Json(e.to_string()))
+}
+
+/// Serializa uma mensagem da UI para o serviço (uma linha terminada em `\n`).
+pub fn codificar_da_ui(msg: &DaUi) -> Vec<u8> {
+    let mut v = serde_json::to_vec(&Envelope {
+        v: VERSAO_PROTOCOLO,
+        msg,
+    })
+    .expect("mensagens do protocolo sempre serializam");
+    v.push(b'\n');
+    v
 }
 
 /// Serializa uma mensagem para a UI (uma linha terminada em `\n`).

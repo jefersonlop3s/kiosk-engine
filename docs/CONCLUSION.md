@@ -660,9 +660,10 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - Desvios da ADR-004 (um pipe só; conferência do executável) registrados na própria ADR.
 - `tests/ui_windows.rs` (7 testes) no CI Windows; a conta padrão de teste foi extraída para `tests/comum`.
 
-## 2026-10-30 — Teste da 0.0.7 no PC real; `kioskctl log` sem perfil
+## 2026-10-30 — Bandeja, etapa 2: `kiosk-ui.exe` (E-004 F3)
 
-- **Visto no PC real (0.0.7)**: `install` mostra `versão instalada 0.0.7 (1dada17)`; `status` mostra a versão da pasta e a instalada, iguais; `kioskd version` e `kioskctl version` com commit, data, alvo e perfil; a conta comum gerou 5 `AUTHZ_FAIL` em 30 s (limite de 5 por minuto) com a mensagem em pt-BR e em en-US; o administrador elevado gerou o código.
-- **Achado**: o `AGENT_STOPPED` não tem perfil e o `kioskctl log` exigia `--profile`, então os pais nunca o veriam. Corrigido: `--profile` passou a ser opcional (a API já aceitava). Teste em `tests/cli.rs`: o evento do PC só aparece sem `--profile`, e os dos perfis ganham o marcador do perfil.
-- **Ainda não visto no PC**: `AGENT_STOPPED` (parar o serviço por mais de 30 s), a recusa com o serviço parado (GC-21), GC-16 e GC-20.
+- `kiosk-ui.exe` (sem console, sem menu, sem "sair"), `bandeja` (dica e aviso nos três idiomas, puros), `bandeja_windows` (ícone e balão) e `ui_cliente_windows` (conexão com batimento, reconexão e entrega). O protocolo ganhou `codificar_da_ui` e `decodificar_para_ui`.
+- `install` e o pacote do Windows passam a levar o `kiosk-ui.exe`. O serviço ainda não o inicia (etapa 3).
+- Testes: `tests/bandeja.rs` (textos e protocolo, no Linux); no CI Windows, o cliente contra o servidor real (espera o serviço, batimento, aviso, confirmação, serviço que cai e volta) e o `kiosk-ui.exe` de verdade, no modo de teste (texto no idioma da conta e confirmação) e com a bandeja real (sobe, conecta, fica vivo).
+- **Falta ver no PC**: o desenho do ícone e do balão (o runner do CI não tem como mostrar).
 

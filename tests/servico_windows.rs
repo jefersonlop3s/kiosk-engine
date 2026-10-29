@@ -251,7 +251,11 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
         path_antes.iter().all(|e| path_instalado.contains(e)),
         "o instalar perdeu entradas do PATH"
     );
-    assert!(programa.join("kioskd.exe").exists() && programa.join("kioskctl.exe").exists());
+    assert!(
+        programa.join("kioskd.exe").exists()
+            && programa.join("kioskctl.exe").exists()
+            && programa.join("kiosk-ui.exe").exists()
+    );
     let sc = Command::new("sc")
         .args(["qfailure", "kiosk"])
         .output()
