@@ -10,6 +10,8 @@ use uuid::Uuid;
 
 use crate::database_schema::*;
 use crate::db_manager::{EventContext, KioskDbManager};
+use crate::detalhes::Detalhe;
+use crate::i18n::idioma;
 use crate::motor::{AVISOS_SEGUNDOS, Decisao, Instante, Motivo};
 
 /// Intervalo mínimo entre dois bloqueios de sessão do mesmo SID.
@@ -151,9 +153,27 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         )
         .with_profile(perfil);
         if let Err(err) = self.db.record_event(&e).await {
-            rel.erros
-                .push(format!("evento {} não gravado: {err}", tipo.as_str()));
+            rel.erros.push(
+                Detalhe::EventNotRecorded {
+                    event_type: tipo.as_str().to_owned(),
+                    error: err.to_string(),
+                }
+                .texto(idioma()),
+            );
         }
+    }
+
+    /// Falha que vai para o log forense (como código) e para o relatório (no idioma do serviço).
+    async fn falha(&self, rel: &mut Relatorio, perfil: Option<Uuid>, d: Detalhe) {
+        self.evento(
+            rel,
+            perfil,
+            EventType::InternalError,
+            TransactionStatus::Failure,
+            d.codigo(),
+        )
+        .await;
+        rel.erros.push(d.texto(idioma()));
     }
 
     /// Um ciclo do agente em `agora`.
@@ -164,32 +184,16 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         let visto = match self.sistema.processos() {
             Ok(p) => p,
             Err(e) => {
-                let msg = format!("falha ao listar processos: {e}");
-                self.evento(
-                    &mut rel,
-                    None,
-                    EventType::InternalError,
-                    TransactionStatus::Failure,
-                    msg.clone(),
-                )
-                .await;
-                rel.erros.push(msg);
+                self.falha(&mut rel, None, Detalhe::ListProcessesFailed { error: e })
+                    .await;
                 return rel;
             }
         };
         let sessoes = match self.sistema.sessoes_ativas() {
             Ok(x) => x,
             Err(e) => {
-                let msg = format!("falha ao listar sessões: {e}");
-                self.evento(
-                    &mut rel,
-                    None,
-                    EventType::InternalError,
-                    TransactionStatus::Failure,
-                    msg.clone(),
-                )
-                .await;
-                rel.erros.push(msg);
+                self.falha(&mut rel, None, Detalhe::ListSessionsFailed { error: e })
+                    .await;
                 Vec::new()
             }
         };
@@ -214,7 +218,12 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                         .registrar_uso(&self.ctx, *perfil_id, *app_id, ini, agora_utc, &self.tz)
                         .await
                     {
-                        rel.erros.push(format!("uso não contabilizado: {e}"));
+                        rel.erros.push(
+                            Detalhe::UsageNotRecorded {
+                                error: e.to_string(),
+                            }
+                            .texto(idioma()),
+                        );
                     }
                 }
                 // tempo de sessão: só conta se a sessão estava ativa no tick anterior também
@@ -225,8 +234,12 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                         .registrar_sessao(&self.ctx, *perfil_id, ini, agora_utc, &self.tz)
                         .await
                 {
-                    rel.erros
-                        .push(format!("tempo de sessão não contabilizado: {e}"));
+                    rel.erros.push(
+                        Detalhe::SessionTimeNotRecorded {
+                            error: e.to_string(),
+                        }
+                        .texto(idioma()),
+                    );
                 }
             }
             // 2. sessão do perfil (uma sessão bloqueada já está contida: nada a fazer)
@@ -247,7 +260,12 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                         )
                         .await
                     }
-                    Err(e) => rel.erros.push(format!("decisão de sessão falhou: {e}")),
+                    Err(e) => rel.erros.push(
+                        Detalhe::SessionDecisionFailed {
+                            error: e.to_string(),
+                        }
+                        .texto(idioma()),
+                    ),
                 }
             }
             // 3. cada app em execução
@@ -265,7 +283,12 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                     .await
                 {
                     Ok(()) => {}
-                    Err(e) => rel.erros.push(format!("decisão de app falhou: {e}")),
+                    Err(e) => rel.erros.push(
+                        Detalhe::AppDecisionFailed {
+                            error: e.to_string(),
+                        }
+                        .texto(idioma()),
+                    ),
                 }
             }
         }
@@ -311,7 +334,12 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                 let id = match self.db.perfil_por_sid(&p.sid).await {
                     Ok(x) => x.map(|c| c.profile_id),
                     Err(e) => {
-                        rel.erros.push(format!("perfil não consultado: {e}"));
+                        rel.erros.push(
+                            Detalhe::ProfileNotQueried {
+                                error: e.to_string(),
+                            }
+                            .texto(idioma()),
+                        );
                         continue;
                     }
                 };
@@ -333,7 +361,12 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                         apps.insert(chave.clone(), a);
                     }
                     Err(e) => {
-                        rel.erros.push(format!("app não consultado: {e}"));
+                        rel.erros.push(
+                            Detalhe::AppNotQueried {
+                                error: e.to_string(),
+                            }
+                            .texto(idioma()),
+                        );
                         continue;
                     }
                 }
@@ -358,7 +391,12 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                         perfis.insert(sid.clone(), x.map(|c| c.profile_id));
                     }
                     Err(e) => {
-                        rel.erros.push(format!("perfil não consultado: {e}"));
+                        rel.erros.push(
+                            Detalhe::ProfileNotQueried {
+                                error: e.to_string(),
+                            }
+                            .texto(idioma()),
+                        );
                         continue;
                     }
                 }
@@ -454,13 +492,13 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         match self.sistema.avisar(&aviso) {
             Ok(()) => {
                 self.avisados.insert((perfil, app_id, motivo, marco));
-                let det = format!(
-                    "aviso de {marco}s: restam {restante}s ({}){}",
-                    motivo.as_str(),
-                    nome.as_deref()
-                        .map(|n| format!(" app {n}"))
-                        .unwrap_or_default()
-                );
+                let det = Detalhe::WarningShown {
+                    marker: marco,
+                    remaining: restante,
+                    reason: motivo.as_str().to_owned(),
+                    app: nome.clone(),
+                }
+                .codigo();
                 self.evento(
                     rel,
                     Some(perfil),
@@ -477,16 +515,11 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                 });
             }
             Err(e) => {
-                let msg = format!("aviso não exibido ({}): {e}", motivo.as_str());
-                self.evento(
-                    rel,
-                    Some(perfil),
-                    EventType::InternalError,
-                    TransactionStatus::Failure,
-                    msg.clone(),
-                )
-                .await;
-                rel.erros.push(msg);
+                let d = Detalhe::WarningFailed {
+                    reason: motivo.as_str().to_owned(),
+                    error: e,
+                };
+                self.falha(rel, Some(perfil), d).await;
             }
         }
     }
@@ -507,12 +540,12 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                 Ok(()) => {
                     self.tentativas.remove(&p.pid);
                     self.aguardando.insert(p.pid, 0);
-                    let det = format!(
-                        "app {} (pid {}) encerrado: {}",
-                        p.process_name,
-                        p.pid,
-                        motivo.as_str()
-                    );
+                    let det = Detalhe::AppTerminated {
+                        process: p.process_name.clone(),
+                        pid: p.pid,
+                        reason: motivo.as_str().to_owned(),
+                    }
+                    .codigo();
                     self.evento(
                         rel,
                         Some(perfil),
@@ -531,25 +564,21 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                     let n = self.tentativas.entry(p.pid).or_insert(0);
                     *n += 1;
                     let n = *n;
-                    let msg = format!(
-                        "falha ao encerrar {} (pid {}), tentativa {n}: {e}",
-                        p.process_name, p.pid
-                    );
-                    self.evento(
-                        rel,
-                        Some(perfil),
-                        EventType::InternalError,
-                        TransactionStatus::Failure,
-                        msg.clone(),
-                    )
-                    .await;
-                    rel.erros.push(msg);
+                    let d = Detalhe::TerminateFailed {
+                        process: p.process_name.clone(),
+                        pid: p.pid,
+                        attempt: n,
+                        error: e,
+                    };
+                    self.falha(rel, Some(perfil), d).await;
                     if n >= MAX_TENTATIVAS_ENCERRAR {
                         self.abandonados.insert(p.pid);
-                        let det = format!(
-                            "processo {} (pid {}) não encerra após {n} tentativas",
-                            p.process_name, p.pid
-                        );
+                        let det = Detalhe::ProcessWontTerminate {
+                            process: p.process_name.clone(),
+                            pid: p.pid,
+                            attempts: n,
+                        }
+                        .codigo();
                         self.evento(
                             rel,
                             Some(perfil),
@@ -584,10 +613,11 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             match self.sistema.encerrar_sessao(sid) {
                 Ok(()) => {
                     self.ultimo_bloqueio.insert(sid.to_owned(), agora);
-                    let det = format!(
-                        "sessão encerrada (logoff) após {feitos} bloqueios desfeitos: {}",
-                        motivo.as_str()
-                    );
+                    let det = Detalhe::SessionLoggedOff {
+                        locks: feitos,
+                        reason: motivo.as_str().to_owned(),
+                    }
+                    .codigo();
                     self.evento(
                         rel,
                         Some(perfil),
@@ -602,16 +632,11 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                     });
                 }
                 Err(e) => {
-                    let msg = format!("sessão não encerrada ({}): {e}", motivo.as_str());
-                    self.evento(
-                        rel,
-                        Some(perfil),
-                        EventType::InternalError,
-                        TransactionStatus::Failure,
-                        msg.clone(),
-                    )
-                    .await;
-                    rel.erros.push(msg);
+                    let d = Detalhe::LogoffFailed {
+                        reason: motivo.as_str().to_owned(),
+                        error: e,
+                    };
+                    self.falha(rel, Some(perfil), d).await;
                 }
             }
             return;
@@ -620,7 +645,10 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             Ok(()) => {
                 self.ultimo_bloqueio.insert(sid.to_owned(), agora);
                 self.bloqueios.insert(sid.to_owned(), feitos + 1);
-                let det = format!("sessão bloqueada: {}", motivo.as_str());
+                let det = Detalhe::SessionLocked {
+                    reason: motivo.as_str().to_owned(),
+                }
+                .codigo();
                 self.evento(
                     rel,
                     Some(perfil),
@@ -635,16 +663,11 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                 });
             }
             Err(e) => {
-                let msg = format!("sessão não bloqueada ({}): {e}", motivo.as_str());
-                self.evento(
-                    rel,
-                    Some(perfil),
-                    EventType::InternalError,
-                    TransactionStatus::Failure,
-                    msg.clone(),
-                )
-                .await;
-                rel.erros.push(msg);
+                let d = Detalhe::LockFailed {
+                    reason: motivo.as_str().to_owned(),
+                    error: e,
+                };
+                self.falha(rel, Some(perfil), d).await;
             }
         }
     }

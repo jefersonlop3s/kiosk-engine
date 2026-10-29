@@ -40,14 +40,15 @@ Critério: cada fase do épico vale 100% concluída, 50% parcial e 0% não inici
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) Fundação e dados | fases concluídas | F1–F4 concluídas | 100% | — |
 | [E-002](epics/E-002-log-forense.md) Log forense | concluído | F1–F3 concluídas | 100% | Hash encadeado, adiado pelo dono (fora das fases) |
 | [E-003](epics/E-003-motor-de-regras-e-uso.md) Motor e uso | concluído | F1–F3 concluídas | 100% | — |
-| [E-004](epics/E-004-agente-windows-enforcement.md) Agente Windows | em andamento | F0 concluída; F1, F2, F3 e F4 parciais | 60% | Reinício real (GC-16), logoff (GC-20), bandeja no lugar das caixas de mensagem (GC-17), batimento da UI |
+| [E-004](epics/E-004-agente-windows-enforcement.md) Agente Windows | em andamento | F0 e F1 concluídas; F2, F3 e F4 parciais | 70% | Agente como SYSTEM na conta da criança (GC-16), logoff (GC-20), bandeja no lugar das caixas de mensagem (GC-17), batimento da UI |
 | [E-005](epics/E-005-api-comando-e-pareamento.md) API e pareamento | concluído nas fases | F1–F3 concluídas | 100% | Modo LAN com HTTPS (GC-15, fora das fases) |
 | [E-006](epics/E-006-app-mobile-administracao.md) App mobile dos pais | congelado | fases a definir | 0% | Condição de retomada |
-| [E-007](epics/E-007-onboarding-e-instalador.md) Onboarding e instalador | em andamento | F2 parcial; F1 e F3 não iniciadas | 15% | Reinício real (GC-16), assistente `kioskd configurar`, `.msi` |
+| [E-007](epics/E-007-onboarding-e-instalador.md) Onboarding e instalador | em andamento | F2 concluída; F1 e F3 não iniciadas | 35% | Assistente `kioskd configurar`, `.msi` |
 | [E-008](epics/E-008-cliente-grafico-dos-pais.md) Cliente gráfico dos pais | proposto | F1–F4 não iniciadas | 0% | Listagem remota na API (F1); a exigência de administrador no pareamento já foi antecipada |
 | [E-009](epics/E-009-servico-linux.md) Serviço Linux | congelado | fases a definir | 0% | Condição de retomada |
 | [E-010](epics/E-010-servico-macos.md) Serviço macOS | congelado | fases a definir | 0% | Condição de retomada |
 | [E-011](epics/E-011-servico-android.md) Serviço Android | congelado | fases a definir | 0% | Condição de retomada |
+| [E-012](epics/E-012-internacionalizacao.md) Idiomas e CLI em inglês | em andamento | F1 e F2 concluídas; F3 parcial | 85% | Ver o aviso à criança num Windows real, com a conta em outro idioma |
 
 Leitura rápida: a base comum (dados, log, motor, API) está pronta; o produto no Windows depende de fechar o E-004 e o E-007; o resto vem depois.
 

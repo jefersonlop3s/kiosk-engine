@@ -349,8 +349,8 @@ async fn parametros_invalidos_de_dispositivo_autenticado_sao_recusados_e_registr
     .await
     .unwrap();
     assert!(motivos.iter().any(|m| m.contains("86400")));
-    assert!(motivos.iter().any(|m| m.contains("perfil inexistente")));
-    assert!(motivos.iter().any(|m| m.contains("ação desconhecida")));
+    assert!(motivos.iter().any(|m| m.contains("profile does not exist")));
+    assert!(motivos.iter().any(|m| m.contains("unknown action")));
 }
 
 #[tokio::test]

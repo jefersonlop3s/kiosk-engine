@@ -370,7 +370,7 @@ async fn retencao_remove_so_o_que_passou_de_90_dias_e_registra_a_limpeza() {
     assert!(
         restantes
             .iter()
-            .any(|d| d.contains("2 eventos com mais de 90 dias")),
+            .any(|d| d.contains("RETENTION_PURGED") && d.contains("\"removed\":2")),
         "limpeza fica registrada"
     );
 

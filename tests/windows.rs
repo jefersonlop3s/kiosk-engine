@@ -250,6 +250,7 @@ fn perfil_criado_pelo_nome_da_conta_recebe_o_sid_do_windows() {
 fn sem_kiosk_db_o_padrao_no_windows_e_o_banco_da_maquina() {
     let saida = Command::new(KIOSKD)
         .args(["perfil", "listar"])
+        .env("KIOSK_LANG", "pt-BR")
         .env_remove("KIOSK_DB")
         .output()
         .unwrap();
@@ -273,4 +274,96 @@ fn o_runner_do_ci_e_administrador_elevado() {
         kiosk_engine::sistema_windows::administrador_elevado(),
         Ok(true)
     );
+}
+
+/// Valor do registro do usuário atual, restaurado ao sair do escopo.
+struct ValorDoRegistro {
+    chave: &'static str,
+    nome: &'static str,
+    antes: Option<(String, String)>,
+}
+
+impl ValorDoRegistro {
+    /// Grava `dados` (e lembra do que havia, para restaurar).
+    fn definir(chave: &'static str, nome: &'static str, tipo: &str, dados: &str) -> Self {
+        let q = Command::new("reg")
+            .args(["query", chave, "/v", nome])
+            .output()
+            .unwrap();
+        let t = String::from_utf8_lossy(&q.stdout).into_owned();
+        let antes = t
+            .lines()
+            .find(|l| l.trim_start().starts_with(nome))
+            .and_then(|l| {
+                let mut partes = l.split_whitespace();
+                partes.next()?;
+                let tipo = partes.next()?.to_owned();
+                Some((tipo, partes.collect::<Vec<_>>().join(" ")))
+            });
+        let o = Command::new("reg")
+            .args(["add", chave, "/v", nome, "/t", tipo, "/d", dados, "/f"])
+            .output()
+            .unwrap();
+        assert!(
+            o.status.success(),
+            "reg add: {}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+        Self { chave, nome, antes }
+    }
+
+    fn apagar(chave: &'static str, nome: &'static str) -> Self {
+        let g = Self::definir(chave, nome, "REG_SZ", "x");
+        let _ = Command::new("reg")
+            .args(["delete", chave, "/v", nome, "/f"])
+            .output();
+        g
+    }
+}
+
+impl Drop for ValorDoRegistro {
+    fn drop(&mut self) {
+        let _ = match &self.antes {
+            Some((tipo, dados)) => Command::new("reg")
+                .args([
+                    "add", self.chave, "/v", self.nome, "/t", tipo, "/d", dados, "/f",
+                ])
+                .output(),
+            None => Command::new("reg")
+                .args(["delete", self.chave, "/v", self.nome, "/f"])
+                .output(),
+        };
+    }
+}
+
+#[test]
+fn o_idioma_da_conta_vem_do_perfil_carregado_dela() {
+    use kiosk_engine::i18n::Idioma;
+    use kiosk_engine::sistema_windows::idioma_da_conta;
+
+    // HKCU é o HKEY_USERS\<SID> de quem roda o teste: o mesmo lugar que o serviço lê
+    let desktop = r"HKCU\Control Panel\Desktop";
+    let internacional = r"HKCU\Control Panel\International";
+    let sid = sid_atual();
+
+    // 1º PreferredUILanguages (o idioma de exibição), com o primeiro da lista
+    let _g1 = ValorDoRegistro::definir(
+        desktop,
+        "PreferredUILanguages",
+        "REG_MULTI_SZ",
+        r"pt-BR\0en-US",
+    );
+    let _g2 = ValorDoRegistro::definir(internacional, "LocaleName", "REG_SZ", "es-ES");
+    assert_eq!(idioma_da_conta(&sid), Some(Idioma::PtBr));
+
+    // sem ele, o LocaleName da conta
+    let _g3 = ValorDoRegistro::apagar(desktop, "PreferredUILanguages");
+    assert_eq!(idioma_da_conta(&sid), Some(Idioma::EsEs));
+
+    // idioma que o kiosk não traduz: sem resposta, e quem chama usa o do serviço
+    let _g4 = ValorDoRegistro::definir(internacional, "LocaleName", "REG_SZ", "fr-FR");
+    assert_eq!(idioma_da_conta(&sid), None);
+
+    // conta que não está logada (SID sem perfil carregado)
+    assert_eq!(idioma_da_conta("S-1-5-21-1-2-3-9999"), None);
 }

@@ -70,3 +70,19 @@ fn todo_comando_tem_fluxograma_e_o_documento_nao_cita_comando_inexistente() {
         "o documento cita comandos que não existem: {sobrando:?}"
     );
 }
+
+/// ADR-010: a página de equivalentes em português lista cada par das tabelas do código.
+#[test]
+fn a_pagina_em_portugues_lista_cada_equivalente_do_codigo() {
+    let pagina = include_str!("../docs/runbooks/comandos-em-portugues.md");
+    let faltando: Vec<String> = kiosk_engine::cli::COMANDOS
+        .iter()
+        .chain(kiosk_engine::cli::OPCOES)
+        .map(|(pt, en)| format!("| `{pt}` | `{en}` |"))
+        .filter(|linha| !pagina.contains(linha.as_str()))
+        .collect();
+    assert!(
+        faltando.is_empty(),
+        "faltam em docs/runbooks/comandos-em-portugues.md: {faltando:?}"
+    );
+}

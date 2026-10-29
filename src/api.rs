@@ -27,6 +27,7 @@ use crate::assinatura::{
 use crate::comandos::{Comando, acao_do_nome, interpretar};
 use crate::database_schema::*;
 use crate::db_manager::{EventContext, KioskDbManager};
+use crate::i18n::Msg;
 use crate::pareamento::Rejeicao;
 
 /// Corpo máximo de uma requisição (Camada 0).
@@ -39,16 +40,45 @@ const CORPO_ERRO: &str = r#"{"status":"error"}"#;
 #[derive(Debug)]
 pub enum ErroServidor {
     SemEnderecos,
-    EnderecoRecusado(SocketAddr, &'static str),
+    EnderecoRecusado(SocketAddr, MotivoEndereco),
     Io(std::io::Error),
+}
+
+/// Por que um endereço de escuta foi recusado (ADR-005).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MotivoEndereco {
+    Curinga,
+    ForaDaRede,
+}
+
+impl MotivoEndereco {
+    pub fn msg(self) -> Msg {
+        match self {
+            Self::Curinga => Msg::EnderecoCuringa,
+            Self::ForaDaRede => Msg::EnderecoForaDaRede,
+        }
+    }
 }
 
 impl std::fmt::Display for ErroServidor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SemEnderecos => f.write_str("nenhum endereço de escuta configurado (ADR-005)"),
-            Self::EnderecoRecusado(a, m) => write!(f, "endereço {a} recusado: {m}"),
-            Self::Io(e) => write!(f, "falha de E/S: {e}"),
+            Self::SemEnderecos => write!(f, "{}", Msg::SemEnderecosConfigurados),
+            Self::EnderecoRecusado(a, m) => write!(
+                f,
+                "{}",
+                Msg::EnderecoRecusado {
+                    endereco: a.to_string(),
+                    motivo: m.msg().to_string(),
+                }
+            ),
+            Self::Io(e) => write!(
+                f,
+                "{}",
+                Msg::FalhaDeEs {
+                    erro: e.to_string()
+                }
+            ),
         }
     }
 }
@@ -57,9 +87,9 @@ impl std::error::Error for ErroServidor {}
 
 /// Política de rede da ADR-005: só loopback e a rede privada Tailscale (CGNAT `100.64.0.0/10` e
 /// `fd7a:115c:a1e0::/48`). Curinga e LAN são recusados; a LAN exige HTTPS, ainda não implementado.
-pub fn endereco_permitido(ip: IpAddr) -> Result<(), &'static str> {
+pub fn endereco_permitido(ip: IpAddr) -> Result<(), MotivoEndereco> {
     if ip.is_unspecified() {
-        return Err("endereço curinga (0.0.0.0 ou ::) não é permitido");
+        return Err(MotivoEndereco::Curinga);
     }
     if ip.is_loopback() {
         return Ok(());
@@ -77,7 +107,7 @@ pub fn endereco_permitido(ip: IpAddr) -> Result<(), &'static str> {
     if tailscale {
         Ok(())
     } else {
-        Err("só loopback e rede Tailscale; LAN exige HTTPS, ainda não implementado (ADR-005)")
+        Err(MotivoEndereco::ForaDaRede)
     }
 }
 
@@ -182,10 +212,11 @@ async fn recusar_validacao(
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+/// Corpo do pareamento. A API fala só inglês (ADR-010).
 struct PareamentoBruto {
-    codigo: String,
-    chave_publica: String,
-    nome: String,
+    code: String,
+    public_key: String,
+    name: String,
 }
 
 /// `POST /api/pair`: o código de uso único, mostrado na conta de administrador, é a credencial.
@@ -202,16 +233,16 @@ async fn parear(
     let bruto: PareamentoBruto = match serde_json::from_slice(&corpo) {
         Ok(b) => b,
         Err(e) => {
-            let motivo = format!("corpo de pareamento inválido: {e}");
+            let motivo = format!("invalid pairing body: {e}");
             return recusar_validacao(&db, &ctx, ActionType::PairDevice, motivo).await;
         }
     };
-    let Some(chave) = crate::pareamento::decodificar_chave_publica(&bruto.chave_publica) else {
-        let motivo = "chave pública de pareamento não é base64".to_string();
+    let Some(chave) = crate::pareamento::decodificar_chave_publica(&bruto.public_key) else {
+        let motivo = "pairing public key is not base64".to_string();
         return recusar_validacao(&db, &ctx, ActionType::PairDevice, motivo).await;
     };
     match db
-        .parear_dispositivo(&ctx, &bruto.codigo, &chave, &bruto.nome, Utc::now())
+        .parear_dispositivo(&ctx, &bruto.code, &chave, &bruto.name, Utc::now())
         .await
     {
         Ok(id) => resposta(
@@ -267,21 +298,21 @@ async fn comando(
     let acao_log = acao_do_nome(&nome).unwrap_or(ActionType::System);
     let cmd = match interpretar(&nome, &corpo, agora) {
         Ok(c) => c,
-        Err(motivo) => return recusar_validacao(&db, &ctx, acao_log, motivo).await,
+        Err(motivo) => return recusar_validacao(&db, &ctx, acao_log, motivo.to_string()).await,
     };
     let referencias = match &cmd {
         Comando::AddRule(r) => vec![
-            ("perfil", db.existe_perfil(r.profile_id).await),
+            ("profile", db.existe_perfil(r.profile_id).await),
             ("app", db.existe_app(r.app_id).await),
         ],
         Comando::ActivateRule { rule_id }
         | Comando::RevokeRule { rule_id }
         | Comando::ModifyLimit { rule_id, .. } => {
-            vec![("regra", db.existe_regra(*rule_id).await)]
+            vec![("rule", db.existe_regra(*rule_id).await)]
         }
-        Comando::Usage { profile_id, .. } => vec![("perfil", db.existe_perfil(*profile_id).await)],
+        Comando::Usage { profile_id, .. } => vec![("profile", db.existe_perfil(*profile_id).await)],
         Comando::Log(c) => match c.profile_id {
-            Some(p) => vec![("perfil", db.existe_perfil(p).await)],
+            Some(p) => vec![("profile", db.existe_perfil(p).await)],
             None => vec![],
         },
     };
@@ -289,8 +320,13 @@ async fn comando(
         match existe {
             Ok(true) => {}
             Ok(false) => {
-                return recusar_validacao(&db, &ctx, cmd.acao(), format!("{nome_ref} inexistente"))
-                    .await;
+                return recusar_validacao(
+                    &db,
+                    &ctx,
+                    cmd.acao(),
+                    format!("{nome_ref} does not exist"),
+                )
+                .await;
             }
             Err(_) => return erro_interno(),
         }

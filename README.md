@@ -66,11 +66,15 @@ Quando duas regras se aplicam, vale a mais restritiva. Programa monitorado sem r
 2. Crie uma conta local **padrão**, sem administrador, para cada criança.
 3. Num PowerShell **como Administrador**, na pasta extraída, instale o serviço:
    ```powershell
-   .\kioskd.exe instalar --escutar "SEU_IP_TAILSCALE:8443,127.0.0.1:8443"
+   .\kioskd.exe install --listen "SEU_IP_TAILSCALE:8443,127.0.0.1:8443"
    ```
 4. Cadastre as crianças, os programas e as regras, gere o código e pareie o cliente.
 
 O passo a passo completo, com cada comando, está no [runbook](docs/runbooks/api-e-cli.md). O fluxo de cada comando, com o caminho da informação entre o cliente e o serviço, está nos [fluxogramas dos comandos](docs/architecture/fluxos-dos-comandos.md).
+
+## Idiomas
+
+Mensagens em **inglês (en-US), português (pt-BR) e espanhol (es-ES)**, no idioma de quem as lê: os pais no cliente, a criança nos avisos, no idioma da conta dela. Escolha com `KIOSK_LANG` ou pelo idioma do Windows. Os nomes dos comandos não se traduzem: são em inglês, com os equivalentes em português ([lista](docs/runbooks/comandos-em-portugues.md)). Detalhes no [runbook](docs/runbooks/api-e-cli.md#idioma).
 
 ## Plataformas
 
@@ -81,6 +85,7 @@ O passo a passo completo, com cada comando, está no [runbook](docs/runbooks/api
 
 ## Documentação
 
+- [Comandos em português](docs/runbooks/comandos-em-portugues.md): os comandos são documentados em inglês, e todos têm equivalente em português, por exemplo `kioskd estado` = `kioskd status`.
 - [Arquitetura](docs/architecture/README.md) e [decisões (ADRs)](docs/adr/ADR-INDEX.md).
 - [ROADMAP](docs/ROADMAP.md), com a porcentagem de cada épico, e [pendências](docs/PENDING.md).
 - [Histórico de entregas](docs/CONCLUSION.md) e [organização da documentação](docs/README.md).

@@ -4,10 +4,31 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.5] - 2026-10-29
+
+Ainda **pré-lançamento**. Idiomas (en-US, pt-BR, es-ES), comandos em inglês com o português equivalente, pasta do kiosk no PATH e exigência de administrador para gerar o código de pareamento. **Atualize o `kioskd` e o `kioskctl` juntos**: o corpo do pareamento mudou e um `kioskctl` 0.0.4 não pareia com um serviço 0.0.5. Dispositivos já pareados continuam funcionando. O log gravado pela 0.0.4 mantém o texto em português.
+
+### Adicionado
+- Mensagens em **en-US, pt-BR e es-ES**, no idioma de quem as lê (ADR-010): `kioskd` e `kioskctl` por `KIOSK_LANG` ou pelo idioma do Windows; serviço no idioma de quem o instalou; avisos à criança no idioma da conta dela. Cada mensagem exige os três idiomas, ou o build falha.
+- `kioskctl log` mostra o detalhe dos eventos traduzido; o log forense passa a guardar um código (JSON) para o enforcement. Linhas antigas aparecem como foram gravadas.
+- Dias da semana aceitos também em espanhol (`lun,mar,mie,jue,vie,sab,dom`); `uninstall --purge-data` pede `DELETE`, `APAGAR` ou `BORRAR`, conforme o idioma.
+
+### Alterado
+- Códigos de motivo no log e no protocolo da UI em inglês (`APP_DAILY_LIMIT`, `TOTAL_DAILY_LIMIT`, `APP_BLOCKED`, `APP_OUTSIDE_WINDOW`, `OUTSIDE_WINDOW`).
+- Detalhes das falhas da API (autenticação e validação), gravados só no banco local, em inglês.
+- Comandos e opções do `kioskd` e do `kioskctl` em inglês, que é a convenção (`kioskd status`, `kioskd install --listen`, `kioskd pairing-code`, `kioskctl pair --server` etc.). **Os nomes em português continuam valendo, sem prazo**, e podem ser misturados. Lista em `docs/runbooks/comandos-em-portugues.md`, que também vai no pacote do release (ADR-010).
+- Dias da semana aceitam `mon,tue,...`, além de `seg,ter,...` e de `0` a `6`.
+- `kioskd install` registra o serviço como `kioskd.exe service`. O registro da 0.0.4 (`servico`) segue funcionando; reinstalar atualiza.
+- **Quebra**: o corpo de `POST /api/pair` passa a `code`, `public_key` e `name`, porque a API fala só inglês. Um `kioskctl` 0.0.4 não pareia com um serviço novo; atualize os dois. Dispositivos já pareados não são afetados.
+
+### Adicionado
+- `kioskd instalar` põe `C:\Program Files\kiosk` no PATH do sistema, sem duplicar e preservando as outras entradas, e avisa o Windows. Em janelas novas, `kioskd` e `kioskctl` funcionam de qualquer pasta. `kioskd desinstalar` tira a entrada; `kioskd estado` mostra se ela está lá.
+
 ### Segurança
 - `kioskd codigo-pareamento` no Windows exige administrador elevado. Sem isso, recusa, grava `AUTHZ_FAIL` no log forense e não cria código. Antes, sem o `kioskd instalar` ou com `KIOSK_DB` em outro lugar, uma conta padrão conseguia gerar código e parear um cliente.
 
 ### Documentação
+- E-012 "Internacionalização" e ADR-010 propostos: en-US, pt-BR e es-ES nas interfaces, no serviço e nas respostas; comandos e opções da CLI em inglês, com os nomes em português aceitos até a 0.1.0.
 - `README.md` novo: o que é o kiosk, como o cliente e o serviço funcionam, conceitos, plataformas e dois fluxogramas para entender o projeto num olhar.
 - ROADMAP com a maturidade de cada épico em porcentagem (critério: média das fases, concluída 100%, parcial 50%).
 - Responsáveis são os administradores: todos gerem todas as contas monitoradas, no Windows, no Linux e no macOS (decisão do dono).

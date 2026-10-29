@@ -524,3 +524,60 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Observação**: definir `KIOSK_DB` e `KIOSK_LISTEN` na janela antes do `instalar` não é necessário; o endereço vai para o serviço pelo `--escutar`, e o banco usa o padrão.
 - Nenhum dado do log do dono (IP, conta, caminhos pessoais) foi copiado para o repositório.
 
+## 2026-10-29 — Serviço volta sozinho após reiniciar o Windows; pasta do kiosk no PATH
+
+- **Origem**: teste de reinício do dono com a 0.0.4 e pedido para registrar o diretório de instalação no PATH do sistema (o `kioskd` não era encontrado fora da pasta extraída).
+- **Resultado**:
+  - depois de reiniciar, o `kioskd estado` mostrou o serviço em execução com um PID diferente do da instalação, início automático e conta LocalSystem. Com isso, a [E-007](epics/E-007-onboarding-e-instalador.md) F2 está concluída e o GC-16 se reduz a ver o agente, como SYSTEM, aplicar uma regra na conta da criança;
+  - `kioskd instalar` põe `%ProgramFiles%\kiosk` no `Path` da máquina (`HKLM\...\Session Manager\Environment`), sem duplicar, preservando as outras entradas e o tipo do valor, e avisa o Windows com `WM_SETTINGCHANGE`. `desinstalar` tira a entrada; `estado` mostra se ela está lá. A pasta só aceita escrita de SYSTEM e Administradores, então a entrada no PATH não permite que a criança plante um executável;
+  - fluxogramas de `instalar`, `desinstalar` e `estado` e o runbook atualizados; ROADMAP: E-004 em 70% e E-007 em 35%.
+- **Evidência**: log do dono (nenhum dado pessoal copiado); `tests/servico_windows.rs` no CI Windows confere, pelo `reg query`, que a pasta entra uma vez, que a reinstalação não duplica e que o PATH volta ao original depois do `desinstalar`.
+
+## 2026-10-29 — E-012 e ADR-010: idiomas e CLI em inglês (proposta)
+
+- **Origem**: pedido do dono: en-US, pt-BR e es-ES nas interfaces, no serviço e nas respostas; comandos da CLI com equivalentes em inglês como padrão (`kioskd estado` → `kioskd status`).
+- **Resultado**: [E-012](epics/E-012-internacionalizacao.md) e [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md) **propostos**. A ADR traz a tabela completa de nomes, os apelidos em português até a 0.1.0 (o serviço instalado na 0.0.4 está registrado como `servico`), o catálogo no código com `match` exaustivo, a ordem de escolha do idioma e o log forense com códigos. Nada implementado antes do aceite.
+- **Evidência**: `verificar_refs.py` e `verificar_adr.py` sem erros.
+
+## 2026-10-29 — Aceite da ADR-010 com ajustes do dono
+
+- **Origem**: respostas do dono aos três pontos da [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md).
+- **Resultado**: ADR-010 **Aceita**, com os ajustes registrados na própria ADR:
+  - comandos em português e em inglês permanentes, sem obsolescência;
+  - API só em inglês, inclusive o corpo do pareamento;
+  - documentação em inglês, com uma página de equivalentes em português;
+  - texto no idioma do perfil de quem o vê;
+  - mensagens da CLI traduzidas e palavra de confirmação no idioma da mensagem.
+
+  O [E-012](epics/E-012-internacionalizacao.md) entra em andamento pela F1.
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros.
+
+## 2026-10-29 — E-012 F1: comandos em inglês, português equivalente e API só em inglês
+
+- **Origem**: [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md), aceita com ajustes do dono.
+- **Resultado**:
+  - `src/cli.rs` traz as tabelas português → inglês de comandos e opções. O `kioskd` e o `kioskctl` traduzem os argumentos antes de interpretar, então as duas línguas, inclusive misturadas, seguem o mesmo código;
+  - uso impresso, fluxogramas, runbook e README em inglês; página [comandos em português](runbooks/comandos-em-portugues.md) gerada das tabelas;
+  - corpo do pareamento em inglês (`code`, `public_key`, `name`), uma quebra registrada no CHANGELOG;
+  - `install` registra o serviço como `service`, e o `servico` da 0.0.4 segue valendo.
+- **Evidência local**:
+  - 134 testes no Linux, entre eles `tests/cli_idiomas.rs`: tradução só de comando, subcomando e opção, valores intactos, tabelas sem ambiguidade, o mesmo cadastro nas duas línguas e uso sem português nas linhas de comando;
+  - página conferida contra as tabelas em `tests/documentacao.rs`;
+  - os testes de CLI anteriores, ainda em português, seguem passando;
+  - clippy no Linux e cruzado para Windows; diagramas validados no mermaid-cli.
+- **Evidência no CI Windows**: o teste do serviço instala em inglês e reinstala em português, e confere o registro como `kioskd.exe" service`.
+
+## 2026-10-29 — E-012 F2 e F3: mensagens em en-US, pt-BR e es-ES e log com códigos
+
+- **Origem**: [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md), aceita com ajustes do dono; pedido de seguir com as próximas fases.
+- **Resultado**:
+  - `i18n` (idiomas, escolha, catálogo por macro com os três idiomas obrigatórios) e `detalhes` (detalhe do log como código JSON, traduzido ao ler);
+  - `kioskd`, `kioskctl`, cliente e serviço com todas as mensagens ao usuário no catálogo; texto de uso, nome e descrição do serviço também;
+  - avisos à criança nos três idiomas, no idioma da conta dela (`sistema_windows::idioma_da_conta`, perfil carregado em `HKEY_USERS`);
+  - o `install` grava `KIOSK_LANG` no serviço;
+  - desvios e itens fora do escopo registrados na ADR-010 (seção "Implementação e desvios").
+- **Evidência local**: 146 testes no Linux, entre eles `tests/i18n.rs` (tags, catálogo, código do detalhe e tradução), `tests/cli_idiomas.rs` (escolha do idioma por `KIOSK_LANG` e pelo sistema, nomes de comando intactos), o log traduzido nos três idiomas em `tests/cli.rs` e o log do agente em código em `tests/agente.rs`; clippy no Linux e cruzado para Windows; 30 diagramas validados.
+- **Evidência no CI Windows**: leitura do idioma da conta pelo registro (`tests/windows.rs`), serviço instalado com `KIOSK_LANG` e nome de exibição no idioma de quem instala (`tests/servico_windows.rs`).
+- **Falta**: ver no PC real o aviso à criança no idioma da conta dela.
+- **Quebra**: o log gravado pela 0.0.4 tem texto em português; o `kioskctl log` o mostra como está.
+

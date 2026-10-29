@@ -1,11 +1,12 @@
-//! CLI dos pais (E-005 F3). Uso:
+//! CLI dos pais (E-005 F3). Comandos em inglês (convenção); os equivalentes em português valem
+//! igualmente (ADR-010, `kiosk_engine::cli`). Uso:
 //!
-//! - `kioskctl parear --servidor HOST:PORTA --codigo CODIGO [--nome NOME]`
-//! - `kioskctl regra criar --perfil ID --app ID [--limite SEGUNDOS] [--janela HH:MM-HH:MM] [--ate RFC3339]`
-//! - `kioskctl regra ativar <id>` e `kioskctl regra revogar <id>`
-//! - `kioskctl regra limite <id> --segundos N`
-//! - `kioskctl uso --perfil ID [--data AAAA-MM-DD]`
-//! - `kioskctl log --perfil ID [--dias N] [--limite N]`
+//! - `kioskctl pair --server HOST:PORTA --code CODIGO [--name NOME]`
+//! - `kioskctl rule create --profile ID --app ID [--limit SEGUNDOS] [--window HH:MM-HH:MM] [--until RFC3339]`
+//! - `kioskctl rule activate <id>` e `kioskctl rule revoke <id>`
+//! - `kioskctl rule limit <id> --seconds N`
+//! - `kioskctl usage --profile ID [--date AAAA-MM-DD]`
+//! - `kioskctl log --profile ID [--days N] [--limit N]`
 //!
 //! As credenciais (inclusive a chave privada) ficam em `KIOSK_CREDENCIAIS`, ou em
 //! `~/.config/kiosk/credenciais.json` (`%APPDATA%\kiosk\credenciais.json` no Windows).
@@ -14,20 +15,17 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use kiosk_engine::cliente::{self, Credenciais};
+use kiosk_engine::i18n::{Msg, idioma};
 use uuid::Uuid;
 
-const USO: &str = "uso:\n  \
-kioskctl parear --servidor HOST:PORTA --codigo CODIGO [--nome NOME]\n  \
-kioskctl regra criar --perfil ID --app ID [--limite SEGUNDOS] [--janela HH:MM-HH:MM] [--ate RFC3339]\n  \
-kioskctl regra ativar <id>\n  \
-kioskctl regra revogar <id>\n  \
-kioskctl regra limite <id> --segundos N\n  \
-kioskctl uso --perfil ID [--data AAAA-MM-DD]\n  \
-kioskctl log --perfil ID [--dias N] [--limite N]";
+fn uso() -> String {
+    Msg::UsoKioskctl.to_string()
+}
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    // português e inglês equivalem; daqui em diante, só inglês (ADR-010)
+    let args = kiosk_engine::cli::em_ingles(&std::env::args().skip(1).collect::<Vec<_>>());
     match executar(&args).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
@@ -42,17 +40,27 @@ fn caminho_credenciais() -> Result<PathBuf, String> {
         return Ok(PathBuf::from(p));
     }
     if cfg!(windows) {
-        let base = std::env::var("APPDATA").map_err(|_| "APPDATA não definida".to_string())?;
+        let base = std::env::var("APPDATA").map_err(|_| {
+            Msg::VarNaoDefinida {
+                nome: "APPDATA".into(),
+            }
+            .to_string()
+        })?;
         return Ok(PathBuf::from(base).join("kiosk").join("credenciais.json"));
     }
-    let home = std::env::var("HOME").map_err(|_| "HOME não definida".to_string())?;
+    let home = std::env::var("HOME").map_err(|_| {
+        Msg::VarNaoDefinida {
+            nome: "HOME".into(),
+        }
+        .to_string()
+    })?;
     Ok(PathBuf::from(home)
         .join(".config")
         .join("kiosk")
         .join("credenciais.json"))
 }
 
-/// Valor de `--nome` em `args`, se houver.
+/// Valor de `--name` em `args`, se houver.
 fn opcao(args: &[String], nome: &str) -> Option<String> {
     args.iter()
         .position(|a| a == nome)
@@ -61,26 +69,43 @@ fn opcao(args: &[String], nome: &str) -> Option<String> {
 }
 
 fn exigir(args: &[String], nome: &str) -> Result<String, String> {
-    opcao(args, nome).ok_or_else(|| format!("falta {nome}\n{USO}"))
+    opcao(args, nome).ok_or_else(|| {
+        format!(
+            "{}\n{}",
+            Msg::FaltaOpcao {
+                nome: nome.to_owned()
+            },
+            uso()
+        )
+    })
 }
 
 fn json_da_regra(args: &[String]) -> Result<String, String> {
     let mut obj = serde_json::json!({
-        "profile_id": exigir(args, "--perfil")?,
+        "profile_id": exigir(args, "--profile")?,
         "app_id": exigir(args, "--app")?,
     });
-    if let Some(l) = opcao(args, "--limite") {
-        let l: u64 = l.parse().map_err(|_| format!("--limite inválido: {l:?}"))?;
+    if let Some(l) = opcao(args, "--limit") {
+        let l: u64 = l.parse().map_err(|_| {
+            Msg::OpcaoInvalida {
+                nome: "--limit".into(),
+                valor: l.clone(),
+            }
+            .to_string()
+        })?;
         obj["daily_limit_seconds"] = l.into();
     }
-    if let Some(j) = opcao(args, "--janela") {
-        let (a, b) = j
-            .split_once('-')
-            .ok_or_else(|| format!("--janela deve ser HH:MM-HH:MM, recebi {j:?}"))?;
+    if let Some(j) = opcao(args, "--window") {
+        let (a, b) = j.split_once('-').ok_or_else(|| {
+            Msg::JanelaFormato {
+                recebido: j.clone(),
+            }
+            .to_string()
+        })?;
         obj["window_start"] = a.into();
         obj["window_end"] = b.into();
     }
-    if let Some(t) = opcao(args, "--ate") {
+    if let Some(t) = opcao(args, "--until") {
         obj["effective_until"] = t.into();
     }
     Ok(obj.to_string())
@@ -96,10 +121,7 @@ async fn enviar(
         Ok(r)
     } else {
         // a recusa é genérica de propósito; o motivo exato está no log do PC
-        Err(format!(
-            "o serviço recusou o comando (HTTP {}). O motivo fica no log do PC.",
-            r.status
-        ))
+        Err(Msg::ServicoRecusou { status: r.status }.to_string())
     }
 }
 
@@ -116,42 +138,55 @@ fn duracao(segundos: u64) -> String {
 async fn executar(args: &[String]) -> Result<(), String> {
     let partes: Vec<&str> = args.iter().map(String::as_str).collect();
     match partes.as_slice() {
-        ["parear", ..] => {
-            let servidor = exigir(args, "--servidor")?;
-            let codigo = exigir(args, "--codigo")?;
-            let nome = opcao(args, "--nome").unwrap_or_else(|| "Dispositivo dos pais".into());
+        ["pair", ..] => {
+            let servidor = exigir(args, "--server")?;
+            let codigo = exigir(args, "--code")?;
+            let nome = opcao(args, "--name").unwrap_or_else(|| Msg::NomeDoDispositivo.to_string());
             let caminho = caminho_credenciais()?;
             if caminho.exists() {
-                return Err(format!(
-                    "já existe {}: apague o arquivo para parear de novo",
-                    caminho.display()
-                ));
+                return Err(Msg::CredenciaisJaExistem {
+                    caminho: caminho.display().to_string(),
+                }
+                .to_string());
             }
             let (mut cred, chave) = Credenciais::nova(&servidor);
             let id = cliente::parear(&servidor, &codigo, &chave, &nome).await?;
             cred.device_id = Some(id);
             cred.salvar(&caminho)?;
-            println!("dispositivo pareado: {id}");
-            eprintln!("credenciais gravadas em {}", caminho.display());
+            println!("{}", Msg::DispositivoPareado { id: id.to_string() });
+            eprintln!(
+                "{}",
+                Msg::CredenciaisGravadas {
+                    caminho: caminho.display().to_string()
+                }
+            );
             Ok(())
         }
-        ["regra", "criar", ..] => {
+        ["rule", "create", ..] => {
             let cred = Credenciais::carregar(&caminho_credenciais()?)?;
             let r = enviar(&cred, "add_rule", &json_da_regra(args)?).await?;
             let v: serde_json::Value = serde_json::from_str(&r.corpo).unwrap_or_default();
             println!(
-                "regra criada (pendente): {}",
-                v["id"].as_str().unwrap_or("?")
+                "{}",
+                Msg::RegraCriadaPeloCliente {
+                    id: v["id"].as_str().unwrap_or("?").to_owned()
+                }
             );
             Ok(())
         }
-        ["regra", acao @ ("ativar" | "revogar"), id] => {
-            let id = Uuid::parse_str(id).map_err(|_| format!("identificador inválido: {id:?}"))?;
+        ["rule", acao @ ("activate" | "revoke"), id] => {
+            let id = Uuid::parse_str(id).map_err(|_| {
+                Msg::IdInvalido {
+                    valor: (*id).to_owned(),
+                }
+                .to_string()
+            })?;
             let cred = Credenciais::carregar(&caminho_credenciais()?)?;
-            let (nome_api, feito) = if *acao == "ativar" {
-                ("activate_rule", "ativada")
+            let ativar = *acao == "activate";
+            let nome_api = if ativar {
+                "activate_rule"
             } else {
-                ("revoke_rule", "revogada")
+                "revoke_rule"
             };
             enviar(
                 &cred,
@@ -159,34 +194,59 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 &serde_json::json!({ "rule_id": id }).to_string(),
             )
             .await?;
-            println!("regra {id} {feito}");
+            let id = id.to_string();
+            println!(
+                "{}",
+                if ativar {
+                    Msg::RegraAtivadaCliente { id }
+                } else {
+                    Msg::RegraRevogadaCliente { id }
+                }
+            );
             Ok(())
         }
-        ["regra", "limite", id, ..] => {
-            let id = Uuid::parse_str(id).map_err(|_| format!("identificador inválido: {id:?}"))?;
-            let segundos = exigir(args, "--segundos")?;
-            let segundos: u64 = segundos
-                .parse()
-                .map_err(|_| format!("--segundos inválido: {segundos:?}"))?;
+        ["rule", "limit", id, ..] => {
+            let id = Uuid::parse_str(id).map_err(|_| {
+                Msg::IdInvalido {
+                    valor: (*id).to_owned(),
+                }
+                .to_string()
+            })?;
+            let segundos = exigir(args, "--seconds")?;
+            let segundos: u64 = segundos.parse().map_err(|_| {
+                Msg::OpcaoInvalida {
+                    nome: "--seconds".into(),
+                    valor: segundos.clone(),
+                }
+                .to_string()
+            })?;
             let cred = Credenciais::carregar(&caminho_credenciais()?)?;
             let corpo = serde_json::json!({ "rule_id": id, "daily_limit_seconds": segundos });
             enviar(&cred, "modify_limit", &corpo.to_string()).await?;
-            println!("regra {id}: limite diário agora é {}", duracao(segundos));
+            println!(
+                "{}",
+                Msg::LimiteDaRegraCliente {
+                    id: id.to_string(),
+                    limite: duracao(segundos)
+                }
+            );
             Ok(())
         }
-        ["uso", ..] => {
-            let perfil = exigir(args, "--perfil")?;
-            let data = opcao(args, "--data")
+        ["usage", ..] => {
+            let perfil = exigir(args, "--profile")?;
+            let data = opcao(args, "--date")
                 .unwrap_or_else(|| chrono::Local::now().date_naive().to_string());
             let cred = Credenciais::carregar(&caminho_credenciais()?)?;
             let corpo = serde_json::json!({ "profile_id": perfil, "date": data });
             let r = enviar(&cred, "usage", &corpo.to_string()).await?;
             let v: serde_json::Value = serde_json::from_str(&r.corpo)
-                .map_err(|_| "resposta de uso ilegível".to_string())?;
-            println!("uso em {data}");
+                .map_err(|_| Msg::RespostaDeUsoIlegivel.to_string())?;
+            println!("{}", Msg::UsoEm { data: data.clone() });
             println!(
-                "  sessão ativa: {}",
-                duracao(v["session_seconds"].as_u64().unwrap_or(0))
+                "{}",
+                Msg::SessaoAtiva {
+                    duracao: duracao(v["session_seconds"].as_u64().unwrap_or(0))
+                }
             );
             for a in v["apps"].as_array().into_iter().flatten() {
                 println!(
@@ -198,9 +258,17 @@ async fn executar(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         ["log", ..] => {
-            let perfil = exigir(args, "--perfil")?;
-            let dias: i64 = opcao(args, "--dias")
-                .map(|d| d.parse().map_err(|_| format!("--dias inválido: {d:?}")))
+            let perfil = exigir(args, "--profile")?;
+            let dias: i64 = opcao(args, "--days")
+                .map(|d| {
+                    d.parse().map_err(|_| {
+                        Msg::OpcaoInvalida {
+                            nome: "--days".into(),
+                            valor: d.clone(),
+                        }
+                        .to_string()
+                    })
+                })
                 .transpose()?
                 .unwrap_or(1);
             let agora = chrono::Utc::now();
@@ -209,17 +277,23 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 "to": agora.to_rfc3339(),
                 "profile_id": perfil,
             });
-            if let Some(l) = opcao(args, "--limite") {
-                let l: u32 = l.parse().map_err(|_| format!("--limite inválido: {l:?}"))?;
+            if let Some(l) = opcao(args, "--limit") {
+                let l: u32 = l.parse().map_err(|_| {
+                    Msg::OpcaoInvalida {
+                        nome: "--limit".into(),
+                        valor: l.clone(),
+                    }
+                    .to_string()
+                })?;
                 corpo["limit"] = l.into();
             }
             let cred = Credenciais::carregar(&caminho_credenciais()?)?;
             let r = enviar(&cred, "log", &corpo.to_string()).await?;
             let v: serde_json::Value = serde_json::from_str(&r.corpo)
-                .map_err(|_| "resposta de log ilegível".to_string())?;
+                .map_err(|_| Msg::RespostaDeLogIlegivel.to_string())?;
             let eventos = v["events"].as_array().cloned().unwrap_or_default();
             if eventos.is_empty() {
-                eprintln!("kioskctl: nenhum evento no período");
+                eprintln!("kioskctl: {}", Msg::NenhumEvento);
             }
             for e in eventos {
                 println!(
@@ -227,11 +301,11 @@ async fn executar(args: &[String]) -> Result<(), String> {
                     e["timestamp"].as_str().unwrap_or("?"),
                     e["event_type"].as_str().unwrap_or("?"),
                     e["action"].as_str().unwrap_or("?"),
-                    e["detail"].as_str().unwrap_or("")
+                    kiosk_engine::detalhes::legivel(e["detail"].as_str().unwrap_or(""), idioma())
                 );
             }
             Ok(())
         }
-        _ => Err(USO.to_string()),
+        _ => Err(uso()),
     }
 }

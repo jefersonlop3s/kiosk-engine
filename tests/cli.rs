@@ -35,6 +35,7 @@ fn kioskd(db_url: &str, listen: Option<&str>, args: &[&str]) -> Output {
     let mut c = Command::new(KIOSKD);
     c.args(args)
         .env("KIOSK_DB", db_url)
+        .env("KIOSK_LANG", "pt-BR")
         .env_remove("KIOSK_LISTEN");
     if let Some(l) = listen {
         c.env("KIOSK_LISTEN", l);
@@ -45,6 +46,7 @@ fn kioskd(db_url: &str, listen: Option<&str>, args: &[&str]) -> Output {
 fn kioskctl(cred: &Path, args: &[&str]) -> Output {
     Command::new(KIOSKCTL)
         .args(args)
+        .env("KIOSK_LANG", "pt-BR")
         .env("KIOSK_CREDENCIAIS", cred)
         .output()
         .unwrap()
@@ -57,6 +59,7 @@ fn texto(b: &[u8]) -> String {
 fn subir_servico(db_url: &str, porta: u16) -> Servidor {
     let filho = Command::new(KIOSKD)
         .arg("servir")
+        .env("KIOSK_LANG", "pt-BR")
         .env("KIOSK_DB", db_url)
         .env("KIOSK_LISTEN", format!("127.0.0.1:{porta}"))
         .stdout(Stdio::null())
@@ -415,6 +418,49 @@ async fn limite_uso_e_log_pelo_cli() {
         "{saida}"
     );
 
+    // o log mostra o detalhe gravado como código, traduzido para quem lê (ADR-010)
+    let detalhe = kiosk_engine::detalhes::Detalhe::AppTerminated {
+        process: "jogo.exe".into(),
+        pid: 4242,
+        reason: "APP_DAILY_LIMIT".into(),
+    };
+    let ev = SecurityEvent::new(
+        "local",
+        ActionType::System,
+        EventType::AppTerminated,
+        TransactionStatus::Success,
+        &detalhe.codigo(),
+    )
+    .with_profile(Some(m.perfil));
+    db.record_event(&ev).await.unwrap();
+    for (lang, esperado) in [
+        (
+            "pt-BR",
+            "app jogo.exe (pid 4242) encerrado: limite diário do app",
+        ),
+        (
+            "en-US",
+            "app jogo.exe (pid 4242) terminated: app daily limit",
+        ),
+        (
+            "es-ES",
+            "app jogo.exe (pid 4242) cerrada: límite diario de la app",
+        ),
+    ] {
+        let o = Command::new(KIOSKCTL)
+            .args(["log", "--profile", &perfil, "--days", "1"])
+            .env("KIOSK_LANG", lang)
+            .env("KIOSK_CREDENCIAIS", &cred)
+            .output()
+            .unwrap();
+        let t = texto(&o.stdout);
+        assert!(o.status.success() && t.contains(esperado), "{lang}: {t}");
+        assert!(
+            !t.contains("APP_DAILY_LIMIT"),
+            "{lang}: o código vazou: {t}"
+        );
+    }
+
     // perfil inexistente: a consulta é recusada sem vazar nada
     let ruim = kioskctl(&cred, &["uso", "--perfil", &Uuid::new_v4().to_string()]);
     assert!(!ruim.status.success() && texto(&ruim.stderr).contains("recusou"));
@@ -649,7 +695,7 @@ async fn pareamento_recusado_explica_como_gerar_o_codigo() {
     let erro = texto(&p.stderr);
     assert!(
         erro.contains("8 caracteres")
-            && erro.contains("kioskd codigo-pareamento")
+            && erro.contains("kioskd pairing-code")
             && erro.contains("KIOSK_DB"),
         "{erro}"
     );

@@ -141,17 +141,17 @@ impl KioskDbManager {
         }
 
         let Ok(device_id) = Uuid::parse_str(req.device_id) else {
-            recusa!("identificador de dispositivo ilegível");
+            recusa!("unreadable device identifier");
         };
         let Ok(ts) = req.timestamp.parse::<i64>() else {
-            recusa!("timestamp ilegível");
+            recusa!("unreadable timestamp");
         };
         if !nonce_valido(req.nonce) {
-            recusa!("nonce inválido");
+            recusa!("invalid nonce");
         }
         let desvio = agora.timestamp() - ts;
         if desvio.abs() > JANELA_SEGUNDOS {
-            recusa!("timestamp fora da janela ({desvio}s de desvio)");
+            recusa!("timestamp outside the window ({desvio}s off)");
         }
 
         let row: Option<(Vec<u8>, String, String, Option<String>)> = match sqlx::query_as(
@@ -165,19 +165,19 @@ impl KioskDbManager {
             Err(e) => return Err(self.falha_interna(ctx, ACAO, e).await),
         };
         let Some((chave, nome, papel, revogado)) = row else {
-            recusa!("dispositivo desconhecido {device_id}");
+            recusa!("unknown device {device_id}");
         };
         if revogado.is_some() {
-            recusa!("dispositivo revogado {device_id}");
+            recusa!("revoked device {device_id}");
         }
         let (Some(papel), Ok(chave)) = (
             Papel::parse(&papel),
             <[u8; 32]>::try_from(chave.as_slice()).map(|b| VerifyingKey::from_bytes(&b)),
         ) else {
-            recusa!("registro do dispositivo {device_id} corrompido");
+            recusa!("corrupted record for device {device_id}");
         };
         let Ok(chave) = chave else {
-            recusa!("chave pública do dispositivo {device_id} inválida");
+            recusa!("invalid public key for device {device_id}");
         };
 
         if !verificar(
@@ -189,7 +189,7 @@ impl KioskDbManager {
             req.corpo,
             req.assinatura,
         ) {
-            recusa!("assinatura inválida do dispositivo {device_id}");
+            recusa!("invalid signature from device {device_id}");
         }
 
         // anti-replay: limpa o que saiu da janela e registra este nonce
@@ -211,7 +211,7 @@ impl KioskDbManager {
         match inserido {
             Ok(_) => {}
             Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-                recusa!("nonce repetido (replay) do dispositivo {device_id}");
+                recusa!("repeated nonce (replay) from device {device_id}");
             }
             Err(e) => return Err(self.falha_interna(ctx, ACAO, e).await),
         }
@@ -234,7 +234,7 @@ impl KioskDbManager {
             return Ok(());
         }
         let detalhe = format!(
-            "dispositivo {} sem permissão para {}",
+            "device {} lacks permission for {}",
             dispositivo.device_id,
             acao.as_str()
         );
@@ -307,7 +307,7 @@ impl KioskDbManager {
         };
         if falhas >= MAX_FALHAS_PAREAMENTO {
             let msg = format!(
-                "pareamento bloqueado: {falhas} falhas nos últimos {VALIDADE_CODIGO_SEGUNDOS}s"
+                "pairing blocked: {falhas} failures in the last {VALIDADE_CODIGO_SEGUNDOS}s"
             );
             return Err(self
                 .recusar(ctx, ACAO, EventType::AuthFail, msg, agora)
@@ -319,7 +319,7 @@ impl KioskDbManager {
             .is_some_and(|b| VerifyingKey::from_bytes(&b).is_ok());
         let nome = nome.trim();
         if !chave_ok || nome.is_empty() || nome.chars().count() > 64 {
-            let msg = "pareamento com chave pública ou nome inválidos".to_string();
+            let msg = "pairing with invalid public key or name".to_string();
             return Err(self
                 .recusar(ctx, ACAO, EventType::ValidationFail, msg, agora)
                 .await);
@@ -342,7 +342,7 @@ impl KioskDbManager {
             Ok(r) if r.rows_affected() == 1 => {}
             Ok(_) => {
                 drop(tx);
-                let msg = "código de pareamento inválido, usado ou expirado".to_string();
+                let msg = "pairing code invalid, used or expired".to_string();
                 return Err(self
                     .recusar(ctx, ACAO, EventType::AuthFail, msg, agora)
                     .await);
