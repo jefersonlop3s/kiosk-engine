@@ -647,3 +647,10 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - `sistema_windows::texto_do_aviso` (extraída do `avisar`) liga o idioma lido de `HKEY_USERS\<SID>` ao texto do aviso. `tests/windows.rs` cobre es-ES, en-US, pt-BR, a precedência do idioma de exibição e o idioma não traduzido (`fr-FR`), no registro real do runner.
 - Fica fora das fases: revisão da tradução es-ES por falante.
 
+## 2026-10-29 — `AGENT_STOPPED` (E-004 F4) e resposta perdida no pipe
+
+- **`AGENT_STOPPED`**: `agent_heartbeat` (migração 0007), `Agente::conferir_parada_anterior` e `bater`, `Detalhe::AgentWasDown`, marca de parada normal gravada por `servir` ao receber o pedido do Windows. Detalhes e desvio da ADR-004 no E-004. 9 testes em `tests/agente_parada.rs` (primeira execução, agente que sumiu com o intervalo exato, parada de propósito, reinício rápido, limiar de 3 batimentos, frequência do batimento, desmarcar a parada normal, texto nos idiomas, banco sem a tabela) e, no CI Windows, parada de propósito e `taskkill` com o intervalo acima de 30 s.
+- **Correção no pipe de auditoria** (ADR-011, item 7): o servidor desconectava antes de o cliente ler; achado em duas rodadas intermitentes do CI ("o serviço não confirmou").
+- **Correção ao que eu disse**: o salto de relógio já estava coberto desde o E-003 (intervalos negativos ou acima de 600 s viram `TAMPER_SUSPECTED` e não são contados); não é GAP novo.
+- Vai no mesmo PR do encerramento do E-012.
+

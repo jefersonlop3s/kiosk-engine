@@ -363,6 +363,40 @@ impl KioskDbManager {
         tx.commit().await
     }
 
+    /// Último batimento do agente e se ele parou de propósito (E-004 F4). `None` na primeira vez.
+    pub async fn ler_batimento(&self) -> Result<Option<(DateTime<Utc>, bool)>, sqlx::Error> {
+        let linha: Option<(String, i64)> =
+            sqlx::query_as("SELECT beat_at, clean_stop FROM agent_heartbeat WHERE id = 1")
+                .fetch_optional(&self.pool)
+                .await?;
+        linha
+            .map(|(quando, limpa)| {
+                DateTime::parse_from_rfc3339(&quando)
+                    .map(|t| (t.with_timezone(&Utc), limpa == 1))
+                    .map_err(|e| sqlx::Error::Decode(Box::new(e)))
+            })
+            .transpose()
+    }
+
+    /// Grava o batimento do agente; `parada_limpa` marca uma parada de propósito (serviço parado
+    /// pelo Windows), e o batimento seguinte a desmarca.
+    pub async fn gravar_batimento(
+        &self,
+        quando: DateTime<Utc>,
+        parada_limpa: bool,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO agent_heartbeat (id, beat_at, clean_stop) VALUES (1, ?, ?) \
+             ON CONFLICT (id) DO UPDATE SET beat_at = excluded.beat_at, \
+             clean_stop = excluded.clean_stop",
+        )
+        .bind(quando.to_rfc3339())
+        .bind(i64::from(parada_limpa))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     /// Soma ao `session_usage` o tempo de sessão ativa do perfil em `[inicio, fim)` (ADR-003).
     pub async fn registrar_sessao<Tz: TimeZone>(
         &self,

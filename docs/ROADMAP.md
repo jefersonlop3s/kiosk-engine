@@ -40,7 +40,7 @@ Critério: cada fase do épico vale 100% concluída, 50% parcial e 0% não inici
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) Fundação e dados | fases concluídas | F1–F4 concluídas | 100% | — |
 | [E-002](epics/E-002-log-forense.md) Log forense | concluído | F1–F3 concluídas | 100% | Hash encadeado, adiado pelo dono (fora das fases) |
 | [E-003](epics/E-003-motor-de-regras-e-uso.md) Motor e uso | concluído | F1–F3 concluídas | 100% | — |
-| [E-004](epics/E-004-agente-windows-enforcement.md) Agente Windows | em andamento | F0 e F1 concluídas; F2, F3 e F4 parciais | 70% | Agente como SYSTEM na conta da criança (GC-16), logoff (GC-20), bandeja no lugar das caixas de mensagem (GC-17), batimento da UI |
+| [E-004](epics/E-004-agente-windows-enforcement.md) Agente Windows | em andamento | F0 e F1 concluídas; F2, F3 e F4 parciais | 70% | Agente como SYSTEM na conta da criança (GC-16), logoff (GC-20), bandeja no lugar das caixas de mensagem (GC-17) e o batimento da UI; `AGENT_STOPPED` já entregue |
 | [E-005](epics/E-005-api-comando-e-pareamento.md) API e pareamento | concluído nas fases | F1–F3 concluídas | 100% | Modo LAN com HTTPS (GC-15, fora das fases) |
 | [E-006](epics/E-006-app-mobile-administracao.md) App mobile dos pais | congelado | fases a definir | 0% | Condição de retomada |
 | [E-007](epics/E-007-onboarding-e-instalador.md) Onboarding e instalador | em andamento | F2 concluída; F1 e F3 não iniciadas | 35% | Assistente `kioskd configurar`, `.msi` |

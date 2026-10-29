@@ -1080,6 +1080,21 @@ catalogo! {
         pt: "intervalo de uso suspeito: {inicio} -> {fim} ({duracao}s; aceito 0..={max}s)",
         es: "intervalo de uso sospechoso: {inicio} -> {fim} ({duracao}s; aceptado 0..={max}s)",
     },
+    LogAgenteParado { inicio: String, fim: String, duracao: String } => {
+        en: "enforcement was off for {duracao} ({inicio} -> {fim}): the service was stopped normally",
+        pt: "o controle ficou desligado por {duracao} ({inicio} -> {fim}): o serviço foi parado normalmente",
+        es: "el control estuvo apagado durante {duracao} ({inicio} -> {fim}): el servicio se detuvo normalmente",
+    },
+    LogAgenteSumiu { inicio: String, fim: String, duracao: String } => {
+        en: "enforcement was off for {duracao} ({inicio} -> {fim}): the agent disappeared without a normal stop (crash, killed or power loss)",
+        pt: "o controle ficou desligado por {duracao} ({inicio} -> {fim}): o agente sumiu sem parada normal (falha, encerrado à força ou falta de energia)",
+        es: "el control estuvo apagado durante {duracao} ({inicio} -> {fim}): el agente desapareció sin una parada normal (fallo, cierre forzado o corte de energía)",
+    },
+    LogBatimentoNaoGravado { erro: String } => {
+        en: "agent heartbeat not recorded: {erro}",
+        pt: "batimento do agente não gravado: {erro}",
+        es: "latido del agente no registrado: {erro}",
+    },
     LogRetencao { removidos: u64 } => {
         en: "retention: {removidos} events older than 90 days removed",
         pt: "retenção: {removidos} eventos com mais de 90 dias removidos",

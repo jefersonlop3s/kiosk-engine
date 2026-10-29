@@ -80,4 +80,5 @@ A decisão não mudou. Ao implementar, ficaram estes detalhes:
 4. **Mensagem inválida também gasta a cota** do limite de taxa (e vira `VALIDATION_FAIL`), para não dar para encher o log com lixo. Aviso descartado por excesso responde `ok:true`, porque o que importa ao `kioskd` é que o serviço está no ar; a contagem sai no próximo evento.
 5. **A lista fechada de comandos** inclui `install` e `uninstall`: sem elevação, eles também recusam antes de tocar no gerenciador de serviços. Sem o serviço no ar (primeira instalação), a recusa diz que a tentativa não foi registrada.
 6. **`Detalhe::PairingCodeNotAdmin`** continua existindo só para ler linhas gravadas pela 0.0.5; nada novo o grava.
+7. **O servidor espera o cliente ler a resposta antes de desconectar** (achado pelo CI Windows, em duas rodadas intermitentes de "o serviço não confirmou"). `DisconnectNamedPipe` descarta o que o cliente ainda não leu; sem a espera, o evento era gravado e o cliente recebia EOF. Agora o servidor lê até o cliente fechar (prazo de 2 s) e só então desconecta. Uma conexão que fecha sem enviar um byte (uma sondagem, como `Test-Path`) é descartada sem erro no log.
 

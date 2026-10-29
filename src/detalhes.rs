@@ -60,6 +60,17 @@ pub enum Detalhe {
         seconds: i64,
         max: i64,
     },
+    /// Intervalo sem agente rodando (E-004 F4): `clean` se o serviço foi parado de propósito
+    /// (parada normal, desligamento), `false` se o agente simplesmente sumiu.
+    AgentWasDown {
+        from: String,
+        to: String,
+        seconds: i64,
+        clean: bool,
+    },
+    HeartbeatNotRecorded {
+        error: String,
+    },
     PairingCodeNotAdmin,
     /// Comando administrativo tentado sem elevação (ADR-011). `caller_sid` só quando a conta não
     /// é um perfil de criança; a API dos pais o omite.
@@ -202,6 +213,28 @@ impl Detalhe {
                 duracao: seconds,
                 max,
             },
+            Self::AgentWasDown {
+                from,
+                to,
+                seconds,
+                clean,
+            } => {
+                let duracao = crate::textos::duracao(seconds.max(0) as u64);
+                if clean {
+                    Msg::LogAgenteParado {
+                        inicio: from,
+                        fim: to,
+                        duracao,
+                    }
+                } else {
+                    Msg::LogAgenteSumiu {
+                        inicio: from,
+                        fim: to,
+                        duracao,
+                    }
+                }
+            }
+            Self::HeartbeatNotRecorded { error } => Msg::LogBatimentoNaoGravado { erro: error },
             Self::PairingCodeNotAdmin => Msg::LogCodigoSemAdmin,
             Self::AdminRequired {
                 command,

@@ -53,6 +53,13 @@ Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam
 - Textos pt-BR dos avisos em `textos` (testáveis fora do Windows).
 - F0 resolvida por dois caminhos: verificação cruzada local (`--target x86_64-pc-windows-gnu`, com mingw) e o runner `windows-latest` do CI, que roda `tests/windows.rs` em Windows real.
 
+## Antiadulteração: `AGENT_STOPPED` por batimento no banco (2026-10-29)
+
+- Desvio da ADR-004 (que previa `AGENT_STOPPED` na parada do serviço): quem sabe que o serviço parou é o **próximo** agente, não o que parou. O agente grava um batimento no banco a cada 10 s (`agent_heartbeat`, uma linha, migração 0007), o serviço marca a parada normal ao receber o pedido do Windows, e o agente que sobe compara com agora. Intervalo maior que 3 batimentos (30 s) vira `AGENT_STOPPED`: `SUCCESS` se foi parada de propósito (inclui o desligamento do PC), `FAILURE` se o agente sumiu (falha, encerrado à força, falta de energia). O reinício de 5 s depois de uma falha não gera evento.
+- Salto de relógio: já coberto pelo E-003 (`registrar_sessao` recusa intervalos negativos ou acima de 600 s, grava `TAMPER_SUSPECTED` e não conta o intervalo).
+- Testes: `tests/agente_parada.rs` (9, com tempo simulado e SQLite real) e, no CI Windows, parada de propósito e `taskkill` seguidos de reinício com o intervalo acima do limiar.
+- Falta da F4: o batimento da UI (3 batimentos perdidos geram `TAMPER_SUSPECTED`) e o teste negativo de `taskkill` na UI, que dependem da bandeja (F3).
+
 ## Aceites
 
 - Todo aceite deste épico exige Windows real ou VM; build no macOS não certifica comportamento.

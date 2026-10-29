@@ -29,7 +29,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | Épico | Estado | Próximo passo |
 |---|---|---|
 | [E-001](epics/E-001-fundacao-crate-e-dados.md) | em andamento | F1–F4 concluídas e CI verde em Ubuntu e Windows |
-| [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Validados em PC real com conta de criança (2026-10-29): encerramento de app, avisos de 5 e 1 min, encerramento ao esgotar o limite do app e bloqueio de sessão; falta o logoff (GC-20), o serviço do Windows (GC-16) e a UI de bandeja (GC-17) |
+| [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Validados em PC real (2026-10-29): encerramento de app, avisos de 5 e 1 min, encerramento ao esgotar o limite do app e bloqueio de sessão. `AGENT_STOPPED` por batimento implementado e testado no CI. Faltam o logoff (GC-20), ver o agente como SYSTEM (GC-16) e a bandeja com o batimento da UI (GC-17, F3 e F4) |
 | [E-005](epics/E-005-api-comando-e-pareamento.md) | em andamento | F1 a F3 concluídas (servidor, assinatura, regras, `modify_limit`, consultas de uso e log, CLI dos pais); sobram o modo LAN (GC-15) e ligar o agente ao serviço (GC-16) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
 | [E-007](epics/E-007-onboarding-e-instalador.md) | em andamento | F2 concluída (serviço validado no CI e no PC real, inclusive após reinício; `instalar` põe a pasta no PATH). Próximo: F1, o assistente `kioskd configurar` |
