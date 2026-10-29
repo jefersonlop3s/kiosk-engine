@@ -180,6 +180,7 @@ Sem `--activate`, a regra nasce **pendente**. No PC os erros vêm com o motivo e
 .\kioskctl.exe rule revoke <id-da-regra>
 .\kioskctl.exe usage --profile <id-do-perfil> [--date 2026-03-09]
 .\kioskctl.exe log --profile <id-do-perfil> [--days 7] [--limit 100]
+.\kioskctl.exe log --days 7        # sem --profile: todos os eventos do PC
 ```
 
 - A regra nasce **pendente**; só `ativar` a põe em vigor. Regra com `--limit 0` bloqueia o app.
