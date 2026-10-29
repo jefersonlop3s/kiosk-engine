@@ -11,5 +11,9 @@ Frentes de trabalho com resultado, fases, dependências e aceites. Use o [templa
 | [E-005](E-005-api-comando-e-pareamento.md) | API de comando e pareamento | concluído no que não exige Windows | ADR-005, ADR-006 |
 | [E-006](E-006-app-mobile-administracao.md) | App mobile de administração | congelado | — |
 | [E-007](E-007-onboarding-e-instalador.md) | Onboarding e instalador | em andamento | ADR-007, ADR-008, ADR-009 |
+| [E-008](E-008-cliente-grafico-dos-pais.md) | Cliente gráfico dos pais (Windows, Linux, macOS) | proposto | ADR do toolkit a abrir |
+| [E-009](E-009-servico-linux.md) | Serviço em Linux | congelado | revisão da ADR-002 na retomada |
+| [E-010](E-010-servico-macos.md) | Serviço em macOS | congelado | revisão da ADR-002 na retomada |
+| [E-011](E-011-servico-android.md) | Serviço em Android | congelado | revisão da ADR-002 na retomada |
 
 Consulte a [organização documental](../README.md).

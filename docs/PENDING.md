@@ -32,6 +32,10 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | [E-005](epics/E-005-api-comando-e-pareamento.md) | em andamento | F1 a F3 concluídas (servidor, assinatura, regras, `modify_limit`, consultas de uso e log, CLI dos pais); sobram o modo LAN (GC-15) e ligar o agente ao serviço (GC-16) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
 | [E-007](epics/E-007-onboarding-e-instalador.md) | em andamento | F2 (serviço do Windows) implementada e validada no CI; falta o reinício no PC real (GC-16). Depois: F1, o assistente `kioskd configurar` |
+| [E-008](epics/E-008-cliente-grafico-dos-pais.md) | proposto | F1: listagem remota de perfis, apps e regras na API; ADR do toolkit antes da F2 |
+| [E-009](epics/E-009-servico-linux.md) | congelado | Condição de retomada no épico |
+| [E-010](epics/E-010-servico-macos.md) | congelado | Condição de retomada no épico |
+| [E-011](epics/E-011-servico-android.md) | congelado | Condição de retomada no épico |
 
 ## Infraestrutura do harness
 

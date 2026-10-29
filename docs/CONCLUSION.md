@@ -485,3 +485,12 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência local**: `cargo clippy -D warnings` no Linux e cruzado para `x86_64-pc-windows-gnu`, 127 testes passando no Linux, 28 diagramas validados com o mermaid-cli.
 - **Evidência de aceite**: `tests/servico_windows.rs` no runner Windows do CI (`KIOSK_TESTE_SERVICO=1`), com controles negativos (escuta fora da ADR-005, conta padrão tentando parar e iniciar o serviço e ler os dados, `--apagar-dados` sem confirmação).
 - **Pendente**: reinício do PC real (GC-16).
+
+## 2026-10-29 — E-008 a E-011: cliente gráfico e serviço em outras plataformas
+
+- **Origem**: pedido do dono depois da publicação da 0.0.4.
+- **Resultado**:
+  - [E-008](epics/E-008-cliente-grafico-dos-pais.md) proposto: app gráfico dos pais para Windows, Linux e macOS na Tailscale, sobre o mesmo cliente do `kioskctl`. Registra a lacuna da API (não há listagem remota de perfis, apps e regras), que vira a F1;
+  - [E-009](epics/E-009-servico-linux.md), [E-010](epics/E-010-servico-macos.md) e [E-011](epics/E-011-servico-android.md) congelados, com condição de retomada objetiva: `kioskd` no Windows maduro e cliente gráfico maduro. Cada um exige uma ADR que revise a [ADR-002](adr/ADR-002-identidade-por-conta-windows.md) (GAP Estrutural) e terá CI/CD próprio.
+- **Evidência**: `verificar_refs.py` e `verificar_adr.py` sem erros. Sem código.
+

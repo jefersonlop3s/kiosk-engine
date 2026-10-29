@@ -4,6 +4,10 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Documentação
+- E-008 "Cliente gráfico dos pais" proposto (Windows, Linux e macOS na Tailscale, usando o cliente do `kioskctl`; começa pela listagem remota na API).
+- E-009, E-010 e E-011 (serviço em Linux, macOS e Android) registrados como congelados, até o `kioskd` no Windows e o cliente gráfico amadurecerem; cada um revisa a ADR-002 e traz o próprio CI/CD.
+
 ## [0.0.4] - 2026-10-29
 
 Ainda **pré-lançamento**. O `kioskd` passa a rodar como serviço do Windows (ADR-008, etapa 1), sem depender de uma janela aberta. O reinício do PC com o serviço instalado ainda não foi validado em máquina real (GC-16).

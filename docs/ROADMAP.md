@@ -12,7 +12,10 @@ Controle parental doméstico para Windows: os pais definem quais programas cada 
 E-001 Fundação ──┬─> E-002 Log forense ──┐
                  └─> E-003 Motor de regras ─┴─> E-004 Agente Windows ──> E-005 API + pareamento ──> E-006 App mobile (congelado)
                                                       └──────────────┬──────────┘
-                                                                     └─> E-007 Onboarding e instalador
+                                                                     ├─> E-007 Onboarding e instalador
+                                                                     └─> E-008 Cliente gráfico dos pais (Windows, Linux, macOS)
+
+E-004 + E-007 maduros e E-008 maduro ──> E-009 Serviço Linux, E-010 Serviço macOS, E-011 Serviço Android (congelados)
 ```
 
 | Sprint | Épico/fases | Resultado ao fim |
@@ -24,11 +27,14 @@ E-001 Fundação ──┬─> E-002 Log forense ──┐
 | 5 | E-004 F3–F4, E-002 F3 | Bandeja visível com avisos; antiadulteração |
 | 6 | [E-005](epics/E-005-api-comando-e-pareamento.md) F1–F3 | Pais administram via CLI pareado |
 | 7 | [E-007](epics/E-007-onboarding-e-instalador.md) F1–F3 | Primeira configuração guiada, `kioskd` como serviço do Windows e instalador |
+| 8 | [E-008](epics/E-008-cliente-grafico-dos-pais.md) F1–F4 | Pais administram pelo app gráfico em Windows, Linux e macOS, na Tailscale |
 | — | [E-006](epics/E-006-app-mobile-administracao.md) | Retomada após E-005 estável |
+| — | [E-009](epics/E-009-servico-linux.md), [E-010](epics/E-010-servico-macos.md), [E-011](epics/E-011-servico-android.md) | Serviço em outras plataformas, depois do `kioskd` Windows e do cliente gráfico maduros |
 
 Marco do MVP: fim da sprint 5. Nela, um PC Windows com duas crianças tem regras aplicadas de verdade, configuradas localmente na conta de admin.
 
 ## Condições de retomada
 
 - E-006 congelado até E-005 F3.
+- E-009, E-010 e E-011 congelados até: `kioskd` no Windows maduro (E-004 e E-007 concluídos, sem GAP de enforcement aberto, uso real sem regressão) **e** cliente gráfico maduro (E-008 F4). Cada um revisa a ADR-002 numa ADR nova e traz o próprio CI/CD.
 - E-007 em execução: ADR-007 (forma do assistente), ADR-008 (formato do instalador) e ADR-009 (origem da lista de programas) aceitas em 2026-10-29. As ADRs de detecção, IPC, rede e assinatura (ADR-003 a ADR-006) já foram aceitas.
