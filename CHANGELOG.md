@@ -4,13 +4,15 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.7] - 2026-10-29
+
+Ainda **pré-lançamento**. Traz o rastro das tentativas de comando sem privilégio (ADR-011, visto no PC real com uma conta comum), os comandos `version`, o `AGENT_STOPPED` no log forense e duas correções do pipe de auditoria. O agente, a API e o `kioskctl` da 0.0.6 continuam compatíveis. O serviço aplica sozinho a migração `0007` ao subir; para atualizar, rode `kioskd install --listen ...` da pasta nova (o `kioskd status` mostra a versão instalada e a da pasta).
+
 ### Adicionado
 - **Rastro das tentativas de comando sem privilégio** (ADR-011): quando uma conta sem elevação (a da criança, por exemplo) tenta um comando administrativo do `kioskd`, ele recusa e avisa o serviço por um named pipe local (`kiosk-audit`); o serviço, que é SYSTEM, grava um `AUTHZ_FAIL` no log forense, ligado ao perfil da criança. O chamador é lido do token da conexão, nunca da mensagem; no máximo 5 avisos por minuto por conta. Administrador que esqueceu de elevar também é registrado, marcado como tal. `kioskctl log --profile` mostra a tentativa (sem o SID).
 - Todo comando do `kioskd` que mexe nos dados (`pairing-code`, `devices`, `revoke`, `profile *`, `app *`, `rule *`, `install`, `uninstall`) confere a elevação antes de abrir o banco e explica a recusa, no lugar do erro cru do SQLite (`unable to open database file (code: 14)`). A mensagem diz se a tentativa foi ou não registrada.
-
-- **`kioskd version` e `kioskctl version`** (também `--version`, `-V` e, em português, `versao`): versão, commit, data, alvo e perfil da compilação. A primeira linha tem formato fixo (`kioskd 0.0.6 (a1b2c3d)`); o resto sai no idioma de quem lê.
+- **`kioskd version` e `kioskctl version`** (também `--version`, `-V` e, em português, `versao`): versão, commit, data, alvo e perfil da compilação. A primeira linha tem formato fixo (`kioskd 0.0.7 (a1b2c3d)`); o resto sai no idioma de quem lê.
 - `kioskd status` mostra a versão deste executável e a do executável instalado (lida de `kioskd version` do que o serviço roda), e `kioskd install` diz a versão instalada. O log do serviço também grava o commit na linha de início.
-
 - **`AGENT_STOPPED` no log forense** (E-004 F4): o agente grava um batimento no banco a cada 10 s e, ao subir, registra o intervalo sem enforcement quando passa de 30 s: `SUCCESS` se o serviço foi parado de propósito, `FAILURE` se o agente sumiu. `kioskctl log` mostra o intervalo e a causa. Migração `0007_agent_heartbeat`.
 
 ### Alterado
@@ -19,6 +21,11 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ### Corrigido
 - O pipe de auditoria desconectava o cliente logo depois de escrever a resposta, e o Windows descarta o que o cliente ainda não leu: de vez em quando o evento era gravado e o `kioskd` dizia que **não** foi registrado. O servidor agora espera o cliente ler e fechar (prazo de 2 s). Achado pelo CI Windows.
 - O serviço registrava `ImpersonateNamedPipeClient ... (os error 1368)` no `kioskd.log` quando algo conectava ao pipe `kiosk-audit` e fechava sem enviar nada (visto no PC real, com `Test-Path \\.\pipe\kiosk-audit`). Uma sondagem assim não é erro e agora é descartada em silêncio; uma linha vazia enviada de verdade continua virando `VALIDATION_FAIL`.
+
+### Interno
+- Canal serviço ↔ bandeja (ADR-004, E-004 F3 etapa 1): o pipe `kiosk-ui` e a conferência de quem conecta estão prontos e testados no CI Windows, mas **ainda não ligados ao `kioskd`**: nada muda para quem usa. A bandeja em si vem nas próximas versões.
+- E-012 (idiomas) encerrado: o idioma da conta da criança no aviso passa a ser simulado no CI contra o registro real.
+- Os jobs do CI ganharam prazo de 25 minutos.
 
 ## [0.0.6] - 2026-10-29
 
