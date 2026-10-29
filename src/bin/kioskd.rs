@@ -41,6 +41,17 @@ fn uso() -> String {
 fn main() -> ExitCode {
     // português e inglês equivalem; daqui em diante, só inglês (ADR-010)
     let args = kiosk_engine::cli::em_ingles(&std::env::args().skip(1).collect::<Vec<_>>());
+    match kiosk_engine::cli::validar(&args, kiosk_engine::cli::FORMAS_KIOSKD) {
+        Ok(()) => {}
+        Err(kiosk_engine::cli::ErroArgumentos::PedeAjuda) => {
+            println!("{}", uso());
+            return ExitCode::SUCCESS;
+        }
+        Err(e) => {
+            eprintln!("kioskd: {}", e.msg());
+            return ExitCode::FAILURE;
+        }
+    }
     // o modo serviço entrega a thread principal ao SCM antes de existir qualquer runtime.
     // `servico` (português) é como a 0.0.4 registrou o serviço, e segue valendo
     let resultado = if args == ["service"] {
@@ -485,8 +496,63 @@ fn erro_de_comando(e: kiosk_engine::comandos::ErroComando) -> String {
     }
 }
 
-fn duracao(s: u64) -> String {
-    format!("{}h{:02}", s / 3600, s % 3600 / 60)
+use kiosk_engine::textos::duracao;
+
+/// Avisa quando uma regra ativa já nasce com o limite menor ou igual ao uso de hoje: o app seria
+/// fechado assim que abrisse, e parece que a regra "não pode ser revogada". É só um aviso, depois
+/// de a regra já ter sido gravada; um erro ao calcular não desfaz nada.
+async fn avisar_limite_ja_ultrapassado(db: &KioskDbManager, regra: Uuid) {
+    use kiosk_engine::database_schema::RuleState;
+    let Ok(Some(r)) = db.get_active_rule(regra).await else {
+        return;
+    };
+    let Some(limite) = r.daily_limit_seconds.filter(|l| *l > 0) else {
+        return; // sem limite, ou limite 0 (bloqueio de propósito)
+    };
+    if r.state != RuleState::Active {
+        return;
+    }
+    let hoje = chrono::Local::now().date_naive();
+    let Ok(c) = db.consumo_do_dia(r.profile_id, r.app_id, hoje).await else {
+        return;
+    };
+    if c.app_segundos < limite {
+        return;
+    }
+    let app = db
+        .listar_apps()
+        .await
+        .ok()
+        .and_then(|a| a.into_iter().find(|a| a.app_id == r.app_id))
+        .map_or_else(|| "?".to_owned(), |a| a.process_name);
+    eprintln!(
+        "kioskd: {}",
+        Msg::LimiteJaUltrapassado {
+            app,
+            usado: duracao(c.app_segundos),
+            limite: duracao(limite),
+        }
+    );
+}
+
+/// O mesmo para o limite total do perfil (a sessão seria bloqueada em seguida).
+async fn avisar_total_ja_ultrapassado(db: &KioskDbManager, perfil: Uuid, limite: Option<u64>) {
+    let Some(limite) = limite.filter(|l| *l > 0) else {
+        return;
+    };
+    let hoje = chrono::Local::now().date_naive();
+    let Ok((sessao, _)) = db.uso_do_dia(perfil, hoje).await else {
+        return;
+    };
+    if sessao >= limite {
+        eprintln!(
+            "kioskd: {}",
+            Msg::LimiteTotalJaUltrapassado {
+                usado: duracao(sessao),
+                limite: duracao(limite),
+            }
+        );
+    }
 }
 
 async fn executar(args: &[String]) -> Result<(), String> {
@@ -646,6 +712,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
                     limite: limite.map_or(Msg::SemLimite.to_string(), duracao)
                 }
             );
+            avisar_total_ja_ultrapassado(&db, perfil, limite).await;
             Ok(())
         }
         ["profile", "window", perfil, ..] => {
@@ -802,6 +869,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
                     Msg::RegraCriadaPendente
                 }
             );
+            avisar_limite_ja_ultrapassado(&db, regra.rule_id).await;
             Ok(())
         }
         ["rule", acao @ ("activate" | "revoke"), regra] => {
@@ -827,6 +895,9 @@ async fn executar(args: &[String]) -> Result<(), String> {
                     Msg::RegraRevogadaLocal
                 }
             );
+            if *acao == "activate" {
+                avisar_limite_ja_ultrapassado(&db, regra).await;
+            }
             Ok(())
         }
         ["rule", "limit", regra, ..] => {
@@ -846,6 +917,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
                     outro => outro.to_string(),
                 })?;
             eprintln!("kioskd: {}", Msg::LimiteDaRegraAgora { limite: duracao(s) });
+            avisar_limite_ja_ultrapassado(&db, regra).await;
             Ok(())
         }
         ["rule", "list", ..] => {

@@ -145,6 +145,12 @@ O CLI gera o par de chaves Ed25519, envia só a chave pública e grava `credenci
 
 ## 6. Administrar as regras
 
+> **O limite é por dia e conta o que o app já usou hoje.** Uma regra de 3 minutos num app que já rodou 11 minutos hoje o fecha assim que abrir, e a regra nova parece "ter bloqueado tudo". Veja o uso do dia com `kioskctl usage --profile ID` e, para testar, ponha o limite acima dele (uso de hoje mais a folga que quiser). O `kioskd` avisa quando uma regra ativa já nasce com o limite menor ou igual ao uso de hoje. O limite total do perfil (`profile limit`) funciona igual, com o tempo de sessão ativa.
+>
+> **Revogar uma regra é por ID.** Regra `PENDING` nunca vale, então revogá-la não muda nada; a que vale é a `ACTIVE`. Confira com `kioskd rule list` qual está ativa antes de revogar.
+>
+> Opção digitada errada é recusada com uma sugestão (`--activete` → "você quis dizer `--activate`?"); nada é criado nem alterado nesse caso.
+
 **No próprio PC** (PowerShell de administrador, sem precisar parear nada):
 
 ```powershell

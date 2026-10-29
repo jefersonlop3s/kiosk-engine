@@ -606,3 +606,15 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - alternativas rejeitadas (Log de Eventos do Windows, pasta de entrada, HTTP sem assinatura, abrir o banco) e o plano de testes no CI Windows.
 - **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros.
 
+## 2026-10-29 — Opção desconhecida deixa de ser ignorada; aviso de limite já ultrapassado
+
+- **Origem**: log do dono no teste da 0.0.5: `--activete` (digitado errado) criou uma regra pendente sem erro, e a regra ativa de 3 min fechava o Bloco de Notas na hora porque ele já tinha 11min09s de uso hoje. As revogações (`d9712d1f` e `be76246e`) eram de regras **pendentes**, que nunca valeram; a que valia (`14b04946`) continuava ativa. Não era defeito da revogação.
+- **Resultado**:
+  - `cli::validar` e as tabelas `FORMAS_KIOSKD` e `FORMAS_KIOSKCTL`: opção desconhecida, opção sem valor e argumento sobrando são recusados, com sugestão por distância de edição, antes de abrir o banco ou gravar. `--help` e `-h` mostram o uso;
+  - `kioskd rule create`, `rule activate`, `rule limit` e `profile limit` avisam quando a regra ativa (ou o limite total) já nasce com limite menor ou igual ao uso de hoje;
+  - a duração das listagens passa de `0h03` para `3min 00s`;
+  - runbook com a explicação (limite por dia, uso já contado, revogar por ID) e fluxogramas atualizados.
+- **Evidência local**: 151 testes; um teste confere a tabela de argumentos contra o texto de uso nos três idiomas (uma opção nova só no uso, ou só na tabela, reprova o build); o caso do `--activete` em três idiomas e em português; aviso de limite em cada idioma, sem aviso para regra pendente, limite folgado e limite 0; clippy no Linux e cruzado para Windows; 30 diagramas validados.
+- **ADR-011**: o dono confirmou as duas decisões abertas (registrar também o administrador sem elevação; `sc stop` fora do escopo). O aceite da ADR como um todo está pendente.
+- Nenhum dado do log do dono (IDs, SID, conta) foi copiado.
+

@@ -562,7 +562,7 @@ async fn administracao_local_de_perfis_e_apps_e_regra_pelo_cli_com_os_ids() {
     }
     let lista = texto(&kioskd(&db_url, None, &["perfil", "listar"]).stdout);
     assert!(
-        lista.contains("Ana") && lista.contains(sid) && lista.contains("2h00"),
+        lista.contains("Ana") && lista.contains(sid) && lista.contains("2h 00min 00s"),
         "{lista}"
     );
     assert!(
@@ -754,14 +754,12 @@ async fn regras_administradas_no_proprio_pc_pelo_kioskd() {
 
     let lista = texto(&kioskd(&db_url, None, &["regra", "listar", "--perfil", &p]).stdout);
     assert!(
-        lista.contains(&format!(
-            "{bloqueio}\t{p}\tnotepad.exe\tACTIVE\tlimite: 0h00"
-        )),
+        lista.contains(&format!("{bloqueio}\t{p}\tnotepad.exe\tACTIVE\tlimite: 0s")),
         "{lista}"
     );
     assert!(
         lista.contains(&format!(
-            "{pendente}\t{p}\tnotepad.exe\tPENDING\tlimite: 1h00\t08:00-20:00"
+            "{pendente}\t{p}\tnotepad.exe\tPENDING\tlimite: 1h 00min 00s\t08:00-20:00"
         )),
         "{lista}"
     );
@@ -794,7 +792,7 @@ async fn regras_administradas_no_proprio_pc_pelo_kioskd() {
     let lista = texto(&kioskd(&db_url, None, &["regra", "listar"]).stdout);
     assert!(
         lista.contains(&format!(
-            "{pendente}\t{p}\tnotepad.exe\tACTIVE\tlimite: 0h30"
+            "{pendente}\t{p}\tnotepad.exe\tACTIVE\tlimite: 30min 00s"
         )),
         "{lista}"
     );

@@ -1,6 +1,6 @@
 # Fluxos dos comandos
 
-Um fluxograma por comando de `kioskd` (serviço e administração local) e `kioskctl` (CLI dos pais). Cada um mostra quem age, que dado passa de uma etapa para a próxima, onde a informação é gravada e o que volta para quem chamou. Regra do projeto: ver [AGENTS.md](../../AGENTS.md#fluxogramas-dos-comandos). O teste `tests/documentacao.rs` reprova o build se algum comando ficar sem fluxograma aqui. Os comandos estão em inglês, a convenção; os equivalentes em português valem igualmente e estão em [comandos em português](../runbooks/comandos-em-portugues.md) ([ADR-010](../adr/ADR-010-idiomas-e-comandos-em-ingles.md)).
+Um fluxograma por comando de `kioskd` (serviço e administração local) e `kioskctl` (CLI dos pais). Cada um mostra quem age, que dado passa de uma etapa para a próxima, onde a informação é gravada e o que volta para quem chamou. Regra do projeto: ver [AGENTS.md](../../AGENTS.md#fluxogramas-dos-comandos). O teste `tests/documentacao.rs` reprova o build se algum comando ficar sem fluxograma aqui. Todo comando recusa opção desconhecida, opção sem valor e argumento sobrando antes de abrir o banco ou gravar qualquer coisa (o diagrama de cada comando mostra só os casos de cada um). Os comandos estão em inglês, a convenção; os equivalentes em português valem igualmente e estão em [comandos em português](../runbooks/comandos-em-portugues.md) ([ADR-010](../adr/ADR-010-idiomas-e-comandos-em-ingles.md)).
 
 Decisões de origem: [arquitetura](README.md) (Camadas 0 a 5), [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (perfil por SID), [ADR-003](../adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md) (detecção e tempo de uso), [ADR-005](../adr/ADR-005-rede-da-api-de-comando.md) (rede) e [ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md) (assinatura e pareamento). Uso no dia a dia: [runbook](../runbooks/api-e-cli.md).
 
@@ -160,7 +160,10 @@ flowchart TD
     B --> C{"perfil existe?"}
     C -->|não| E["erro: perfil inexistente<br/>evento de falha no log"]
     C -->|sim| D["transação: daily_total_limit_seconds<br/>e evento MODIFY_LIMIT com o perfil"]
-    D --> F["o agente usa o novo limite total no próximo tick"]
+    D --> W{"sessão ativa de hoje já igual ou maior<br/>que o novo limite total?"}
+    W -->|sim| W1["aviso: a sessão será bloqueada em seguida"]
+    W -->|não| F["o agente usa o novo limite total no próximo tick"]
+    W1 --> F
 ```
 
 ### `kioskd profile window`
@@ -199,7 +202,9 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd rule create --profile --app --limit --window --until --activate"] --> B["monta o mesmo corpo JSON da API add_rule"]
+    A["kioskd rule create --profile --app --limit --window --until --activate"] --> A2{"argumentos: opção desconhecida,<br/>sem valor ou sobrando?"}
+    A2 -->|sim| E0["erro, com sugestão quando há parecida:<br/>nada é aberto nem gravado"]
+    A2 -->|não| B["monta o mesmo corpo JSON da API add_rule"]
     B --> C{"Camada 3 da API: limite até 86400,<br/>janela válida, data no futuro?"}
     C -->|não| E1["erro com o motivo exato"]
     C -->|sim| D["abre o banco e informa qual"]
@@ -211,6 +216,9 @@ flowchart TD
     H -->|não| J["fica pendente"]
     I --> K["imprime o ID da regra"]
     J --> K
+    K --> W{"regra ativa e uso de hoje do app<br/>já igual ou maior que o limite?"}
+    W -->|sim| W1["aviso: o app será fechado assim que abrir;<br/>a regra já foi gravada"]
+    W -->|não| W2["nada a avisar"]
 ```
 
 ### `kioskd rule activate`
@@ -221,7 +229,10 @@ flowchart TD
     B --> C{"regra existe?"}
     C -->|não| E["erro: regra inexistente<br/>evento de falha no log"]
     C -->|sim| D["transação: estado ACTIVE<br/>e evento ACTIVATE_RULE com o perfil"]
-    D --> F["o agente aplica a regra no próximo tick"]
+    D --> W{"uso de hoje do app já igual ou maior<br/>que o limite da regra?"}
+    W -->|sim| W1["aviso: o app será fechado assim que abrir"]
+    W -->|não| F["o agente aplica a regra no próximo tick"]
+    W1 --> F
 ```
 
 ### `kioskd rule revoke`
@@ -245,6 +256,8 @@ flowchart TD
     C --> D{"regra existe e não está revogada?"}
     D -->|não| E2["erro: inexistente ou revogada"]
     D -->|sim| F["transação: daily_limit_seconds<br/>e evento MODIFY_LIMIT com o perfil"]
+    F --> W{"regra ativa e uso de hoje do app<br/>já igual ou maior que o novo limite?"}
+    W -->|sim| W1["aviso: o app será fechado assim que abrir"]
 ```
 
 ### `kioskd rule list`

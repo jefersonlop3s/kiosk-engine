@@ -266,3 +266,351 @@ fn o_idioma_nunca_muda_o_nome_dos_comandos_nem_os_codigos() {
         assert_eq!(erros[0], erros[1], "{lang}: inglês e português dão o mesmo");
     }
 }
+
+// ---- argumentos: nada é ignorado em silêncio ----
+
+fn kioskd_em(db: &str, lang: &str, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_kioskd"))
+        .args(args)
+        .env("KIOSK_DB", db)
+        .env("KIOSK_LANG", lang)
+        .env_remove("KIOSK_LISTEN")
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn opcao_digitada_errada_e_recusada_com_sugestao_e_nada_e_criado() {
+    let dir = TempDir::new().unwrap();
+    let db = format!("sqlite://{}", dir.path().join("k.db").display());
+    let perfil = id(&kioskd(
+        &db,
+        &[
+            "profile",
+            "create",
+            "--sid",
+            "S-1-5-21-1-2-3-1001",
+            "--name",
+            "Ana",
+        ],
+    ));
+    let app = id(&kioskd(&db, &["app", "create", "--process", "notepad.exe"]));
+
+    // o caso do teste no PC real: --activete criava uma regra pendente sem avisar
+    for (lang, esperado) in [
+        (
+            "en-US",
+            "unknown option --activete for `rule create` (did you mean --activate?)",
+        ),
+        (
+            "pt-BR",
+            "opção desconhecida --activete em `rule create` (você quis dizer --activate?)",
+        ),
+        (
+            "es-ES",
+            "opción desconocida --activete en `rule create` (¿quiso decir --activate?)",
+        ),
+    ] {
+        let o = kioskd_em(
+            &db,
+            lang,
+            &[
+                "rule",
+                "create",
+                "--profile",
+                &perfil,
+                "--app",
+                &app,
+                "--limit",
+                "180",
+                "--activete",
+            ],
+        );
+        let erro = String::from_utf8_lossy(&o.stderr);
+        assert!(!o.status.success(), "{lang}: aceitou");
+        assert!(erro.contains(esperado), "{lang}: {erro}");
+        assert!(
+            !erro.contains("kioskd: database") && !erro.contains("banco"),
+            "{lang}: abriu o banco: {erro}"
+        );
+    }
+    // e em português também (o nome da opção é o traduzido)
+    let o = kioskd_em(
+        &db,
+        "pt-BR",
+        &[
+            "regra", "criar", "--perfil", &perfil, "--app", &app, "--ativat",
+        ],
+    );
+    assert!(!o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("você quis dizer --activate"));
+
+    let lista = kioskd(&db, &["rule", "list"]);
+    assert!(
+        String::from_utf8_lossy(&lista.stdout).trim().is_empty(),
+        "nenhuma regra devia ter sido criada: {}",
+        String::from_utf8_lossy(&lista.stdout)
+    );
+}
+
+#[test]
+fn outros_erros_de_argumento_sao_explicados() {
+    let db = "sqlite://nao-e-aberto.db";
+    for (args, esperado) in [
+        (
+            vec!["rule", "create", "--profile"],
+            "--profile needs a value in `rule create`",
+        ),
+        (
+            vec!["rule", "list", "extra"],
+            "unexpected argument \"extra\" for `rule list`",
+        ),
+        (
+            vec!["status", "--listen", "x"],
+            "unknown option --listen for `status`",
+        ),
+        (
+            vec!["revoke", "a", "b"],
+            "unexpected argument \"b\" for `revoke`",
+        ),
+        (
+            vec!["app", "create", "--procces", "x.exe"],
+            "did you mean --process?",
+        ),
+        (
+            vec!["profile", "create", "--zzzzzzzz", "x"],
+            "unknown option --zzzzzzzz for `profile create`",
+        ),
+    ] {
+        let o = kioskd_em(db, "en-US", &args);
+        let erro = String::from_utf8_lossy(&o.stderr);
+        assert!(
+            !o.status.success() && erro.contains(esperado),
+            "{args:?}: {erro}"
+        );
+    }
+    // sem parecido, sem sugestão
+    let o = kioskd_em(db, "en-US", &["profile", "create", "--zzzzzzzz", "x"]);
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("did you mean"));
+    // kioskctl também
+    let o = Command::new(env!("CARGO_BIN_EXE_kioskctl"))
+        .args([
+            "rule",
+            "create",
+            "--perfil",
+            "x",
+            "--app",
+            "y",
+            "--activate",
+        ])
+        .env("KIOSK_LANG", "pt-BR")
+        .output()
+        .unwrap();
+    let erro = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        !o.status.success() && erro.contains("opção desconhecida --activate em `rule create`"),
+        "{erro}"
+    );
+}
+
+#[test]
+fn help_mostra_o_uso_sem_erro() {
+    for exe in [env!("CARGO_BIN_EXE_kioskd"), env!("CARGO_BIN_EXE_kioskctl")] {
+        for args in [vec!["--help"], vec!["-h"], vec!["rule", "create", "--help"]] {
+            let o = Command::new(exe)
+                .args(&args)
+                .env("KIOSK_LANG", "en-US")
+                .output()
+                .unwrap();
+            assert!(o.status.success(), "{args:?}");
+            assert!(
+                String::from_utf8_lossy(&o.stdout).contains("usage:"),
+                "{args:?}"
+            );
+        }
+    }
+}
+
+/// A tabela de argumentos aceitos tem de ser exatamente o que o texto de uso anuncia: uma opção
+/// nova no uso sem entrar na tabela seria recusada, e uma na tabela sem estar no uso, não documentada.
+#[test]
+fn a_tabela_de_argumentos_e_o_texto_de_uso_dizem_o_mesmo() {
+    use std::collections::BTreeSet;
+    for (uso, exe, formas) in [
+        (
+            kiosk_engine::i18n::Msg::UsoKioskd,
+            "kioskd",
+            kiosk_engine::cli::FORMAS_KIOSKD,
+        ),
+        (
+            kiosk_engine::i18n::Msg::UsoKioskctl,
+            "kioskctl",
+            kiosk_engine::cli::FORMAS_KIOSKCTL,
+        ),
+    ] {
+        for idioma in kiosk_engine::i18n::Idioma::TODOS {
+            let texto = uso.em(idioma);
+            for f in formas {
+                let nome = f.comando.join(" ");
+                let linha = texto
+                    .lines()
+                    .map(str::trim)
+                    .find(|l| {
+                        l.strip_prefix(&format!("{exe} {nome}"))
+                            .is_some_and(|r| r.is_empty() || r.starts_with([' ', '\t']))
+                    })
+                    .unwrap_or_else(|| panic!("{idioma:?}: `{exe} {nome}` não está no uso"));
+                let no_uso: BTreeSet<&str> = linha
+                    .split(|c: char| !(c.is_alphanumeric() || c == '-'))
+                    .filter(|p| p.starts_with("--"))
+                    .collect();
+                let na_tabela: BTreeSet<&str> =
+                    f.com_valor.iter().chain(f.sem_valor).copied().collect();
+                assert_eq!(no_uso, na_tabela, "{idioma:?}: `{exe} {nome}`: {linha}");
+            }
+        }
+    }
+}
+
+#[test]
+fn regra_que_ja_nasce_acima_do_uso_do_dia_avisa_em_cada_idioma() {
+    use kiosk_engine::db_manager::{EventContext, KioskDbManager};
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let dir = TempDir::new().unwrap();
+    let db = format!("sqlite://{}", dir.path().join("k.db").display());
+    let perfil = id(&kioskd(
+        &db,
+        &[
+            "profile",
+            "create",
+            "--sid",
+            "S-1-5-21-1-2-3-1001",
+            "--name",
+            "Ana",
+            "--total-limit",
+            "600",
+        ],
+    ));
+    let app = id(&kioskd(&db, &["app", "create", "--process", "notepad.exe"]));
+    // 11min09s de Bloco de Notas e 15 min de sessão hoje, como no teste real
+    rt.block_on(async {
+        let d = KioskDbManager::new(&db).await.unwrap();
+        let fim = chrono::Utc::now();
+        let ini = fim - chrono::Duration::seconds(500);
+        let (p, a) = (perfil.parse().unwrap(), app.parse().unwrap());
+        let tz = chrono::Local;
+        // dois intervalos de até 10 min, dentro do mesmo dia local
+        d.registrar_uso(&EventContext::local(), p, a, ini, fim, &tz)
+            .await
+            .unwrap();
+        d.registrar_sessao(&EventContext::local(), p, ini, fim, &tz)
+            .await
+            .unwrap();
+        d.registrar_uso(
+            &EventContext::local(),
+            p,
+            a,
+            ini,
+            ini + chrono::Duration::seconds(169),
+            &tz,
+        )
+        .await
+        .unwrap();
+    });
+    // uso de hoje do app: 669 s (se a virada do dia local cair no meio do teste, o limite abaixo ainda vale)
+    for (lang, esperado) in [
+        ("en-US", "warning: notepad.exe has already used"),
+        ("pt-BR", "atenção: notepad.exe já usou"),
+        ("es-ES", "atención: notepad.exe ya usó"),
+    ] {
+        let o = kioskd_em(
+            &db,
+            lang,
+            &[
+                "rule",
+                "create",
+                "--profile",
+                &perfil,
+                "--app",
+                &app,
+                "--limit",
+                "180",
+                "--activate",
+            ],
+        );
+        let erro = String::from_utf8_lossy(&o.stderr);
+        assert!(o.status.success(), "{lang}: {erro}");
+        assert!(
+            erro.contains(esperado) && erro.contains("3min 00s"),
+            "{lang}: {erro}"
+        );
+    }
+    // pendente não avisa (ainda não vale), e limite acima do uso também não
+    let o = kioskd_em(
+        &db,
+        "en-US",
+        &[
+            "rule",
+            "create",
+            "--profile",
+            &perfil,
+            "--app",
+            &app,
+            "--limit",
+            "180",
+        ],
+    );
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("warning"));
+    let o = kioskd_em(
+        &db,
+        "en-US",
+        &[
+            "rule",
+            "create",
+            "--profile",
+            &perfil,
+            "--app",
+            &app,
+            "--limit",
+            "86400",
+            "--activate",
+        ],
+    );
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("warning"));
+    // limite 0 é bloqueio de propósito: sem aviso
+    let o = kioskd_em(
+        &db,
+        "en-US",
+        &[
+            "rule",
+            "create",
+            "--profile",
+            &perfil,
+            "--app",
+            &app,
+            "--limit",
+            "0",
+            "--activate",
+        ],
+    );
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("warning"));
+
+    // o limite total do perfil (600 s) também: a sessão já passou de 500 s? ainda não, então sem aviso;
+    // abaixo do uso, avisa
+    let o = kioskd_em(
+        &db,
+        "pt-BR",
+        &["profile", "limit", &perfil, "--seconds", "300"],
+    );
+    let erro = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        o.status.success() && erro.contains("atenção: a conta já ficou"),
+        "{erro}"
+    );
+    let o = kioskd_em(
+        &db,
+        "en-US",
+        &["profile", "limit", &perfil, "--seconds", "90000"],
+    );
+    assert!(!String::from_utf8_lossy(&o.stderr).contains("warning"));
+}

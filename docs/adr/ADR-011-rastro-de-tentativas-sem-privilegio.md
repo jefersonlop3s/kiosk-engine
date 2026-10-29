@@ -14,6 +14,10 @@ Dois fatos que o teste mostrou e esta ADR também resolve:
 - Só o `pairing-code` confere a elevação. Os outros comandos que usam o banco (`devices`, `revoke`, `profile *`, `app *`, `rule *`) falham pelo erro cru do SQLite (`unable to open database file (code: 14)`), sem explicar e sem rastro.
 - O serviço (SYSTEM) já é dono do banco e escuta a API, mas a API é só para dispositivos pareados e assinados ([ADR-006](ADR-006-assinatura-de-requisicoes-e-pareamento.md)); uma conta local sem privilégio não tem como falar com ele.
 
+## Confirmações do dono (2026-10-29)
+
+O dono confirmou as duas decisões que a proposta deixou abertas, e elas valem como estão escritas abaixo: **(1)** o administrador que esqueceu de abrir o PowerShell elevado também é registrado, marcado como `admin_account: true`; **(2)** o que a conta da criança tenta contra o serviço pelo gerenciador de serviços (por exemplo `sc stop`) fica fora desta ADR. O aceite da ADR como um todo ainda não foi dado.
+
 ## Decisão
 
 Proposta:
