@@ -649,7 +649,7 @@ async fn pareamento_recusado_explica_como_gerar_o_codigo() {
     let erro = texto(&p.stderr);
     assert!(
         erro.contains("8 caracteres")
-            && erro.contains("kioskd codigo-pareamento")
+            && erro.contains("kioskd pairing-code")
             && erro.contains("KIOSK_DB"),
         "{erro}"
     );

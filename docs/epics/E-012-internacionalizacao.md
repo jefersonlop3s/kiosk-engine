@@ -30,6 +30,15 @@ Estado: em andamento desde 2026-10-29 ([ADR-010](../adr/ADR-010-idiomas-e-comand
 | F2 | Catálogo de mensagens e escolha de idioma (`KIOSK_LANG`, idioma do Windows, en-US); mensagens do `kioskd`, do `kioskctl` e do serviço traduzidas | F1 | Testes em cada idioma; build falha se faltar tradução |
 | F3 | Avisos no idioma da conta da criança e detalhe do log forense como código | F2 | Aviso visto no Windows real numa conta em outro idioma; teste de que o log grava códigos |
 
+## Progresso
+
+- **F1** (2026-10-29), aguardando o CI Windows:
+  - `src/cli.rs` traz as tabelas de equivalentes, e os executáveis traduzem os argumentos para inglês antes de interpretar, então há um caminho só;
+  - uso, fluxogramas, runbook e README em inglês;
+  - página [comandos em português](../runbooks/comandos-em-portugues.md), conferida contra as tabelas por teste;
+  - corpo do pareamento em inglês;
+  - serviço registrado como `service`, com `servico` equivalente.
+
 ## Aceites
 
 - Um usuário que só lê inglês ou espanhol instala, cadastra e pareia sem ver português.

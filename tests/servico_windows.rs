@@ -281,10 +281,10 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     }
     assert!(ok(&["estado"]).contains("não instalado"));
 
-    // instala e confere o que o Windows diz
-    let saida = ok(&["instalar", "--escutar", &format!("127.0.0.1:{PORTA}")]);
+    // instala e confere o que o Windows diz (em inglês, a convenção; o resto do teste mistura)
+    let saida = ok(&["install", "--listen", &format!("127.0.0.1:{PORTA}")]);
     assert!(saida.contains("serviço em execução"), "{saida}");
-    let estado = ok(&["estado"]);
+    let estado = ok(&["status"]);
     assert!(estado.contains("início: automático"), "{estado}");
     assert!(estado.contains("conta: LocalSystem"), "{estado}");
     assert!(
@@ -292,6 +292,8 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
         "{estado}"
     );
     assert!(estado.contains(r"\kiosk\kioskd.exe"), "{estado}");
+    // registrado com o nome em inglês; a 0.0.4 usava `servico`, que segue valendo como equivalente
+    assert!(estado.contains(r#"kioskd.exe" service"#), "{estado}");
     // a pasta instalada entra no PATH do sistema uma vez, e as outras entradas ficam
     assert!(estado.contains("PATH do sistema: sim"), "{estado}");
     assert_eq!(kiosk_engine::servico_windows::vezes_no_path(), Ok(1));
@@ -384,7 +386,7 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     assert_ne!(novo, pid);
     esperar(Duration::from_secs(15), status_do_pareamento).expect("API não voltou");
 
-    // reinstalar atualiza sem duplicar
+    // reinstalar atualiza sem duplicar (em português: as duas línguas valem, ADR-010)
     ok(&["instalar", "--escutar", &format!("127.0.0.1:{PORTA}")]);
     assert!(pid_em_execucao().is_some());
     assert_eq!(
@@ -394,7 +396,7 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     );
 
     // desinstalar sem --apagar-dados mantém os dados
-    let saida = ok(&["desinstalar"]);
+    let saida = ok(&["uninstall"]);
     assert!(saida.contains("parado e removido"), "{saida}");
     assert!(
         esperar(Duration::from_secs(15), || ok(&["estado"])
@@ -425,7 +427,7 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     assert!(dados.exists());
 
     let mut filho = Command::new(env!("CARGO_BIN_EXE_kioskd"))
-        .args(["desinstalar", "--apagar-dados"])
+        .args(["uninstall", "--purge-data"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -441,5 +443,5 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
 fn servico_rodado_a_mao_explica_e_falha() {
     let o = kioskd(&["servico"]);
     assert!(!o.status.success());
-    assert!(texto(&o).contains("kioskd instalar"), "{}", texto(&o));
+    assert!(texto(&o).contains("kioskd install"), "{}", texto(&o));
 }

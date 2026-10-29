@@ -1,23 +1,23 @@
-//! Serviço do kiosk. Uso:
+//! Serviço do kiosk. Comandos em inglês (convenção); os equivalentes em português valem
+//! igualmente (ADR-010, `kiosk_engine::cli`). Uso:
 //!
-//! - `kioskd servir [--sem-agente]`: sobe a API de comando (exige `KIOSK_LISTEN`, sem valor
+//! - `kioskd serve [--no-agent]`: sobe a API de comando (exige `KIOSK_LISTEN`, sem valor
 //!   padrão — ADR-005) e, no Windows, o agente de enforcement (tick de 2 s) e a limpeza diária
 //!   do log (retenção de 90 dias). Fora do Windows só a API sobe.
-//! - `kioskd codigo-pareamento`: gera o código de pareamento (válido por 5 min) para digitar no
+//! - `kioskd pairing-code`: gera o código de pareamento (válido por 5 min) para digitar no
 //!   dispositivo dos pais. No Windows, só administrador elevado; a recusa vai para o log forense.
-//! - `kioskd dispositivos`: lista os dispositivos pareados.
-//! - `kioskd revogar <id>`: revoga um dispositivo.
-//! - `kioskd perfil criar --conta USUARIO --nome NOME [--limite-total SEGUNDOS]` (Windows; em
-//!   outros sistemas, `--sid S-1-...` no lugar de `--conta`), `perfil listar`,
-//!   `perfil limite <id> --segundos N|--sem-limite`, `perfil janela <id> --dias seg,ter,... --janela HH:MM-HH:MM`.
-//! - `kioskd app criar --processo NOME.exe [--isento | --ignorar]` e `app listar`.
-//! - `kioskd regra criar --perfil ID --app ID [--limite S] [--janela HH:MM-HH:MM] [--ate RFC3339] [--ativar]`,
-//!   `regra ativar|revogar <id>`, `regra limite <id> --segundos N` e `regra listar [--perfil ID]`:
+//! - `kioskd devices`: lista os dispositivos pareados; `kioskd revoke <id>` revoga um.
+//! - `kioskd profile create --account USUARIO --name NOME [--total-limit SEGUNDOS]` (Windows; em
+//!   outros sistemas, `--sid S-1-...` no lugar de `--account`), `profile list`,
+//!   `profile limit <id> --seconds N|--no-limit`, `profile window <id> --days mon,tue,... --window HH:MM-HH:MM`.
+//! - `kioskd app create --process NOME.exe [--exempt | --ignore]` e `app list`.
+//! - `kioskd rule create --profile ID --app ID [--limit S] [--window HH:MM-HH:MM] [--until RFC3339] [--activate]`,
+//!   `rule activate|revoke <id>`, `rule limit <id> --seconds N` e `rule list [--profile ID]`:
 //!   administração local das regras, com a mesma validação e auditoria da API.
-//! - `kioskd instalar --escutar ip:porta[,...]` (Windows, administrador): copia os executáveis
+//! - `kioskd install --listen ip:porta[,...]` (Windows, administrador): copia os executáveis
 //!   para `%ProgramFiles%\kiosk`, protege `%ProgramData%\kiosk` e registra e inicia o serviço
-//!   `kiosk` (LocalSystem, início automático, reinício em falha; ADR-008). `kioskd desinstalar
-//!   [--apagar-dados]` desfaz; `kioskd estado` mostra o serviço; `kioskd servico` é o modo
+//!   `kiosk` (LocalSystem, início automático, reinício em falha; ADR-008). `kioskd uninstall
+//!   [--purge-data]` desfaz; `kioskd status` mostra o serviço; `kioskd service` é o modo
 //!   serviço, chamado pelo Windows.
 //!
 //! Variáveis: `KIOSK_DB` (padrão `sqlite://C:/ProgramData/kiosk/kiosk.db` no Windows e
@@ -34,31 +34,34 @@ use kiosk_engine::db_manager::{EventContext, KioskDbManager};
 use uuid::Uuid;
 
 const USO: &str = "uso:
-  kioskd servir [--sem-agente]
-  kioskd codigo-pareamento   (Windows: PowerShell como administrador)
-  kioskd dispositivos
-  kioskd revogar <id-do-dispositivo>
-  kioskd perfil criar --conta USUARIO --nome NOME [--limite-total SEGUNDOS]   (ou --sid S-1-... no lugar de --conta)
-  kioskd perfil listar
-  kioskd perfil limite <id-do-perfil> --segundos N | --sem-limite
-  kioskd perfil janela <id-do-perfil> --dias seg,ter,qua,qui,sex --janela 08:00-20:00
-  kioskd app criar --processo NOME.exe [--isento | --ignorar]
-  kioskd app listar
-  kioskd regra criar --perfil ID --app ID [--limite SEGUNDOS] [--janela HH:MM-HH:MM] [--ate RFC3339] [--ativar]
-  kioskd regra ativar <id-da-regra>
-  kioskd regra revogar <id-da-regra>
-  kioskd regra limite <id-da-regra> --segundos N
-  kioskd regra listar [--perfil ID]
-  kioskd instalar --escutar ip:porta[,ip:porta...]   (Windows, PowerShell como administrador)
-  kioskd desinstalar [--apagar-dados]
-  kioskd estado
-  kioskd servico   (chamado pelo Windows ao iniciar o serviço; não rode à mão)
-variáveis: KIOSK_DB (padrão no Windows: sqlite://C:/ProgramData/kiosk/kiosk.db), KIOSK_LISTEN (ip:porta[,ip:porta...], obrigatória em `servir`)";
+  kioskd serve [--no-agent]
+  kioskd pairing-code   (Windows: PowerShell como administrador)
+  kioskd devices
+  kioskd revoke <id-do-dispositivo>
+  kioskd profile create --account USUARIO --name NOME [--total-limit SEGUNDOS]   (ou --sid S-1-... no lugar de --account)
+  kioskd profile list
+  kioskd profile limit <id-do-perfil> --seconds N | --no-limit
+  kioskd profile window <id-do-perfil> --days mon,tue,wed,thu,fri --window 08:00-20:00
+  kioskd app create --process NOME.exe [--exempt | --ignore]
+  kioskd app list
+  kioskd rule create --profile ID --app ID [--limit SEGUNDOS] [--window HH:MM-HH:MM] [--until RFC3339] [--activate]
+  kioskd rule activate <id-da-regra>
+  kioskd rule revoke <id-da-regra>
+  kioskd rule limit <id-da-regra> --seconds N
+  kioskd rule list [--profile ID]
+  kioskd install --listen ip:porta[,ip:porta...]   (Windows, PowerShell como administrador)
+  kioskd uninstall [--purge-data]
+  kioskd status
+  kioskd service   (chamado pelo Windows ao iniciar o serviço; não rode à mão)
+os mesmos comandos em português também valem (ex.: kioskd estado = kioskd status); lista em docs/runbooks/comandos-em-portugues.md
+variáveis: KIOSK_DB (padrão no Windows: sqlite://C:/ProgramData/kiosk/kiosk.db), KIOSK_LISTEN (ip:porta[,ip:porta...], obrigatória em `serve`)";
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    // o modo serviço entrega a thread principal ao SCM antes de existir qualquer runtime
-    let resultado = if args == ["servico"] {
+    // português e inglês equivalem; daqui em diante, só inglês (ADR-010)
+    let args = kiosk_engine::cli::em_ingles(&std::env::args().skip(1).collect::<Vec<_>>());
+    // o modo serviço entrega a thread principal ao SCM antes de existir qualquer runtime.
+    // `servico` (português) é como a 0.0.4 registrou o serviço, e segue valendo
+    let resultado = if args == ["service"] {
         servico()
     } else {
         tokio::runtime::Runtime::new()
@@ -145,7 +148,7 @@ async fn servir(com_agente: bool) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// `kioskd servico`: o processo que o SCM inicia (ADR-008).
+/// `kioskd service`: o processo que o SCM inicia (ADR-008).
 #[cfg(windows)]
 fn servico() -> Result<(), String> {
     kiosk_engine::servico_windows::despachar(|parar| {
@@ -281,9 +284,10 @@ fn segundos(texto: &str, nome: &str) -> Result<u64, String> {
         .map_err(|_| format!("{nome} inválido: {texto:?}"))
 }
 
-/// `dom,seg,...` ou `0,1,...` -> dias da semana (0 = domingo).
+/// `sun,mon,...`, `dom,seg,...` ou `0,1,...` -> dias da semana (0 = domingo).
 fn dias(texto: &str) -> Result<Vec<u8>, String> {
     const NOMES: [&str; 7] = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+    const NAMES: [&str; 7] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
     texto
         .split(',')
         .map(|d| {
@@ -291,10 +295,11 @@ fn dias(texto: &str) -> Result<Vec<u8>, String> {
             NOMES
                 .iter()
                 .position(|n| d.starts_with(n))
+                .or_else(|| NAMES.iter().position(|n| d.starts_with(n)))
                 .map(|i| i as u8)
                 .or_else(|| d.parse::<u8>().ok().filter(|n| *n <= 6))
                 .ok_or_else(|| {
-                    format!("dia inválido: {d:?} (use dom, seg, ter, qua, qui, sex, sab)")
+                    format!("dia inválido: {d:?} (use mon, tue, wed, thu, fri, sat, sun)")
                 })
         })
         .collect()
@@ -305,7 +310,7 @@ fn hora(texto: &str) -> Result<chrono::NaiveTime, String> {
         .map_err(|_| format!("hora inválida: {texto:?} (use HH:MM)"))
 }
 
-/// SID da conta: `--sid` explícito, ou `--conta` resolvida pelo Windows.
+/// SID da conta: `--sid` explícito, ou `--account` resolvida pelo Windows.
 fn sid_do_argumento(args: &[String]) -> Result<String, String> {
     if let Some(sid) = opcao(args, "--sid") {
         if !sid.starts_with("S-1-") {
@@ -313,7 +318,7 @@ fn sid_do_argumento(args: &[String]) -> Result<String, String> {
         }
         return Ok(sid);
     }
-    let conta = exigir(args, "--conta")?;
+    let conta = exigir(args, "--account")?;
     #[cfg(windows)]
     {
         kiosk_engine::sistema_windows::sid_de_usuario(&conta)
@@ -321,7 +326,7 @@ fn sid_do_argumento(args: &[String]) -> Result<String, String> {
     #[cfg(not(windows))]
     {
         Err(format!(
-            "--conta {conta:?} só é resolvida no Windows; informe --sid"
+            "--account {conta:?} só é resolvida no Windows; informe --sid"
         ))
     }
 }
@@ -370,7 +375,7 @@ fn estado() -> Result<(), String> {
     let no_path = if e.no_path {
         "sim"
     } else {
-        "não (rode `kioskd instalar` de novo)"
+        "não (rode `kioskd install` de novo)"
     };
     println!("PATH do sistema: {no_path}");
     println!("dados: {}", sv::pasta_dados().display());
@@ -404,23 +409,23 @@ async fn executar(args: &[String]) -> Result<(), String> {
         .collect::<Vec<_>>()
         .as_slice()
     {
-        ["servir", resto @ ..] => {
+        ["serve", resto @ ..] => {
             let com_agente = match resto {
                 [] => true,
-                ["--sem-agente"] => false,
+                ["--no-agent"] => false,
                 _ => return Err(USO.to_string()),
             };
             servir(com_agente).await
         }
-        ["instalar", "--escutar", escutar] => {
+        ["install", "--listen", escutar] => {
             let lista = lista_de_enderecos(escutar)?;
             let normalizado: Vec<String> = lista.iter().map(ToString::to_string).collect();
             instalar(&normalizado.join(","))
         }
-        ["desinstalar", resto @ ..] => {
+        ["uninstall", resto @ ..] => {
             let apagar = match resto {
                 [] => false,
-                ["--apagar-dados"] => true,
+                ["--purge-data"] => true,
                 _ => return Err(USO.to_string()),
             };
             if apagar {
@@ -428,8 +433,8 @@ async fn executar(args: &[String]) -> Result<(), String> {
             }
             desinstalar(apagar)
         }
-        ["estado"] => estado(),
-        ["codigo-pareamento"] => {
+        ["status"] => estado(),
+        ["pairing-code"] => {
             exigir_administrador().await?;
             let db = abrir_banco().await?;
             let codigo = db
@@ -440,7 +445,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
             println!("{codigo}");
             Ok(())
         }
-        ["dispositivos"] => {
+        ["devices"] => {
             let db = abrir_banco().await?;
             let lista = db.listar_dispositivos().await.map_err(|e| e.to_string())?;
             if lista.is_empty() {
@@ -452,7 +457,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        ["revogar", id] => {
+        ["revoke", id] => {
             let id = Uuid::parse_str(id).map_err(|_| format!("identificador inválido: {id:?}"))?;
             let db = abrir_banco().await?;
             db.revogar_dispositivo(&EventContext::local(), id, Utc::now())
@@ -466,11 +471,11 @@ async fn executar(args: &[String]) -> Result<(), String> {
             eprintln!("kioskd: dispositivo {id} revogado");
             Ok(())
         }
-        ["perfil", "criar", ..] => {
+        ["profile", "create", ..] => {
             let sid = sid_do_argumento(args)?;
-            let nome = exigir(args, "--nome")?;
-            let limite = opcao(args, "--limite-total")
-                .map(|l| segundos(&l, "--limite-total"))
+            let nome = exigir(args, "--name")?;
+            let limite = opcao(args, "--total-limit")
+                .map(|l| segundos(&l, "--total-limit"))
                 .transpose()?;
             let db = abrir_banco().await?;
             let perfil = kiosk_engine::database_schema::ChildProfile {
@@ -491,7 +496,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
             eprintln!("kioskd: perfil {nome:?} criado para a conta {sid}");
             Ok(())
         }
-        ["perfil", "listar"] => {
+        ["profile", "list"] => {
             let db = abrir_banco().await?;
             let perfis = db.listar_perfis().await.map_err(|e| e.to_string())?;
             if perfis.is_empty() {
@@ -529,12 +534,12 @@ async fn executar(args: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        ["perfil", "limite", perfil, ..] => {
+        ["profile", "limit", perfil, ..] => {
             let perfil = id(perfil)?;
-            let limite = if args.iter().any(|a| a == "--sem-limite") {
+            let limite = if args.iter().any(|a| a == "--no-limit") {
                 None
             } else {
-                Some(segundos(&exigir(args, "--segundos")?, "--segundos")?)
+                Some(segundos(&exigir(args, "--seconds")?, "--seconds")?)
             };
             let db = abrir_banco().await?;
             db.set_profile_limit(&EventContext::local(), perfil, limite)
@@ -549,13 +554,13 @@ async fn executar(args: &[String]) -> Result<(), String> {
             );
             Ok(())
         }
-        ["perfil", "janela", perfil, ..] => {
+        ["profile", "window", perfil, ..] => {
             let perfil = id(perfil)?;
-            let dias = dias(&exigir(args, "--dias")?)?;
-            let janela = exigir(args, "--janela")?;
+            let dias = dias(&exigir(args, "--days")?)?;
+            let janela = exigir(args, "--window")?;
             let (a, b) = janela
                 .split_once('-')
-                .ok_or_else(|| format!("--janela deve ser HH:MM-HH:MM, recebi {janela:?}"))?;
+                .ok_or_else(|| format!("--window deve ser HH:MM-HH:MM, recebi {janela:?}"))?;
             let janela = kiosk_engine::database_schema::TimeWindow {
                 start: hora(a)?,
                 end: hora(b)?,
@@ -572,14 +577,14 @@ async fn executar(args: &[String]) -> Result<(), String> {
             eprintln!("kioskd: janela gravada para {} dia(s)", dias.len());
             Ok(())
         }
-        ["app", "criar", ..] => {
+        ["app", "create", ..] => {
             use kiosk_engine::database_schema::ProcessStatus;
-            let processo = exigir(args, "--processo")?;
+            let processo = exigir(args, "--process")?;
             let status = match (
-                args.iter().any(|a| a == "--isento"),
-                args.iter().any(|a| a == "--ignorar"),
+                args.iter().any(|a| a == "--exempt"),
+                args.iter().any(|a| a == "--ignore"),
             ) {
-                (true, true) => return Err("use --isento ou --ignorar, não os dois".into()),
+                (true, true) => return Err("use --exempt ou --ignore, não os dois".into()),
                 (true, false) => ProcessStatus::Whitelisted,
                 (false, true) => ProcessStatus::Ignored,
                 (false, false) => ProcessStatus::Monitored,
@@ -602,7 +607,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
             eprintln!("kioskd: app {processo} cadastrado ({})", status.as_str());
             Ok(())
         }
-        ["app", "listar"] => {
+        ["app", "list"] => {
             let db = abrir_banco().await?;
             let apps = db.listar_apps().await.map_err(|e| e.to_string())?;
             if apps.is_empty() {
@@ -613,25 +618,25 @@ async fn executar(args: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        ["regra", "criar", ..] => {
+        ["rule", "create", ..] => {
             use kiosk_engine::comandos::{Comando, interpretar};
             use kiosk_engine::database_schema::{ActiveRule, RuleState};
             // mesmo corpo e mesma validação da API (Camada 3)
             let mut corpo = serde_json::json!({
-                "profile_id": exigir(args, "--perfil")?,
+                "profile_id": exigir(args, "--profile")?,
                 "app_id": exigir(args, "--app")?,
             });
-            if let Some(l) = opcao(args, "--limite") {
-                corpo["daily_limit_seconds"] = segundos(&l, "--limite")?.into();
+            if let Some(l) = opcao(args, "--limit") {
+                corpo["daily_limit_seconds"] = segundos(&l, "--limit")?.into();
             }
-            if let Some(j) = opcao(args, "--janela") {
+            if let Some(j) = opcao(args, "--window") {
                 let (a, b) = j
                     .split_once('-')
-                    .ok_or_else(|| format!("--janela deve ser HH:MM-HH:MM, recebi {j:?}"))?;
+                    .ok_or_else(|| format!("--window deve ser HH:MM-HH:MM, recebi {j:?}"))?;
                 corpo["window_start"] = a.into();
                 corpo["window_end"] = b.into();
             }
-            if let Some(t) = opcao(args, "--ate") {
+            if let Some(t) = opcao(args, "--until") {
                 corpo["effective_until"] = t.into();
             }
             let agora = Utc::now();
@@ -646,14 +651,14 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 .await
                 .map_err(|e| e.to_string())?
             {
-                return Err("perfil inexistente (veja `kioskd perfil listar`)".into());
+                return Err("perfil inexistente (veja `kioskd profile list`)".into());
             }
             if !db
                 .existe_app(nova.app_id)
                 .await
                 .map_err(|e| e.to_string())?
             {
-                return Err("app inexistente (veja `kioskd app listar`)".into());
+                return Err("app inexistente (veja `kioskd app list`)".into());
             }
             let regra = ActiveRule {
                 rule_id: Uuid::new_v4(),
@@ -669,7 +674,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
             db.create_active_rule(&ctx, &regra)
                 .await
                 .map_err(|e| e.to_string())?;
-            let ativar = args.iter().any(|a| a == "--ativar");
+            let ativar = args.iter().any(|a| a == "--activate");
             if ativar {
                 db.set_rule_state(&ctx, regra.rule_id, RuleState::Active)
                     .await
@@ -686,10 +691,10 @@ async fn executar(args: &[String]) -> Result<(), String> {
             );
             Ok(())
         }
-        ["regra", acao @ ("ativar" | "revogar"), regra] => {
+        ["rule", acao @ ("activate" | "revoke"), regra] => {
             use kiosk_engine::database_schema::RuleState;
             let regra = id(regra)?;
-            let estado = if *acao == "ativar" {
+            let estado = if *acao == "activate" {
                 RuleState::Active
             } else {
                 RuleState::Revoked
@@ -703,7 +708,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 })?;
             eprintln!(
                 "kioskd: regra {}",
-                if *acao == "ativar" {
+                if *acao == "activate" {
                     "ativada"
                 } else {
                     "revogada"
@@ -711,12 +716,12 @@ async fn executar(args: &[String]) -> Result<(), String> {
             );
             Ok(())
         }
-        ["regra", "limite", regra, ..] => {
+        ["rule", "limit", regra, ..] => {
             let regra = id(regra)?;
-            let s = segundos(&exigir(args, "--segundos")?, "--segundos")?;
+            let s = segundos(&exigir(args, "--seconds")?, "--seconds")?;
             if s > kiosk_engine::comandos::MAX_LIMITE_SEGUNDOS {
                 return Err(format!(
-                    "--segundos acima de {}",
+                    "--seconds acima de {}",
                     kiosk_engine::comandos::MAX_LIMITE_SEGUNDOS
                 ));
             }
@@ -730,8 +735,8 @@ async fn executar(args: &[String]) -> Result<(), String> {
             eprintln!("kioskd: limite diário da regra agora é {}", duracao(s));
             Ok(())
         }
-        ["regra", "listar", ..] => {
-            let perfil = opcao(args, "--perfil").map(|p| id(&p)).transpose()?;
+        ["rule", "list", ..] => {
+            let perfil = opcao(args, "--profile").map(|p| id(&p)).transpose()?;
             let db = abrir_banco().await?;
             let apps: std::collections::HashMap<Uuid, String> = db
                 .listar_apps()

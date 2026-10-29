@@ -194,17 +194,17 @@ pub async fn parear(
     nome: &str,
 ) -> Result<Uuid, String> {
     let corpo = serde_json::json!({
-        "codigo": codigo,
-        "chave_publica": codificar(chave.verifying_key().as_bytes()),
-        "nome": nome,
+        "code": codigo,
+        "public_key": codificar(chave.verifying_key().as_bytes()),
+        "name": nome,
     })
     .to_string();
     let r = post(servidor, "/api/pair", &[], corpo.as_bytes()).await?;
     if !r.aceita() {
         return Err(format!(
             "pareamento recusado pelo serviço (HTTP {}). O código tem 8 caracteres, vale por 5 minutos \
-             e só pode ser usado uma vez; gere outro no PC com `kioskd codigo-pareamento`, usando o \
-             mesmo KIOSK_DB do `kioskd servir`",
+             e só pode ser usado uma vez; gere outro no PC com `kioskd pairing-code`, usando o \
+             mesmo KIOSK_DB do `kioskd serve`",
             r.status
         ));
     }

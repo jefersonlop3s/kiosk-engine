@@ -48,7 +48,7 @@ Critério: cada fase do épico vale 100% concluída, 50% parcial e 0% não inici
 | [E-009](epics/E-009-servico-linux.md) Serviço Linux | congelado | fases a definir | 0% | Condição de retomada |
 | [E-010](epics/E-010-servico-macos.md) Serviço macOS | congelado | fases a definir | 0% | Condição de retomada |
 | [E-011](epics/E-011-servico-android.md) Serviço Android | congelado | fases a definir | 0% | Condição de retomada |
-| [E-012](epics/E-012-internacionalizacao.md) Idiomas e CLI em inglês | em andamento | F1–F3 não iniciadas | 0% | F1: CLI em inglês e API só em inglês |
+| [E-012](epics/E-012-internacionalizacao.md) Idiomas e CLI em inglês | em andamento | F1 concluída; F2 e F3 não iniciadas | 35% | F2: catálogo de mensagens nos três idiomas e escolha pelo perfil do usuário |
 
 Leitura rápida: a base comum (dados, log, motor, API) está pronta; o produto no Windows depende de fechar o E-004 e o E-007; o resto vem depois.
 

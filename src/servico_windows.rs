@@ -7,7 +7,8 @@
 //!   e o inicia. Reexecutar atualiza a instalação (para, copia, reconfigura e inicia).
 //! - `desinstalar`: para e remove o serviço e os executáveis; os dados só com `apagar_dados`.
 //! - `estado`: o que o SCM e o registro dizem do serviço.
-//! - `despachar`: o modo serviço propriamente dito (`kioskd servico`, chamado pelo SCM).
+//! - `despachar`: o modo serviço propriamente dito (`kioskd service`, chamado pelo SCM; a 0.0.4
+//!   registrou `kioskd servico`, que segue valendo porque os nomes em português equivalem).
 //!
 //! Só compila no Windows. O CI (`windows-latest`, administrador) instala, confere, derruba o
 //! processo para ver o reinício, prova que uma conta padrão não para o serviço e desinstala.
@@ -669,7 +670,7 @@ pub fn instalar(escutar: &str) -> Result<u32, String> {
     }
 
     let caminho = para_utf16(&format!(
-        "\"{}\" servico",
+        "\"{}\" service",
         destino.join("kioskd.exe").display()
     ));
     let exibicao = para_utf16(NOME_EXIBICAO);
@@ -821,7 +822,7 @@ pub fn desinstalar(apagar_dados: bool) -> Result<(), String> {
         eprintln!("kioskd: dados apagados ({})", dados.display());
     } else if dados.exists() {
         eprintln!(
-            "kioskd: dados mantidos em {} (use --apagar-dados para apagar)",
+            "kioskd: dados mantidos em {} (use --purge-data para apagar)",
             dados.display()
         );
     }
@@ -876,7 +877,7 @@ pub fn estado() -> Result<Option<Estado>, String> {
     }))
 }
 
-// --- modo serviço (`kioskd servico`) ---
+// --- modo serviço (`kioskd service`) ---
 
 type Servir = fn(Arc<Notify>) -> Result<(), String>;
 
@@ -995,7 +996,7 @@ unsafe extern "system" fn servico_main(_argc: u32, _argv: *mut PWSTR) {
 }
 
 /// Entrega o processo ao SCM; `servir` roda até o `Notify` ser acionado pelo pedido de parada.
-/// Fora do SCM (alguém rodou `kioskd servico` à mão), falha com uma explicação.
+/// Fora do SCM (alguém rodou `kioskd service` à mão), falha com uma explicação.
 pub fn despachar(servir: Servir) -> Result<(), String> {
     let _ = SERVIR.set(servir);
     let mut nome = para_utf16(NOME_SERVICO);
@@ -1012,7 +1013,7 @@ pub fn despachar(servir: Servir) -> Result<(), String> {
     // SAFETY: tabela terminada pela entrada nula; bloqueia até o serviço parar.
     if unsafe { StartServiceCtrlDispatcherW(tabela.as_ptr()) } == 0 {
         return Err(format!(
-            "{}: `kioskd servico` é chamado pelo Windows; para instalar use `kioskd instalar`",
+            "{}: `kioskd service` é chamado pelo Windows; para instalar use `kioskd install`",
             std::io::Error::last_os_error()
         ));
     }

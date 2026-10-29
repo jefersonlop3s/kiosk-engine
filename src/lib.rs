@@ -1,6 +1,7 @@
 pub mod agente;
 pub mod api;
 pub mod assinatura;
+pub mod cli;
 pub mod cliente;
 pub mod comandos;
 pub mod database_schema;

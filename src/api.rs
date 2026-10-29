@@ -182,10 +182,11 @@ async fn recusar_validacao(
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+/// Corpo do pareamento. A API fala só inglês (ADR-010).
 struct PareamentoBruto {
-    codigo: String,
-    chave_publica: String,
-    nome: String,
+    code: String,
+    public_key: String,
+    name: String,
 }
 
 /// `POST /api/pair`: o código de uso único, mostrado na conta de administrador, é a credencial.
@@ -206,12 +207,12 @@ async fn parear(
             return recusar_validacao(&db, &ctx, ActionType::PairDevice, motivo).await;
         }
     };
-    let Some(chave) = crate::pareamento::decodificar_chave_publica(&bruto.chave_publica) else {
+    let Some(chave) = crate::pareamento::decodificar_chave_publica(&bruto.public_key) else {
         let motivo = "chave pública de pareamento não é base64".to_string();
         return recusar_validacao(&db, &ctx, ActionType::PairDevice, motivo).await;
     };
     match db
-        .parear_dispositivo(&ctx, &bruto.codigo, &chave, &bruto.nome, Utc::now())
+        .parear_dispositivo(&ctx, &bruto.code, &chave, &bruto.name, Utc::now())
         .await
     {
         Ok(id) => resposta(

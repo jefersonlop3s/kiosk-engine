@@ -552,3 +552,18 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   O [E-012](epics/E-012-internacionalizacao.md) entra em andamento pela F1.
 - **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros.
 
+## 2026-10-29 — E-012 F1: comandos em inglês, português equivalente e API só em inglês
+
+- **Origem**: [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md), aceita com ajustes do dono.
+- **Resultado**:
+  - `src/cli.rs` traz as tabelas português → inglês de comandos e opções. O `kioskd` e o `kioskctl` traduzem os argumentos antes de interpretar, então as duas línguas, inclusive misturadas, seguem o mesmo código;
+  - uso impresso, fluxogramas, runbook e README em inglês; página [comandos em português](runbooks/comandos-em-portugues.md) gerada das tabelas;
+  - corpo do pareamento em inglês (`code`, `public_key`, `name`), uma quebra registrada no CHANGELOG;
+  - `install` registra o serviço como `service`, e o `servico` da 0.0.4 segue valendo.
+- **Evidência local**:
+  - 134 testes no Linux, entre eles `tests/cli_idiomas.rs`: tradução só de comando, subcomando e opção, valores intactos, tabelas sem ambiguidade, o mesmo cadastro nas duas línguas e uso sem português nas linhas de comando;
+  - página conferida contra as tabelas em `tests/documentacao.rs`;
+  - os testes de CLI anteriores, ainda em português, seguem passando;
+  - clippy no Linux e cruzado para Windows; diagramas validados no mermaid-cli.
+- **Evidência no CI Windows**: o teste do serviço instala em inglês e reinstala em português, e confere o registro como `kioskd.exe" service`.
+
