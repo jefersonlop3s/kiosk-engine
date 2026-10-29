@@ -4,6 +4,19 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.3] - 2026-10-28
+
+Ainda **pré-lançamento**. Corrige armadilhas encontradas no primeiro teste no Windows.
+
+### Adicionado
+- Fluxograma Mermaid de cada comando de `kioskd` e `kioskctl` em `docs/architecture/fluxos-dos-comandos.md`, regra no `AGENTS.md` e teste que reprova comando sem fluxograma.
+- `kioskd regra criar|ativar|revogar|limite|listar`: regras administradas no próprio PC, sem parear dispositivo, com a mesma validação e a mesma auditoria da API (`--ativar` cria já ativa).
+
+### Corrigido
+- Sem `KIOSK_DB`, o `kioskd` criava em silêncio um banco novo na pasta atual, e cadastros feitos em outra janela pareciam sumir. No Windows o padrão passa a ser `C:\ProgramData\kiosk\kiosk.db`, e todo comando informa o banco em uso.
+- Pareamento recusado agora explica o código esperado (8 caracteres, 5 minutos, uso único, gerado por `kioskd codigo-pareamento` no mesmo banco).
+- Runbook: identificação da conta da criança (nome × SID × ID do perfil, `Get-LocalUser`, conta Microsoft), escuta em `127.0.0.1` para parear no próprio PC e o banco padrão.
+
 ## [0.0.2] - 2026-10-28
 
 Ainda **pré-lançamento**, com as mesmas limitações da 0.0.1. Torna possível o primeiro uso real no Windows: antes não havia como cadastrar a criança nem os apps.

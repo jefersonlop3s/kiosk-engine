@@ -393,3 +393,37 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitações**: o runbook dentro do pacote da 0.0.2 é o anterior; o texto novo chega aos pacotes na próxima versão.
 - **Commit**: branch `claude/hopeful-curie-egiw07`.
 
+## 2026-10-28 — Segundo teste do dono no Windows e preparação da 0.0.3
+
+- **Origem**: logs do dono com a 0.0.2 (dados pessoais dos logs não são registrados aqui).
+- **Confirmado em Windows real**: `kioskd perfil criar --conta` com nome de conta com espaço resolveu o SID correto da conta da criança; `app criar` funcionou; `servir` escutou no IP Tailscale e no loopback com o agente ativo.
+- **Achados**:
+  - (defeito, fail-loud violado) sem `KIOSK_DB` na janela, o `kioskd` usava `sqlite://kiosk.db` na pasta atual e criava outro banco em silêncio: na segunda janela o perfil "sumiu" e o app foi cadastrado no banco errado;
+  - pareamento recusado (`403`) porque o código digitado não era o gerado por `kioskd codigo-pareamento`; a mensagem do CLI não explicava o código esperado;
+  - na 0.0.1 o `servir` falhava sem a pasta do banco (já corrigido na 0.0.2).
+- **Resultado**: banco padrão fixo no Windows (`C:\ProgramData\kiosk\kiosk.db`); todo comando do `kioskd` informa o banco em uso; mensagem de pareamento recusado explica o código e o banco; runbook com o banco padrão, o loopback para parear no próprio PC e o código de 8 caracteres; versão 0.0.3.
+- **Evidência**: clippy `-D warnings` limpo em Linux e no alvo Windows; testes novos em `tests/cli.rs` (banco informado em todo comando; mensagem do pareamento recusado) e em `tests/windows.rs` (sem `KIOSK_DB`, o padrão é o banco da máquina), este no CI em Windows.
+- **Pareamento confirmado em Windows real**: com o banco certo, `codigo-pareamento` + `kioskctl parear` pelo loopback funcionou.
+- **Achado seguinte**: o dono tentou `kioskd regra criar`, que não existia (regras só pelo `kioskctl`). Adicionado `kioskd regra criar|ativar|revogar|limite|listar`, que reaproveita `comandos::interpretar` (mesma validação da Camada 3) e as operações auditadas do banco; `listar_regras` no banco; teste de ponta a ponta em `tests/cli.rs` (inclui os eventos `ADD_RULE`, `ACTIVATE_RULE`, `MODIFY_LIMIT`, `REVOKE` no log).
+- **Pendente**: o teste de bloqueio do Bloco de Notas na conta da criança ainda não foi feito.
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+
+## 2026-10-29 — Enforcement validado em PC real com conta de criança
+
+- **Origem**: teste do dono com a 0.0.2 no próprio PC (identificadores, SID e IP do teste não são registrados aqui).
+- **Roteiro**: `kioskd perfil criar --conta` (conta local padrão da criança), `kioskd app criar --processo notepad.exe`, `kioskd servir` num PowerShell de administrador (não como SYSTEM), `kioskd codigo-pareamento` + `kioskctl parear` pelo loopback, `kioskctl regra criar --limite 0` e `kioskctl regra ativar`; depois o Bloco de Notas foi aberto na sessão da criança (troca rápida de usuário).
+- **Resultado**: o `kioskctl log` mostrou `ADD_PROFILE`, `ADD_RULE`, `ACTIVATE_RULE` e três `APP_TERMINATED` com o detalhe `app Notepad.exe (pid …) encerrado: APP_BLOQUEADO`, a cerca de 6 s um do outro (três aberturas encerradas). O agente, rodando como administrador comum, leu o SID de processos de outra conta sem precisar de `SeDebugPrivilege`.
+- **O que isto valida** (E-004 F2, parcial): detecção por SID em sessão de outro usuário, encerramento real, motor com regra de limite 0, log forense e o ciclo de regra pela API a partir de um dispositivo pareado.
+- **Ainda sem validação**: aviso por `WTSSendMessageW`, bloqueio de sessão (`WTSDisconnectSession`), logoff após 2 desbloqueios, limites por tempo (com avisos de 5 e 1 min) e o `kioskd` como serviço do Windows.
+
+## 2026-10-29 — Regra: todo comando tem fluxograma Mermaid
+
+- **Origem**: pedido do dono, antes do merge da 0.0.3: todo comando precisa de fluxograma Mermaid na documentação, para facilitar a cognição e mostrar a integração e o fluxo de informação entre cliente e serviço.
+- **Resultado**:
+  - regra nova no [AGENTS.md](../AGENTS.md) ("Fluxogramas dos comandos");
+  - [fluxos dos comandos](architecture/fluxos-dos-comandos.md): visão geral, o pipeline comum das Camadas 0 a 5 e um fluxograma por comando, 15 do `kioskd` e 7 do `kioskctl`, com quem age, o que é gravado (tabela e evento), as recusas e o retorno; ligado à arquitetura e ao runbook;
+  - `tests/documentacao.rs` transforma a regra em gate: lê os comandos que os próprios executáveis imprimem no texto de uso e reprova se algum não tiver seção com bloco `mermaid`, ou se o documento citar comando inexistente.
+- **Evidência**: os 24 blocos renderizados com `@mermaid-js/mermaid-cli` 11.4.2 e o Chromium do container, sem erro; três mutações (apagar a seção de um comando, citar comando inexistente, trocar `mermaid` por `text`) reprovaram o teste com a mensagem certa e foram revertidas.
+- **Limitações**: o teste confere a existência do fluxograma, não a fidelidade ao código; a renderização não roda no CI (só localmente, antes do commit, como diz a regra).
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

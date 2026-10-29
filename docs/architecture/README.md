@@ -4,6 +4,8 @@
 > - [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md): Seção I.2 (Regra da Discrepância) e o objetivo de "invisibilidade". O enforcement passa a ser ativo e visível.
 > - [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md): Seção II. Entram `child_profile` e `usage_ledger`; alvo somente Windows.
 >
+> Fluxograma de cada comando (`kioskd` e `kioskctl`), com a integração entre cliente, serviço, banco e log: [fluxos-dos-comandos](fluxos-dos-comandos.md).
+>
 > Épicos que implementam esta arquitetura: [epics](../epics/README.md). Histórico da revisão: [insight](../insights/2026-10-27-revisao-estado-inicial.md).
 
 ---

@@ -245,3 +245,22 @@ fn perfil_criado_pelo_nome_da_conta_recebe_o_sid_do_windows() {
         "um grupo não pode virar perfil de criança"
     );
 }
+
+#[test]
+fn sem_kiosk_db_o_padrao_no_windows_e_o_banco_da_maquina() {
+    let saida = Command::new(KIOSKD)
+        .args(["perfil", "listar"])
+        .env_remove("KIOSK_DB")
+        .output()
+        .unwrap();
+    assert!(
+        saida.status.success(),
+        "{}",
+        String::from_utf8_lossy(&saida.stderr)
+    );
+    let erro = String::from_utf8_lossy(&saida.stderr);
+    assert!(
+        erro.contains("kioskd: banco sqlite://C:/ProgramData/kiosk/kiosk.db"),
+        "{erro}"
+    );
+}

@@ -610,3 +610,215 @@ async fn endereco_sem_porta_explica_o_formato() {
         texto(&s.stderr)
     );
 }
+
+#[tokio::test]
+async fn todo_comando_informa_o_banco_em_uso() {
+    let m = mundo().await;
+    for args in [
+        vec!["perfil", "listar"],
+        vec!["app", "listar"],
+        vec!["dispositivos"],
+    ] {
+        let s = kioskd(&m.db_url, None, &args);
+        assert!(s.status.success(), "{args:?}: {}", texto(&s.stderr));
+        assert!(
+            texto(&s.stderr).contains(&format!("kioskd: banco {}", m.db_url)),
+            "{args:?}: {}",
+            texto(&s.stderr)
+        );
+    }
+}
+
+#[tokio::test]
+async fn pareamento_recusado_explica_como_gerar_o_codigo() {
+    let m = mundo().await;
+    let porta = porta_livre();
+    let _srv = subir_servico(&m.db_url, porta);
+    let cred = m.dir.path().join("credenciais.json");
+    let p = kioskctl(
+        &cred,
+        &[
+            "parear",
+            "--servidor",
+            &format!("127.0.0.1:{porta}"),
+            "--codigo",
+            "1234",
+        ],
+    );
+    assert!(!p.status.success());
+    let erro = texto(&p.stderr);
+    assert!(
+        erro.contains("8 caracteres")
+            && erro.contains("kioskd codigo-pareamento")
+            && erro.contains("KIOSK_DB"),
+        "{erro}"
+    );
+}
+
+#[tokio::test]
+async fn regras_administradas_no_proprio_pc_pelo_kioskd() {
+    let dir = tempfile::tempdir().unwrap();
+    let db_url = format!("sqlite://{}", dir.path().join("k.db").display());
+    let perfil = id_da_saida(&kioskd(
+        &db_url,
+        None,
+        &[
+            "perfil",
+            "criar",
+            "--sid",
+            "S-1-5-21-9-9-9-1001",
+            "--nome",
+            "Ana",
+        ],
+    ));
+    let app = id_da_saida(&kioskd(
+        &db_url,
+        None,
+        &["app", "criar", "--processo", "notepad.exe"],
+    ));
+    let (p, a) = (perfil.to_string(), app.to_string());
+
+    // criar já ativa
+    let bloqueio = id_da_saida(&kioskd(
+        &db_url,
+        None,
+        &[
+            "regra", "criar", "--perfil", &p, "--app", &a, "--limite", "0", "--ativar",
+        ],
+    ));
+    // criar pendente e ativar depois
+    let r = kioskd(
+        &db_url,
+        None,
+        &[
+            "regra",
+            "criar",
+            "--perfil",
+            &p,
+            "--app",
+            &a,
+            "--limite",
+            "3600",
+            "--janela",
+            "08:00-20:00",
+        ],
+    );
+    let pendente = id_da_saida(&r);
+    assert!(texto(&r.stderr).contains("pendente"));
+
+    let lista = texto(&kioskd(&db_url, None, &["regra", "listar", "--perfil", &p]).stdout);
+    assert!(
+        lista.contains(&format!(
+            "{bloqueio}\t{p}\tnotepad.exe\tACTIVE\tlimite: 0h00"
+        )),
+        "{lista}"
+    );
+    assert!(
+        lista.contains(&format!(
+            "{pendente}\t{p}\tnotepad.exe\tPENDING\tlimite: 1h00\t08:00-20:00"
+        )),
+        "{lista}"
+    );
+
+    assert!(
+        kioskd(&db_url, None, &["regra", "ativar", &pendente.to_string()])
+            .status
+            .success()
+    );
+    assert!(
+        kioskd(
+            &db_url,
+            None,
+            &[
+                "regra",
+                "limite",
+                &pendente.to_string(),
+                "--segundos",
+                "1800"
+            ]
+        )
+        .status
+        .success()
+    );
+    assert!(
+        kioskd(&db_url, None, &["regra", "revogar", &bloqueio.to_string()])
+            .status
+            .success()
+    );
+    let lista = texto(&kioskd(&db_url, None, &["regra", "listar"]).stdout);
+    assert!(
+        lista.contains(&format!(
+            "{pendente}\t{p}\tnotepad.exe\tACTIVE\tlimite: 0h30"
+        )),
+        "{lista}"
+    );
+    assert!(
+        lista.contains(&format!("{bloqueio}\t{p}\tnotepad.exe\tREVOKED")),
+        "{lista}"
+    );
+
+    // erros explicados no próprio PC (admin local)
+    let fantasma = Uuid::new_v4().to_string();
+    for (args, trecho) in [
+        (
+            vec!["regra", "criar", "--perfil", &fantasma, "--app", &a],
+            "perfil inexistente",
+        ),
+        (
+            vec!["regra", "criar", "--perfil", &p, "--app", &fantasma],
+            "app inexistente",
+        ),
+        (
+            vec![
+                "regra", "criar", "--perfil", &p, "--app", &a, "--limite", "90000",
+            ],
+            "86400",
+        ),
+        (
+            vec![
+                "regra",
+                "criar",
+                "--perfil",
+                &p,
+                "--app",
+                &a,
+                "--janela",
+                "20:00-08:00",
+            ],
+            "anterior",
+        ),
+        (
+            vec!["regra", "limite", &bloqueio.to_string(), "--segundos", "60"],
+            "revogada",
+        ),
+        (vec!["regra", "ativar", &fantasma], "regra inexistente"),
+    ] {
+        let s = kioskd(&db_url, None, &args);
+        assert!(
+            !s.status.success() && texto(&s.stderr).contains(trecho),
+            "{args:?}: {}",
+            texto(&s.stderr)
+        );
+    }
+
+    // auditoria: as mesmas ações da API ficam no log forense
+    let db = KioskDbManager::new(&db_url).await.unwrap();
+    let acoes: Vec<String> = sqlx::query_scalar(
+        "SELECT action_attempted FROM security_log WHERE event_type = 'SUCCESS' \
+         AND action_attempted IN ('ADD_RULE','ACTIVATE_RULE','MODIFY_LIMIT','REVOKE') ORDER BY rowid",
+    )
+    .fetch_all(db.pool())
+    .await
+    .unwrap();
+    assert_eq!(
+        acoes,
+        [
+            "ADD_RULE",
+            "ACTIVATE_RULE",
+            "ADD_RULE",
+            "ACTIVATE_RULE",
+            "MODIFY_LIMIT",
+            "REVOKE"
+        ]
+    );
+}

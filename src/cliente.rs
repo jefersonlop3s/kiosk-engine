@@ -202,7 +202,9 @@ pub async fn parear(
     let r = post(servidor, "/api/pair", &[], corpo.as_bytes()).await?;
     if !r.aceita() {
         return Err(format!(
-            "pareamento recusado pelo serviço (HTTP {}): confira o código e tente de novo",
+            "pareamento recusado pelo serviço (HTTP {}). O código tem 8 caracteres, vale por 5 minutos \
+             e só pode ser usado uma vez; gere outro no PC com `kioskd codigo-pareamento`, usando o \
+             mesmo KIOSK_DB do `kioskd servir`",
             r.status
         ));
     }

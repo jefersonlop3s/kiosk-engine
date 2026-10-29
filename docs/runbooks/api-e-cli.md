@@ -1,6 +1,6 @@
 # Runbook — instalar, cadastrar, parear e administrar
 
-Procedimento para pôr o kiosk para funcionar num PC Windows e administrá-lo pelo CLI. Decisões de origem: [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (uma conta por criança), [ADR-005](../adr/ADR-005-rede-da-api-de-comando.md) (rede) e [ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md) (assinatura e pareamento). Épicos: [E-004](../epics/E-004-agente-windows-enforcement.md) e [E-005](../epics/E-005-api-comando-e-pareamento.md).
+Procedimento para pôr o kiosk para funcionar num PC Windows e administrá-lo pelo CLI. Decisões de origem: [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (uma conta por criança), [ADR-005](../adr/ADR-005-rede-da-api-de-comando.md) (rede) e [ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md) (assinatura e pareamento). Épicos: [E-004](../epics/E-004-agente-windows-enforcement.md) e [E-005](../epics/E-005-api-comando-e-pareamento.md). O fluxograma de cada comando, com o caminho da informação entre o cliente e o serviço, está em [fluxos dos comandos](../architecture/fluxos-dos-comandos.md).
 
 > Pré-lançamento: o agente encerra apps em Windows real, mas bloqueio de sessão, logoff e avisos ainda não foram validados com uma criança logada. O `kioskd` ainda roda como programa de console, não como serviço do Windows. Não use como única proteção.
 
@@ -20,13 +20,11 @@ Todos os comandos abaixo são para o **PowerShell aberto como Administrador**, d
 > Os exemplos usam `100.95.52.48` como IP Tailscale do PC. É só um exemplo: troque pelo seu. Se esse endereço for de alguém, é chute.
 
 ```powershell
-$env:KIOSK_DB = "sqlite://C:/ProgramData/kiosk/kiosk.db"
-$env:KIOSK_LISTEN = "100.95.52.48:8443"   # o IP do `tailscale ip -4`, com a porta
+$env:KIOSK_LISTEN = "100.95.52.48:8443,127.0.0.1:8443"   # IP do `tailscale ip -4` e o loopback, com a porta
 ```
 
-- `KIOSK_DB`: onde fica o banco. A pasta é criada se faltar. O arquivo tem dados de crianças: deixe a pasta acessível só a SYSTEM e Administradores.
-- `KIOSK_LISTEN`: `ip:porta`, obrigatória para `servir`. Só são aceitos loopback (`127.0.0.1`, `::1`) e a rede Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`); `0.0.0.0` e endereços de LAN são recusados.
-- As variáveis valem só para a janela atual do PowerShell; defina-as de novo em cada janela.
+- **Banco:** no Windows o padrão é `C:\ProgramData\kiosk\kiosk.db`, igual em qualquer janela e pasta; a pasta é criada se faltar. Todo comando do `kioskd` mostra na primeira linha qual banco está usando (`kioskd: banco ...`): confira que é sempre o mesmo. Só defina `$env:KIOSK_DB` se quiser outro lugar e, nesse caso, defina-o **em toda janela** (as variáveis `$env:` valem só para a janela em que foram definidas). O arquivo tem dados de crianças: deixe a pasta acessível só a SYSTEM e Administradores.
+- `KIOSK_LISTEN`: `ip:porta[,ip:porta...]`, obrigatória para `servir`. Só são aceitos loopback (`127.0.0.1`, `::1`) e a rede Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`); `0.0.0.0` e endereços de LAN são recusados. O `127.0.0.1` permite parear um `kioskctl` no próprio PC.
 
 ## 3. Cadastrar a criança e os apps
 
@@ -88,21 +86,37 @@ Deve aparecer `escutando em 100.95.52.48:8443` e `agente de enforcement ativo (t
 
 ## 5. Parear o dispositivo dos pais
 
-Numa **segunda** janela do PowerShell, com o mesmo `$env:KIOSK_DB`:
+Numa **segunda** janela do PowerShell (confira que a linha `kioskd: banco ...` mostra o mesmo banco do `servir`):
 
 ```powershell
 .\kioskd.exe codigo-pareamento
 ```
 
-O código é de uso único e vale por 5 minutos. No dispositivo dos pais, com o `kioskctl` do pacote:
+O comando imprime um código de **8 caracteres**, de uso único, válido por 5 minutos. Use exatamente esse código; qualquer outro é recusado com `HTTP 403`. No dispositivo dos pais, com o `kioskctl` do pacote:
 
 ```powershell
 .\kioskctl.exe parear --servidor 100.95.52.48:8443 --codigo ABCD2345 --nome "Celular da mãe"
+# ou, no próprio PC:
+.\kioskctl.exe parear --servidor 127.0.0.1:8443 --codigo ABCD2345 --nome "PC admin"
 ```
 
 O CLI gera o par de chaves Ed25519, envia só a chave pública e grava `credenciais.json` com a chave privada (`%APPDATA%\kiosk\credenciais.json` no Windows, `~/.config/kiosk/credenciais.json` no Linux e macOS, ou `KIOSK_CREDENCIAIS`). Dez códigos errados em 5 minutos bloqueiam novos pareamentos por esse período.
 
 ## 6. Administrar as regras
+
+**No próprio PC** (PowerShell de administrador, sem precisar parear nada):
+
+```powershell
+.\kioskd.exe regra criar --perfil <id-do-perfil> --app <id-do-app> --limite 0 --ativar
+.\kioskd.exe regra listar [--perfil <id-do-perfil>]
+.\kioskd.exe regra ativar <id-da-regra>
+.\kioskd.exe regra limite <id-da-regra> --segundos 5400
+.\kioskd.exe regra revogar <id-da-regra>
+```
+
+Sem `--ativar`, a regra nasce **pendente**. No PC os erros vêm com o motivo exato (por exemplo, `perfil inexistente`).
+
+**De outro dispositivo** (celular ou notebook dos pais, já pareado), com o `kioskctl`:
 
 ```powershell
 .\kioskctl.exe regra criar --perfil <id-do-perfil> --app <id-do-app> --limite 3600 --janela 08:00-20:00

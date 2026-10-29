@@ -735,6 +735,23 @@ impl KioskDbManager {
         self.finish(tx, r, ctx, ActionType::ModifyLimit, Some(profile_id))
             .await
     }
+
+    /// Regras cadastradas (opcionalmente de um perfil), da mais antiga para a mais nova.
+    pub async fn listar_regras(
+        &self,
+        profile_id: Option<Uuid>,
+    ) -> Result<Vec<ActiveRule>, sqlx::Error> {
+        let rows: Vec<RuleRow> = sqlx::query_as(
+            "SELECT rule_id, profile_id, app_id, creation_timestamp, current_state, daily_limit_seconds, \
+             time_window_start, time_window_end, effective_until_timestamp \
+             FROM active_rules WHERE (? IS NULL OR profile_id = ?) ORDER BY creation_timestamp, rowid",
+        )
+        .bind(profile_id.map(|p| p.to_string()))
+        .bind(profile_id.map(|p| p.to_string()))
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(ActiveRule::try_from).collect()
+    }
 }
 
 /// Quem pediu a operação; vai para o `client_ip` do evento.
