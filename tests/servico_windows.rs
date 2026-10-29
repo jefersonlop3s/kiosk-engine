@@ -546,7 +546,9 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
             assert_eq!(command, "pairing-code");
             assert!(
                 !admin_account,
-                "conta padrão marcada como administrador; grupos da conta: {grupos}"
+                "conta padrão marcada como administrador; grupos da conta: {grupos}; SID esperado {sid}; \
+                 detalhe gravado: {}",
+                ultimo.3
             );
             assert_eq!(
                 caller_sid.as_deref(),
