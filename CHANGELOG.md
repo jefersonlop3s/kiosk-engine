@@ -5,7 +5,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ## [Não lançado]
 
 ### Alterado
-- Comandos e opções do `kioskd` e do `kioskctl` em inglês, que é a convenção (`kioskd status`, `kioskd install --listen`, `kioskd pairing-code`, `kioskctl pair --server` etc.). **Os nomes em português continuam valendo, sem prazo**, e podem ser misturados. Lista em `docs/runbooks/comandos-em-portugues.md` (ADR-010).
+- Comandos e opções do `kioskd` e do `kioskctl` em inglês, que é a convenção (`kioskd status`, `kioskd install --listen`, `kioskd pairing-code`, `kioskctl pair --server` etc.). **Os nomes em português continuam valendo, sem prazo**, e podem ser misturados. Lista em `docs/runbooks/comandos-em-portugues.md`, que também vai no pacote do release (ADR-010).
 - Dias da semana aceitam `mon,tue,...`, além de `seg,ter,...` e de `0` a `6`.
 - `kioskd install` registra o serviço como `kioskd.exe service`. O registro da 0.0.4 (`servico`) segue funcionando; reinstalar atualiza.
 - **Quebra**: o corpo de `POST /api/pair` passa a `code`, `public_key` e `name`, porque a API fala só inglês. Um `kioskctl` 0.0.4 não pareia com um serviço novo; atualize os dois. Dispositivos já pareados não são afetados.
