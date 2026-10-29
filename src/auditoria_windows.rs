@@ -15,7 +15,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::sync::Mutex;
 use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
-use windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
+use windows_sys::Win32::Storage::FileSystem::{
+    FILE_READ_ATTRIBUTES, FILE_READ_DATA, FILE_WRITE_DATA, SECURITY_IDENTIFICATION, SYNCHRONIZE,
+};
 
 use crate::auditoria::{
     Limitador, MAX_BYTES, NOME_DO_PIPE, montar_aviso, montar_resposta, registrar, resposta_ok,
@@ -30,6 +32,9 @@ use crate::sistema_windows::{identidade_do_cliente_do_pipe, pid_do_servidor_do_p
 /// `FILE_WRITE_ATTRIBUTES`), **sem** `FILE_CREATE_PIPE_INSTANCE` (o mesmo bit de
 /// `FILE_APPEND_DATA`, que o `FILE_GENERIC_WRITE` traria): ninguém mais cria instâncias do pipe.
 const SDDL_PIPE: &str = "D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;0x12018b;;;AU)";
+/// O que o cliente pede ao abrir o pipe (um subconjunto do `0x12018b` da DACL).
+pub const DIREITOS_DO_CLIENTE: u32 =
+    FILE_READ_DATA | FILE_WRITE_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE;
 /// Conexões atendidas ao mesmo tempo.
 const MAX_INSTANCIAS: usize = 16;
 /// Quanto o serviço espera a linha de um cliente que conectou e não escreve.
@@ -151,8 +156,9 @@ fn abrir() -> Result<std::fs::File, String> {
     let mut ultimo = String::new();
     for _ in 0..10 {
         match std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
+            // só os direitos que a DACL do pipe concede: `read(true).write(true)` pediria
+            // GENERIC_WRITE, que inclui FILE_CREATE_PIPE_INSTANCE, negado de propósito
+            .access_mode(DIREITOS_DO_CLIENTE)
             // o serviço só precisa saber quem somos, não agir em nosso nome
             .security_qos_flags(SECURITY_IDENTIFICATION)
             .open(NOME_DO_PIPE)

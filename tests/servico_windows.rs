@@ -505,9 +505,9 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
 
     // 1. mensagem forjada: tenta se passar por outra conta; é recusada e o serviço responde ok:false
     let forjada = como(conta, || -> std::io::Result<String> {
+        use std::os::windows::fs::OpenOptionsExt;
         let mut f = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
+            .access_mode(kiosk_engine::auditoria_windows::DIREITOS_DO_CLIENTE)
             .open(NOME_DO_PIPE)?;
         f.write_all(
             b"{\"v\":1,\"tipo\":\"tentativa_sem_privilegio\",\"comando\":\"pairing-code\",\"sid\":\"S-1-5-18\"}\n",
