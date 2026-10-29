@@ -491,6 +491,10 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
     };
     let sid = sid_de_usuario(&conta.nome).expect("SID da conta de teste");
     let antes = eventos().len();
+    // o que o Windows diz dos grupos da conta, para as mensagens de falha abaixo
+    let (_, grupos, _, ps_grupos) =
+        rodar_como(conta, r"C:\Windows\System32\whoami.exe", &["/groups"]);
+    let grupos = format!("{grupos}{ps_grupos}");
 
     // o serviço abre o pipe logo depois de subir
     assert!(
@@ -542,7 +546,10 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
             ..
         } => {
             assert_eq!(command, "pairing-code");
-            assert!(!admin_account, "conta padrão marcada como administrador");
+            assert!(
+                !admin_account,
+                "conta padrão marcada como administrador; grupos da conta: {grupos}"
+            );
             assert_eq!(
                 caller_sid.as_deref(),
                 Some(sid.as_str()),
@@ -597,34 +604,15 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
     );
 
     // 5. o `kioskd` inteiro, rodando como a conta padrão: recusa antes de abrir qualquer coisa e
-    //    diz se registrou (a saída vai para arquivos que a conta padrão pode escrever)
-    let saida = std::path::PathBuf::from(r"C:\Users\Public\kiosk-teste-saida.txt");
-    let erro = std::path::PathBuf::from(r"C:\Users\Public\kiosk-teste-erro.txt");
-    let _ = (std::fs::remove_file(&saida), std::fs::remove_file(&erro));
-    let exe = pasta("ProgramFiles").join("kioskd.exe");
-    let script = format!(
-        "$s = ConvertTo-SecureString '{}' -AsPlainText -Force; \
-         $c = New-Object System.Management.Automation.PSCredential('.\\{}', $s); \
-         $p = Start-Process -FilePath '{}' -ArgumentList 'rule','list' -Credential $c \
-           -WorkingDirectory 'C:\\Windows\\System32' -RedirectStandardOutput '{}' -RedirectStandardError '{}' -Wait -PassThru; \
-         exit $p.ExitCode",
-        conta.senha,
-        conta.nome,
-        exe.display(),
-        saida.display(),
-        erro.display()
-    );
+    //    diz se registrou
     let antes_da_cli = eventos().len();
-    let o = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
-        .output()
-        .unwrap();
-    let saida_do_kioskd = std::fs::read_to_string(&erro).unwrap_or_default();
+    let exe = pasta("ProgramFiles").join("kioskd.exe");
+    let (codigo, _, saida_do_kioskd, ps) =
+        rodar_como(conta, &exe.display().to_string(), &["rule", "list"]);
     assert_eq!(
-        o.status.code(),
+        codigo,
         Some(1),
-        "o kioskd da conta padrão devia recusar (exit 1): ps={} erro={saida_do_kioskd}",
-        texto(&o)
+        "o kioskd da conta padrão devia recusar (exit 1): ps={ps} erro={saida_do_kioskd}"
     );
     assert!(saida_do_kioskd.contains("`rule list`"), "{saida_do_kioskd}");
     assert!(
@@ -644,5 +632,40 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
         assert_eq!(ultimo.2.as_deref(), Some(id_do_perfil.as_str()));
         assert!(ultimo.3.contains("rule list"), "{}", ultimo.3);
     }
+}
+
+/// Roda `exe` como a conta de teste (`Start-Process -Credential`), com a saída em arquivos que a
+/// conta consegue escrever. Devolve (código de saída, stdout, stderr, texto do PowerShell).
+fn rodar_como(
+    conta: &ContaPadrao,
+    exe: &str,
+    args: &[&str],
+) -> (Option<i32>, String, String, String) {
+    let saida = PathBuf::from(r"C:\Users\Public\kiosk-teste-saida.txt");
+    let erro = PathBuf::from(r"C:\Users\Public\kiosk-teste-erro.txt");
     let _ = (std::fs::remove_file(&saida), std::fs::remove_file(&erro));
+    let lista = args
+        .iter()
+        .map(|a| format!("'{a}'"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let script = format!(
+        "$s = ConvertTo-SecureString '{}' -AsPlainText -Force; \
+         $c = New-Object System.Management.Automation.PSCredential('.\\{}', $s); \
+         $p = Start-Process -FilePath '{exe}' -ArgumentList {lista} -Credential $c \
+           -WorkingDirectory 'C:\\Windows\\System32' -RedirectStandardOutput '{}' -RedirectStandardError '{}' -Wait -PassThru; \
+         exit $p.ExitCode",
+        conta.senha,
+        conta.nome,
+        saida.display(),
+        erro.display()
+    );
+    let o = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .unwrap();
+    let ler = |p: &PathBuf| std::fs::read_to_string(p).unwrap_or_default();
+    let r = (o.status.code(), ler(&saida), ler(&erro), texto(&o));
+    let _ = (std::fs::remove_file(&saida), std::fs::remove_file(&erro));
+    r
 }
