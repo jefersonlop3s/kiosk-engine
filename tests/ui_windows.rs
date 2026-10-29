@@ -391,8 +391,18 @@ async fn conta_padrao_conecta_e_so_recebe_o_que_e_dela() {
 /// que cai de verdade (largar só a tarefa de `servir` deixaria as conexões abertas).
 struct ServicoIsolado {
     gerente: GerenteUi,
-    _rt: tokio::runtime::Runtime,
+    rt: Option<tokio::runtime::Runtime>,
     _dir: TempDir,
+}
+
+impl Drop for ServicoIsolado {
+    fn drop(&mut self) {
+        // `shutdown_background` pode ser chamado de dentro de código assíncrono (largar o runtime
+        // ali é proibido pelo tokio); derruba as conexões como um serviço que cai
+        if let Some(rt) = self.rt.take() {
+            rt.shutdown_background();
+        }
+    }
 }
 
 fn subir_isolado(nome: &str) -> ServicoIsolado {
@@ -411,7 +421,7 @@ fn subir_isolado(nome: &str) -> ServicoIsolado {
     });
     ServicoIsolado {
         gerente,
-        _rt: rt,
+        rt: Some(rt),
         _dir: dir,
     }
 }
