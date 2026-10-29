@@ -413,6 +413,12 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
             .sessoes_ativas()
             .unwrap();
         if !sessoes.contains(&sid_do_runner) {
+            // com KIOSK_TESTE_EXIGE_SESSAO, a falta de sessão é falha: sem isso o teste passaria
+            // sem ter provado a bandeja, e ninguém saberia
+            assert!(
+                std::env::var_os("KIOSK_TESTE_EXIGE_SESSAO").is_none(),
+                "o runner não tem sessão interativa para a bandeja ({sessoes:?})"
+            );
             eprintln!("SEM SESSÃO INTERATIVA no runner ({sessoes:?}): a bandeja não foi testada");
         } else {
             let perfil = kioskd(&[
