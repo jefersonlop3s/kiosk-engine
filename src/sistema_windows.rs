@@ -568,11 +568,38 @@ fn sessao_do_sid(sid: &str) -> Result<u32, String> {
         .ok_or_else(|| format!("nenhuma sessão interativa do SID {sid}"))
 }
 
-/// Adaptador real. Sem estado: cada chamada consulta o sistema.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct SistemaWindows;
+/// Adaptador real. O estado do sistema é consultado a cada chamada; só a bandeja (se houver) é
+/// guardada aqui: as UIs conectadas e o caminho do `kiosk-ui.exe` que o serviço inicia.
+#[derive(Default, Clone)]
+pub struct SistemaWindows {
+    ui: Option<(crate::ui_windows::GerenteUi, std::path::PathBuf)>,
+}
+
+impl SistemaWindows {
+    /// Com bandeja: o agente passa a supervisionar a UI de cada criança, iniciando `exe_ui` na
+    /// sessão dela.
+    pub fn com_ui(gerente: crate::ui_windows::GerenteUi, exe_ui: std::path::PathBuf) -> Self {
+        Self {
+            ui: Some((gerente, exe_ui)),
+        }
+    }
+}
 
 impl Sistema for SistemaWindows {
+    fn tem_ui(&self) -> bool {
+        self.ui.is_some()
+    }
+
+    fn batimento_da_ui(&mut self, sid: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.ui.as_ref()?.0.ultimo_batimento(sid)
+    }
+
+    fn iniciar_ui(&mut self, sid: &str) -> Result<(), String> {
+        let (_, exe) = self.ui.as_ref().ok_or("sem bandeja configurada")?;
+        let sessao = sessao_do_sid(sid)?;
+        crate::lancador_windows::iniciar_na_sessao(sessao, exe).map(|_| ())
+    }
+
     fn processos(&mut self) -> Result<Vec<ProcessoVisto>, String> {
         // SAFETY: snapshot fechado por `Handle`; `dwSize` preenchido antes da primeira leitura.
         unsafe {

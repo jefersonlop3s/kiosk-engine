@@ -12,6 +12,7 @@ use crate::database_schema::*;
 use crate::db_manager::{EventContext, KioskDbManager};
 use crate::detalhes::Detalhe;
 use crate::i18n::idioma;
+use crate::ipc::{MonitorBatimento, MudancaUi};
 use crate::motor::{AVISOS_SEGUNDOS, Decisao, Instante, Motivo};
 
 /// Intervalo mínimo entre dois bloqueios de sessão do mesmo SID.
@@ -56,6 +57,31 @@ pub trait Sistema {
     fn sessoes_ativas(&mut self) -> Result<Vec<String>, String>;
     /// Encerra a sessão (logoff) quando o bloqueio simples não basta.
     fn encerrar_sessao(&mut self, sid: &str) -> Result<(), String>;
+    /// `true` se este sistema tem bandeja (UI) para o agente supervisionar (E-004 F3 e F4). Os de
+    /// teste, sem UI, ficam como estão.
+    fn tem_ui(&self) -> bool {
+        false
+    }
+    /// Quando a UI da conta mandou o último batimento; `None` se não há UI conectada.
+    fn batimento_da_ui(&mut self, _sid: &str) -> Option<DateTime<Utc>> {
+        None
+    }
+    /// Inicia a UI na sessão da conta.
+    fn iniciar_ui(&mut self, _sid: &str) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// Intervalo mínimo entre dois alertas (ou dois erros) sobre a UI de uma mesma conta: uma criança
+/// que fecha a UI a cada 15 s não pode encher o log.
+pub const INTERVALO_ALERTA_UI_SEGUNDOS: i64 = 300;
+
+/// O que o agente sabe da UI de uma conta de criança.
+struct SupervisaoUi {
+    monitor: MonitorBatimento,
+    ultimo_visto: Option<DateTime<Utc>>,
+    ultimo_alerta: Option<DateTime<Utc>>,
+    ultimo_erro: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +137,7 @@ pub struct Agente<'a, S: Sistema, Tz: TimeZone> {
     ultimo_tick: Option<DateTime<Utc>>,
     iniciado: bool,
     ultimo_batimento: Option<DateTime<Utc>>,
+    ui: HashMap<String, SupervisaoUi>,
     avisados: HashSet<(Uuid, Option<Uuid>, Motivo, u64)>,
     tentativas: HashMap<u32, u32>,
     abandonados: HashSet<u32>,
@@ -131,6 +158,7 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             ultimo_tick: None,
             iniciado: false,
             ultimo_batimento: None,
+            ui: HashMap::new(),
             avisados: HashSet::new(),
             tentativas: HashMap::new(),
             abandonados: HashSet::new(),
@@ -370,10 +398,90 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         // restrição de sessão que acabou (ex.: novo dia) zera a contagem de bloqueios
         self.bloqueios
             .retain(|sid, _| !avaliadas.contains(sid) || bloqueando.contains(sid));
+        if self.sistema.tem_ui() {
+            self.supervisionar_ui(&mut rel, agora_utc, &ativas).await;
+        }
         self.ativas_anterior = ativas;
         self.avisados
             .retain(|(p, a, m, _)| ativos.contains(&(*p, *a, *m)));
         rel
+    }
+
+    /// A UI de cada criança com sessão ativa (E-004 F3 e F4): inicia quando a sessão aparece e
+    /// relança quando ela some. Três batimentos perdidos são `TAMPER_SUSPECTED` (no máximo um a
+    /// cada [`INTERVALO_ALERTA_UI_SEGUNDOS`] por conta).
+    async fn supervisionar_ui(
+        &mut self,
+        rel: &mut Relatorio,
+        agora: DateTime<Utc>,
+        ativas: &HashSet<String>,
+    ) {
+        self.ui.retain(|sid, _| ativas.contains(sid));
+        for sid in ativas {
+            let perfil = match self.db.perfil_por_sid(sid).await {
+                Ok(Some(p)) => p.profile_id,
+                Ok(None) => continue, // conta sem perfil: não é criança, sem UI
+                Err(e) => {
+                    self.falha(
+                        rel,
+                        None,
+                        Detalhe::ProfileNotQueried {
+                            error: e.to_string(),
+                        },
+                    )
+                    .await;
+                    continue;
+                }
+            };
+            let novo = !self.ui.contains_key(sid);
+            let mut sup = self.ui.remove(sid).unwrap_or_else(|| SupervisaoUi {
+                monitor: MonitorBatimento::novo(agora),
+                ultimo_visto: None,
+                ultimo_alerta: None,
+                ultimo_erro: None,
+            });
+            if let Some(t) = self.sistema.batimento_da_ui(sid)
+                && sup.ultimo_visto.is_none_or(|v| t > v)
+            {
+                sup.ultimo_visto = Some(t);
+                sup.monitor.batimento(agora);
+            }
+            let perdida = sup.monitor.verificar(agora);
+            if let Some(MudancaUi::Perdida {
+                segundos_sem_batimento,
+            }) = perdida
+                && sup
+                    .ultimo_alerta
+                    .is_none_or(|a| (agora - a).num_seconds() >= INTERVALO_ALERTA_UI_SEGUNDOS)
+            {
+                sup.ultimo_alerta = Some(agora);
+                let d = Detalhe::UiStopped {
+                    seconds: segundos_sem_batimento,
+                };
+                self.evento(
+                    rel,
+                    Some(perfil),
+                    EventType::TamperSuspected,
+                    TransactionStatus::Failure,
+                    d.codigo(),
+                )
+                .await;
+            }
+            if novo || perdida.is_some() {
+                // a UI pode ter nascido no meio do caminho: a espera recomeça de qualquer jeito
+                sup.monitor.reiniciar(agora);
+                if let Err(e) = self.sistema.iniciar_ui(sid)
+                    && sup
+                        .ultimo_erro
+                        .is_none_or(|u| (agora - u).num_seconds() >= INTERVALO_ALERTA_UI_SEGUNDOS)
+                {
+                    sup.ultimo_erro = Some(agora);
+                    self.falha(rel, Some(perfil), Detalhe::UiNotStarted { error: e })
+                        .await;
+                }
+            }
+            self.ui.insert(sid.clone(), sup);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

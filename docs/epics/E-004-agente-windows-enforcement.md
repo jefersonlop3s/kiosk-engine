@@ -71,6 +71,11 @@ Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam
 - `src/bin/kiosk-ui.rs`, `bandeja` (textos, puros), `bandeja_windows` (ícone `Shell_NotifyIconW` numa janela escondida) e `ui_cliente_windows` (conexão com batimento e reconexão). O `install` e o pacote do Windows já levam o `kiosk-ui.exe`; o serviço ainda não o inicia.
 - Detalhes e o que o CI não prova (o desenho do ícone) na seção da etapa 2 da [ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md).
 
+## Bandeja, etapa 3: o serviço supervisiona a UI (2026-10-30)
+
+- `lancador_windows` (CreateProcessAsUser) e a supervisão no agente: inicia a bandeja da criança, e três batimentos perdidos viram `TAMPER_SUSPECTED` e relançamento. O `kioskd serve` já escuta o pipe `kiosk-ui`. `install` e `uninstall` encerram as bandejas em execução. Detalhes na seção da etapa 3 da ADR-004.
+- Falta: os avisos e o estado passarem pela bandeja, com a caixa de mensagem como reserva (GC-17), e ver o desenho no PC.
+
 ## Aceites
 
 - Todo aceite deste épico exige Windows real ou VM; build no macOS não certifica comportamento.

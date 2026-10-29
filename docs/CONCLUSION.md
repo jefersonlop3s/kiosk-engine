@@ -667,3 +667,9 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - Testes: `tests/bandeja.rs` (textos e protocolo, no Linux); no CI Windows, o cliente contra o servidor real (espera o serviço, batimento, aviso, confirmação, serviço que cai e volta) e o `kiosk-ui.exe` de verdade, no modo de teste (texto no idioma da conta e confirmação) e com a bandeja real (sobe, conecta, fica vivo).
 - **Falta ver no PC**: o desenho do ícone e do balão (o runner do CI não tem como mostrar).
 
+## 2026-10-30 — Bandeja, etapa 3: o serviço supervisiona a UI (E-004 F3 e F4)
+
+- `lancador_windows` (`WTSQueryUserToken` + `CreateProcessAsUserW`), `Sistema` ganha `tem_ui`, `batimento_da_ui` e `iniciar_ui`, e o agente supervisiona a bandeja de cada criança com sessão ativa. `SistemaWindows` passou a carregar o `GerenteUi` e o caminho do `kiosk-ui.exe` (`com_ui`). `kioskd serve` escuta o pipe `kiosk-ui`. `install` e `uninstall` encerram as bandejas em execução.
+- Testes: `tests/agente_ui.rs` (10, com tempo simulado) cobre início, bandeja saudável, bandeja que some (alerta com perfil e relançamento), limite de alertas, falha ao iniciar, conta sem perfil, sistema sem bandeja e sessão que fecha e volta. No CI Windows, o serviço real como SYSTEM inicia a bandeja na sessão do runner, o batimento chega por mais de 15 s sem alerta, e a bandeja morta é relançada e registrada (se o runner não tiver sessão interativa, o teste diz e pula essa parte).
+- **Ainda não passa pela bandeja**: o aviso de 5 e 1 minuto (segue na caixa de mensagem) e o estado do tempo restante (o agente ainda não o manda). É a etapa 4.
+

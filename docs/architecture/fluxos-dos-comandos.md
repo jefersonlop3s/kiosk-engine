@@ -67,10 +67,12 @@ flowchart TD
     C --> D["tarefa de manutenção: purge_expired_events<br/>na partida e a cada 24 h"]
     C --> AU["tarefa de auditoria (Windows): escuta o pipe kiosk-audit,<br/>só SYSTEM e Administradores criam instâncias"]
     AU --> AU2["cada aviso: lê uma linha curta de esquema fechado,<br/>descobre o chamador pelo token da conexão,<br/>limita a 5 por minuto por conta, grava AUTHZ_FAIL<br/>com o perfil da criança (ou o SID, se não for perfil)"]
+    C --> BA["tarefa da bandeja (Windows): escuta o pipe kiosk-ui;<br/>só o kiosk-ui.exe instalado vale como UI, cada UI só recebe o que é do SID dela"]
     C --> F{"Windows e sem --no-agent?"}
     F -->|sim| G["tarefa do agente: tick a cada 2 s"]
     F -->|não| H["só a API"]
     C --> I["abre as portas e atende a API"]
+    G --> BU["bandeja de cada criança com sessão ativa:<br/>inicia o kiosk-ui.exe na sessão dela (WTSQueryUserToken + CreateProcessAsUser);<br/>3 batimentos perdidos: TAMPER_SUSPECTED (no máximo 1 a cada 5 min) e relança"]
     G --> T1["Sistema: processos com SID e sessões ativas"]
     T1 --> T2["agrupa por SID para perfil e por nome do exe para app"]
     T2 --> T3["registra uso do app e tempo de sessão ativa<br/>em usage_ledger e session_usage"]
@@ -284,7 +286,7 @@ flowchart TD
     C -->|"não: acesso negado"| E2["erro: rode como administrador"]
     C -->|sim| D["cria ProgramData\kiosk e aplica o dono e as permissões:<br/>só SYSTEM e Administradores, sem herança, inclusive no que já havia dentro"]
     D --> F{"serviço kiosk já existe?"}
-    F -->|sim| G["para o serviço e espera parar"]
+    F -->|sim| G["para o serviço, espera parar<br/>e encerra os kiosk-ui.exe em execução"]
     F -->|não| H["segue"]
     G --> I["copia kioskd.exe, kioskctl.exe e kiosk-ui.exe para Program Files\kiosk"]
     H --> I
@@ -311,7 +313,7 @@ flowchart TD
     C -->|não| E1["erro: nada foi alterado"]
     C -->|sim| D
     B -->|não| D{"serviço kiosk existe?"}
-    D -->|sim| F["SCM: para, espera parar e remove o serviço"]
+    D -->|sim| F["SCM: para, espera parar, encerra os kiosk-ui.exe<br/>em execução e remove o serviço"]
     D -->|não| G["avisa que não estava instalado"]
     F --> Q["registro: tira Program Files\kiosk do Path do sistema,<br/>mantendo as outras entradas"]
     G --> Q

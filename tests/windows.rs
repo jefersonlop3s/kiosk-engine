@@ -55,7 +55,7 @@ fn lista_processos_com_o_sid_do_dono_igual_ao_do_whoami() {
     let sid = sid_atual();
     assert!(sid.starts_with("S-1-5-"), "whoami devolveu {sid:?}");
     let meu_pid = std::process::id();
-    let lista = SistemaWindows.processos().unwrap();
+    let lista = SistemaWindows::default().processos().unwrap();
     let eu = lista
         .iter()
         .find(|p| p.pid == meu_pid)
@@ -68,7 +68,7 @@ fn lista_processos_com_o_sid_do_dono_igual_ao_do_whoami() {
 #[test]
 fn encerra_um_processo_de_verdade() {
     let mut filho = ping_longo();
-    SistemaWindows.encerrar(filho.id()).unwrap();
+    SistemaWindows::default().encerrar(filho.id()).unwrap();
     let status = espera_sair(&mut filho, Duration::from_secs(10)).expect("o processo não terminou");
     assert!(!status.success(), "TerminateProcess usa código 1");
 }
@@ -82,13 +82,13 @@ fn encerrar_processo_inexistente_falha_alto() {
     let pid = filho.id();
     filho.wait().unwrap();
     drop(filho); // libera o handle: o pid deixa de existir
-    assert!(SistemaWindows.encerrar(pid).is_err());
+    assert!(SistemaWindows::default().encerrar(pid).is_err());
 }
 
 #[test]
 fn consulta_de_sessoes_responde_sem_erro() {
     // o runner do CI pode não ter sessão interativa; o que se exige é a chamada funcionar
-    let sessoes = SistemaWindows.sessoes_ativas().unwrap();
+    let sessoes = SistemaWindows::default().sessoes_ativas().unwrap();
     assert!(sessoes.iter().all(|s| s.starts_with("S-1-")), "{sessoes:?}");
 }
 
@@ -139,7 +139,7 @@ async fn o_agente_encerra_o_app_bloqueado_e_nao_toca_no_app_isento() {
         .unwrap();
     std::thread::sleep(Duration::from_secs(2)); // o powershell demora a aparecer na lista
 
-    let mut agente = Agente::new(&db, SistemaWindows, chrono::Local);
+    let mut agente = Agente::new(&db, SistemaWindows::default(), chrono::Local);
     let rel = agente.tick(Utc::now()).await;
     let encerrados: Vec<u32> = rel
         .acoes

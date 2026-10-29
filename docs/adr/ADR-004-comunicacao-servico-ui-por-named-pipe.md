@@ -55,3 +55,10 @@ A decisão não mudou. Ao implementar o canal (`src/ui_windows.rs`), ficaram est
 8. **Confirmação**: depois de o Windows aceitar o balão, a UI manda `aviso_exibido` com o marco (300 ou 60); o agente poderá usar isso para cair na caixa de mensagem se a UI não mostrou.
 9. **O que o CI prova e o que não prova**: no CI Windows, o `kiosk-ui.exe` de verdade conecta, recebe estado e aviso, escreve o texto certo no idioma da conta e confirma ao serviço (modo `KIOSK_UI_SEM_BANDEJA`, só para teste), e com a bandeja real sobe, conecta e fica vivo. **O desenho do ícone e do balão só se vê num PC com barra de tarefas**; é o que o dono precisa conferir.
 
+### O serviço supervisiona a bandeja (etapa 3)
+
+10. **O serviço inicia a bandeja** na sessão de cada criança com sessão ativa (`WTSQueryUserToken` + `CreateProcessAsUserW`, na área de trabalho `winsta0\default`, com o ambiente da própria conta), assim que a sessão aparece. O `kiosk-ui.exe` é o de `Program Files\kiosk`.
+11. **Três batimentos perdidos (15 s) viram `TAMPER_SUSPECTED`** ligado ao perfil (`UI_STOPPED`), e a bandeja é relançada. Para uma criança que a feche sempre, o alerta sai no máximo uma vez a cada 5 minutos por conta (o relançamento continua a cada 15 s). Falha ao iniciar vira `INTERNAL_ERROR` (`UI_NOT_STARTED`), com o mesmo limite. Só contas com perfil recebem bandeja.
+12. **`install` e `uninstall` encerram as bandejas em execução**, depois de parar o serviço (que é quem as relançaria): sem isso, o Windows trava o `kiosk-ui.exe` e a atualização ou a remoção falham.
+13. Ainda falta: os avisos e o estado passarem pela bandeja (hoje o aviso segue pela caixa de mensagem do Windows), com a caixa como reserva se a bandeja não confirmar.
+

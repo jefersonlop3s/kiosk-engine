@@ -4,8 +4,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
-### Interno
-- `kiosk-ui.exe`, a bandeja da criança (ADR-004, E-004 F3 etapa 2): ícone com o tempo restante e balão para os avisos de 5 e 1 minuto, no idioma da conta, com reconexão ao serviço e batimento. O `kioskd install` e o pacote do Windows já o levam, mas **o serviço ainda não o inicia**: nada muda para quem usa.
+### Adicionado
+- **Bandeja da criança** (ADR-004, E-004 F3 e F4): o serviço inicia o `kiosk-ui.exe` na sessão de cada criança. Ele mostra um ícone com o tempo restante e conecta ao serviço por um pipe (`kiosk-ui`), mandando batimento. Se a criança fechar a bandeja, o serviço a relança e registra `TAMPER_SUSPECTED` em `kioskctl log` (no máximo uma vez a cada 5 minutos por conta). Falha ao iniciar a bandeja também é registrada. O `install` e o `uninstall` encerram as bandejas em execução, para o Windows não travar o arquivo.
+- **Os avisos de 5 e 1 minuto ainda seguem pela caixa de mensagem do Windows**; passar por esta bandeja, com a caixa como reserva, vem na próxima etapa. O ícone mostra o tempo restante só depois dessa etapa (o agente ainda não manda o estado).
 
 ## [0.0.7] - 2026-10-29
 

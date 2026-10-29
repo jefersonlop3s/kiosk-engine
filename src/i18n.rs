@@ -545,6 +545,11 @@ catalogo! {
         pt: "retenção falhou: {erro}",
         es: "la retención falló: {erro}",
     },
+    BandejaIndisponivel { erro: String } => {
+        en: "tray channel unavailable (the service keeps running without it): {erro}",
+        pt: "canal da bandeja indisponível (o serviço segue sem ele): {erro}",
+        es: "canal de la bandeja no disponible (el servicio sigue sin él): {erro}",
+    },
     AgenteAtivo { segundos: u64 } => {
         en: "enforcement agent active (tick every {segundos}s)",
         pt: "agente de enforcement ativo (tick de {segundos}s)",
@@ -1094,6 +1099,16 @@ catalogo! {
         en: "agent heartbeat not recorded: {erro}",
         pt: "batimento do agente não gravado: {erro}",
         es: "latido del agente no registrado: {erro}",
+    },
+    LogUiParada { duracao: String } => {
+        en: "the tray stopped responding ({duracao} without a heartbeat): it may have been closed",
+        pt: "a bandeja parou de dar sinal ({duracao} sem batimento): pode ter sido fechada",
+        es: "la bandeja dejó de responder ({duracao} sin latido): puede haberse cerrado",
+    },
+    LogUiNaoIniciada { erro: String } => {
+        en: "could not start the tray in the child's session: {erro}",
+        pt: "não foi possível iniciar a bandeja na sessão da criança: {erro}",
+        es: "no se pudo iniciar la bandeja en la sesión del niño: {erro}",
     },
     LogUiRecusada { motivo: String } => {
         en: "tray connection refused: {motivo}",

@@ -402,6 +402,65 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     assert!(paradas[1].1.contains("\"clean\":false"), "{paradas:?}");
     esperar(Duration::from_secs(15), status_do_pareamento).expect("API não voltou");
 
+    // E-004 F3 e F4: o serviço (SYSTEM) inicia a bandeja na sessão da conta, o batimento chega, e
+    // ele a relança e registra quando ela é morta. Precisa de uma sessão interativa logada.
+    {
+        use kiosk_engine::agente::Sistema;
+        let conta_do_runner = std::env::var("USERNAME").expect("USERNAME");
+        let sid_do_runner = kiosk_engine::sistema_windows::sid_de_usuario(&conta_do_runner)
+            .expect("SID do usuário do teste");
+        let sessoes = kiosk_engine::sistema_windows::SistemaWindows::default()
+            .sessoes_ativas()
+            .unwrap();
+        if !sessoes.contains(&sid_do_runner) {
+            eprintln!("SEM SESSÃO INTERATIVA no runner ({sessoes:?}): a bandeja não foi testada");
+        } else {
+            let perfil = kioskd(&[
+                "profile",
+                "create",
+                "--sid",
+                &sid_do_runner,
+                "--name",
+                "Runner",
+            ]);
+            assert!(perfil.status.success(), "{}", texto(&perfil));
+            let primeiro = esperar(Duration::from_secs(60), || {
+                pids_da_bandeja().first().copied()
+            })
+            .expect("o serviço não iniciou a bandeja na sessão da conta");
+            // viva por mais que o limite de 3 batimentos (15 s): sem alerta, o batimento chegou, e
+            // o serviço aceitou o kiosk-ui.exe instalado
+            std::thread::sleep(Duration::from_secs(25));
+            assert_eq!(
+                pids_da_bandeja(),
+                [primeiro],
+                "a bandeja foi relançada sem motivo"
+            );
+            assert!(
+                eventos_do_tipo(&dados, "TAMPER_SUSPECTED").is_empty(),
+                "alerta de bandeja parada com a bandeja viva: {:?}",
+                eventos_do_tipo(&dados, "TAMPER_SUSPECTED")
+            );
+            // a criança a mata: o serviço registra e a relança
+            let kill = Command::new("taskkill")
+                .args(["/F", "/PID", &primeiro.to_string()])
+                .output()
+                .unwrap();
+            assert!(kill.status.success(), "taskkill: {}", texto(&kill));
+            let nova = esperar(Duration::from_secs(90), || {
+                pids_da_bandeja().into_iter().find(|p| *p != primeiro)
+            })
+            .expect("o serviço não relançou a bandeja morta");
+            assert_ne!(nova, primeiro);
+            let alertas = esperar(Duration::from_secs(30), || {
+                Some(eventos_do_tipo(&dados, "TAMPER_SUSPECTED")).filter(|e| !e.is_empty())
+            })
+            .expect("a bandeja morta não virou TAMPER_SUSPECTED");
+            assert!(alertas[0].1.contains("UI_STOPPED"), "{alertas:?}");
+            assert_eq!(alertas[0].0, "FAILURE");
+        }
+    }
+
     // reinstalar atualiza sem duplicar (em português: as duas línguas valem, ADR-010)
     ok(&["instalar", "--escutar", &format!("127.0.0.1:{PORTA}")]);
     assert!(pid_em_execucao().is_some());
@@ -746,6 +805,46 @@ fn paradas_do_agente(dados: &std::path::Path) -> Vec<(String, String)> {
             "SELECT transaction_status, rejection_reason_detail FROM security_log \
              WHERE event_type = 'AGENT_STOPPED' ORDER BY timestamp, rowid",
         )
+        .fetch_all(db.pool())
+        .await
+        .unwrap()
+    })
+}
+
+/// PIDs dos `kiosk-ui.exe` em execução.
+fn pids_da_bandeja() -> Vec<u32> {
+    let o = Command::new("tasklist")
+        .args(["/FI", "IMAGENAME eq kiosk-ui.exe", "/FO", "CSV", "/NH"])
+        .output()
+        .unwrap();
+    texto(&o)
+        .lines()
+        .filter(|l| l.to_lowercase().contains("kiosk-ui.exe"))
+        .filter_map(|l| l.split(',').nth(1))
+        .filter_map(|p| p.trim_matches('"').parse().ok())
+        .collect()
+}
+
+/// Eventos do tipo no banco do serviço, do mais antigo ao mais novo: (status, detalhe).
+fn eventos_do_tipo(dados: &std::path::Path, tipo: &str) -> Vec<(String, String)> {
+    let url = format!(
+        "sqlite://{}",
+        dados
+            .join("kiosk.db")
+            .display()
+            .to_string()
+            .replace('\\', "/")
+    );
+    let tipo = tipo.to_owned();
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let db = kiosk_engine::db_manager::KioskDbManager::new(&url)
+            .await
+            .unwrap();
+        sqlx::query_as(
+            "SELECT transaction_status, rejection_reason_detail FROM security_log \
+             WHERE event_type = ? ORDER BY timestamp, rowid",
+        )
+        .bind(tipo)
         .fetch_all(db.pool())
         .await
         .unwrap()
