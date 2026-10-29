@@ -461,6 +461,37 @@ async fn limite_uso_e_log_pelo_cli() {
         );
     }
 
+    // eventos do PC que não são de um perfil (o agente que sumiu) só aparecem sem --profile
+    let sumiu = kiosk_engine::detalhes::Detalhe::AgentWasDown {
+        from: "2026-10-30T00:00:00+00:00".into(),
+        to: "2026-10-30T01:00:00+00:00".into(),
+        seconds: 3600,
+        clean: false,
+    };
+    let ev = SecurityEvent::new(
+        "local",
+        ActionType::System,
+        EventType::AgentStopped,
+        TransactionStatus::Failure,
+        &sumiu.codigo(),
+    );
+    db.record_event(&ev).await.unwrap();
+    let todos = kioskctl(&cred, &["log", "--dias", "1"]);
+    assert!(todos.status.success(), "{}", texto(&todos.stderr));
+    let t = texto(&todos.stdout);
+    assert!(
+        t.contains("AGENT_STOPPED") && t.contains("[PC]") && t.contains("sumiu sem parada normal"),
+        "{t}"
+    );
+    // e os eventos dos perfis aparecem com as 8 primeiras letras do perfil
+    assert!(t.contains(&format!("[{}]", &perfil[..8])), "{t}");
+    let so_do_perfil = kioskctl(&cred, &["log", "--perfil", &perfil, "--dias", "1"]);
+    let t = texto(&so_do_perfil.stdout);
+    assert!(
+        !t.contains("AGENT_STOPPED") && !t.contains("[PC]") && !t.contains('['),
+        "com --profile, nada de outros: {t}"
+    );
+
     // perfil inexistente: a consulta é recusada sem vazar nada
     let ruim = kioskctl(&cred, &["uso", "--perfil", &Uuid::new_v4().to_string()]);
     assert!(!ruim.status.success() && texto(&ruim.stderr).contains("recusou"));

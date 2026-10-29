@@ -6,6 +6,8 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ### Interno
 - `kiosk-ui.exe`, a bandeja da criança (ADR-004, E-004 F3 etapa 2): ícone com o tempo restante e balão para os avisos de 5 e 1 minuto, no idioma da conta, com reconexão ao serviço e batimento. O `kioskd install` e o pacote do Windows já o levam, mas **o serviço ainda não o inicia**: nada muda para quem usa.
+### Corrigido
+- `kioskctl log` passa a aceitar a consulta **sem** `--profile`: lista todos os eventos do PC, e cada linha diz de quem é (`[8 letras do perfil]` ou `[PC]`). Antes só dava para ler o log de um perfil, e os eventos que não são de um perfil, como o `AGENT_STOPPED` (e a recusa de um administrador sem elevação), existiam no banco mas os pais não tinham como vê-los. Visto no teste da 0.0.7 no PC real. A API já aceitava a consulta sem perfil.
 
 ## [0.0.7] - 2026-10-29
 

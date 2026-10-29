@@ -500,12 +500,12 @@ flowchart TD
 ```mermaid
 flowchart TD
     subgraph PAIS["Dispositivo dos pais"]
-        A["kioskctl log --profile, --days, --limit"] --> B["período: agora menos N dias até agora"]
-        B --> C["corpo JSON from, to, profile_id e limit, assinado"]
+        A["kioskctl log, com --profile (opcional), --days, --limit"] --> B["período: agora menos N dias até agora"]
+        B --> C["corpo JSON from, to, limit e, se houve --profile, profile_id; assinado"]
     end
     C -->|"POST /api/windows/log"| D
     subgraph SRV["kioskd serve"]
-        D["Camadas 0 a 3: período até 31 dias, limite de 1 a 500,<br/>o perfil precisa existir"] --> E["lê security_log em ordem cronológica"]
+        D["Camadas 0 a 3: período até 31 dias, limite de 1 a 500,<br/>o perfil, se informado, precisa existir"] --> E["lê security_log em ordem cronológica:<br/>só do perfil, ou, sem perfil, todos os eventos do PC"]
         E --> F{"tipo do evento é AUTH_FAIL, AUTHZ_FAIL,<br/>VALIDATION_FAIL ou INTERNAL_ERROR?"}
         F -->|sim| G["detalhe omitido: fica só no banco do PC"]
         F -->|não| H["detalhe incluído"]
@@ -515,7 +515,7 @@ flowchart TD
     D -->|recusa| R1["403 rejected"]
     I --> R2["200 com a lista de eventos"]
     R1 --> J1["kioskctl: recusou"]
-    R2 --> J2["kioskctl imprime: horário, tipo, ação e o detalhe,<br/>traduzido para o idioma de quem lê (o log guarda um código)"]
+    R2 --> J2["kioskctl imprime: horário, tipo, ação e o detalhe,<br/>traduzido para o idioma de quem lê (o log guarda um código);<br/>sem --profile, cada linha leva [8 letras do perfil] ou [PC]"]
 ```
 
 ### `kioskctl version`
