@@ -452,3 +452,13 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Resultado**: [E-007](epics/E-007-onboarding-e-instalador.md) registrado como proposto, com resultado, fases (assistente, serviço do Windows, instalador), aceites e as decisões que exigirão ADR; incluído no [ROADMAP](ROADMAP.md) e no PENDING. O índice de épicos, que ainda mostrava E-001 a E-005 como propostos, foi atualizado.
 - **Commit**: branch `claude/hopeful-curie-egiw07` (PR só de documentação).
 
+## 2026-10-29 — ADR-007 a ADR-009 propostas para o E-007
+
+- **Origem**: pedido do dono para registrar já as ADRs que o E-007 deixou em aberto.
+- **Resultado** (todas **Proposto**; o aceite é do dono):
+  - [ADR-007](adr/ADR-007-forma-do-assistente-de-configuracao.md): assistente interativo no terminal (`kioskd configurar`), idempotente, com modo não interativo (`--respostas`) para CI e reinstalação; só orquestra as operações existentes; interface gráfica depois, junto da bandeja da ADR-004;
+  - [ADR-008](adr/ADR-008-formato-do-instalador.md): etapa 1 com autoinstalação (`kioskd instalar|desinstalar`: Program Files, pasta do banco com ACL, serviço SYSTEM no SCM com reinício automático), etapa 2 com `.msi` (WiX) e winget; assinatura de código registrada como risco e decisão do dono;
+  - [ADR-009](adr/ADR-009-origem-da-lista-de-programas.md): atalhos do menu Iniciar e processos em execução, com entrada manual; a lista não é guardada, só as escolhas; histórico de processos rejeitado por coletar mais do que as regras pedem.
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros; E-007, índice de épicos, ROADMAP e PENDING apontam para as ADRs.
+- **Limitações**: nenhuma alternativa foi exercitada; são análise, não medição.
+

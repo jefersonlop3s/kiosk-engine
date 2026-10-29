@@ -5,6 +5,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ## [Não lançado]
 
 ### Documentação
+- ADR-007 a ADR-009 propostas para o E-007 (assistente no terminal, autoinstalação e depois `.msi`, lista de programas pelo menu Iniciar e processos).
 - E-007 "Onboarding e instalador" proposto (assistente de primeira configuração, serviço do Windows e instalador); índice de épicos e roadmap atualizados.
 - Resultados dos testes no Windows real: avisos, limite do app e bloqueio de sessão validados; logoff não ocorreu (GC-20).
 

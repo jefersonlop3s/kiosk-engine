@@ -6,6 +6,7 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 | ID / documento | Estado | Próximo passo | Responsável |
 |---|---|---|---|
+| [ADR-007](adr/ADR-007-forma-do-assistente-de-configuracao.md), [ADR-008](adr/ADR-008-formato-do-instalador.md), [ADR-009](adr/ADR-009-origem-da-lista-de-programas.md) | Propostas em 2026-10-29 para o E-007, com recomendação em cada uma | Aceitar, rejeitar ou pedir alternativa; o aceite desbloqueia o E-007 | dono |
 | Hash encadeado no `Security_Log` | Adiado pelo dono em 2026-10-28; retomar só com ADR. O trigger cobre UPDATE/DELETE via SQL, não edição direta do arquivo | dono |
 | AGENTS global em `~/.claude/` | Criado pela sessão `3a84a5f7` fora do repositório; sem efeito | Apagar (a regra já está no AGENTS.md do projeto) | dono |
 
@@ -31,7 +32,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Validados em PC real com conta de criança (2026-10-29): encerramento de app, avisos de 5 e 1 min, encerramento ao esgotar o limite do app e bloqueio de sessão; falta o logoff (GC-20), o serviço do Windows (GC-16) e a UI de bandeja (GC-17) |
 | [E-005](epics/E-005-api-comando-e-pareamento.md) | em andamento | F1 a F3 concluídas (servidor, assinatura, regras, `modify_limit`, consultas de uso e log, CLI dos pais); sobram o modo LAN (GC-15) e ligar o agente ao serviço (GC-16) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
-| [E-007](epics/E-007-onboarding-e-instalador.md) | proposto (não é para agora) | Abrir as ADRs de forma do assistente e de instalador quando for executado |
+| [E-007](epics/E-007-onboarding-e-instalador.md) | proposto (não é para agora) | Aguarda o aceite das ADR-007 a ADR-009 |
 
 ## Infraestrutura do harness
 

@@ -24,18 +24,18 @@ Estado: proposto em 2026-10-29 (ideia do dono; não é para agora). Responsável
 
 - Origem: pedido do dono em 2026-10-29, depois dos testes no próprio PC ([CONCLUSION](../CONCLUSION.md), entradas de 2026-10-28 e 2026-10-29).
 - Reaproveita: `kioskd perfil|app|regra` e `sistema_windows::sid_de_usuario` (a lógica já existe; falta o fluxo guiado).
-- **Decisões em aberto** (abrir ADR quando o épico for executado):
-  - forma do assistente: interativo no terminal (`kioskd configurar`), interface gráfica, ou os dois;
-  - formato do instalador: `.msi`, `winget` ou só o executável com o assistente;
-  - de onde vem a lista de programas: menu Iniciar, registro de desinstalação, processos em execução ou combinação.
+- **ADRs propostas (2026-10-29), aguardando aceite do dono**:
+  - [ADR-007](../adr/ADR-007-forma-do-assistente-de-configuracao.md): assistente interativo no terminal (`kioskd configurar`), com modo não interativo para CI e reinstalação; interface gráfica depois, junto da bandeja;
+  - [ADR-008](../adr/ADR-008-formato-do-instalador.md): primeiro autoinstalação (`kioskd instalar|desinstalar`, serviço SYSTEM no SCM), depois `.msi` com WiX e winget;
+  - [ADR-009](../adr/ADR-009-origem-da-lista-de-programas.md): atalhos do menu Iniciar e processos em execução, com entrada manual; nada além das escolhas é gravado.
 
 ## Fases e dependências
 
 | Fase | Entrega | Depende de | Evidência |
 |---|---|---|---|
-| F1 | Assistente em terminal: pasta e permissões, lista de contas locais para escolher perfis, lista de programas para escolher apps, regras iniciais, endereço de escuta, código de pareamento | ADR da forma do assistente | Execução de ponta a ponta num Windows limpo, com o fluxograma no padrão do [AGENTS.md](../../AGENTS.md#fluxogramas-dos-comandos) |
-| F2 | `kioskd` como serviço do Windows (SCM, conta SYSTEM, recuperação automática) e remoção limpa | F1, [E-004](E-004-agente-windows-enforcement.md) | Serviço sobrevive a reinício; conta da criança não consegue parar o serviço |
-| F3 | Instalador e lançador | F2, ADR do formato | Instalação e desinstalação num Windows limpo sem passos manuais |
+| F1 | Assistente em terminal: pasta e permissões, lista de contas locais para escolher perfis, lista de programas para escolher apps, regras iniciais, endereço de escuta, código de pareamento | ADR-007 e ADR-009 aceitas | Execução de ponta a ponta num Windows limpo, com o fluxograma no padrão do [AGENTS.md](../../AGENTS.md#fluxogramas-dos-comandos) |
+| F2 | `kioskd` como serviço do Windows (SCM, conta SYSTEM, recuperação automática) e remoção limpa | F1, [E-004](E-004-agente-windows-enforcement.md), ADR-008 aceita | Serviço sobrevive a reinício; conta da criança não consegue parar o serviço |
+| F3 | Instalador e lançador | F2, ADR-008 aceita | Instalação e desinstalação num Windows limpo sem passos manuais |
 
 ## Aceites
 
