@@ -336,8 +336,12 @@ impl Drop for ValorDoRegistro {
     }
 }
 
+/// Os testes que mexem no idioma do `HKCU` não podem rodar ao mesmo tempo: é o mesmo registro.
+static REGISTRO_DO_IDIOMA: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
 fn o_idioma_da_conta_vem_do_perfil_carregado_dela() {
+    let _trava = REGISTRO_DO_IDIOMA.lock().unwrap_or_else(|e| e.into_inner());
     use kiosk_engine::i18n::Idioma;
     use kiosk_engine::sistema_windows::idioma_da_conta;
 
@@ -374,6 +378,8 @@ fn o_aviso_a_crianca_sai_no_idioma_da_conta_dela_com_o_registro_real() {
     use kiosk_engine::i18n::{Idioma, idioma};
     use kiosk_engine::motor::Motivo;
     use kiosk_engine::sistema_windows::texto_do_aviso;
+
+    let _trava = REGISTRO_DO_IDIOMA.lock().unwrap_or_else(|e| e.into_inner());
 
     // simula a criança logada com o Windows em outro idioma: o serviço lê o mesmo lugar do registro
     let desktop = r"HKCU\Control Panel\Desktop";
