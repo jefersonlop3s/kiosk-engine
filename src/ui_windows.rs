@@ -68,6 +68,11 @@ impl GerenteUi {
         self.entradas.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// SIDs das contas com UI conectada (para diagnóstico).
+    pub fn contas(&self) -> Vec<String> {
+        self.travar().keys().cloned().collect()
+    }
+
     /// Há uma UI conectada para esta conta.
     pub fn conectada(&self, sid: &str) -> bool {
         self.travar().contains_key(sid)
@@ -296,7 +301,12 @@ async fn atender(
     let primeira =
         match tokio::time::timeout(PRAZO_DA_PRIMEIRA, linhas.proxima(&mut servidor)).await {
             Ok(Ok(Some(l))) => l,
-            _ => return, // calou, fechou sem enviar ou mandou lixo sem fim de linha
+            // fechou sem enviar ou mandou lixo sem fim de linha
+            Ok(_) => return,
+            Err(_) => {
+                eprintln!("kioskd: ui: conexão sem a primeira mensagem em {PRAZO_DA_PRIMEIRA:?}");
+                return;
+            }
         };
     let chamador = match identidade_do_cliente_do_pipe(&servidor) {
         Ok(c) => c,

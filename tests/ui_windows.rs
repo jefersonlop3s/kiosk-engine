@@ -359,7 +359,12 @@ async fn conta_padrao_conecta_e_so_recebe_o_que_e_dela() {
     let arquivo = como(&conta, || Cliente::abrir(&nome)).expect("a conta padrão devia conectar");
     let mut c = Cliente::de_arquivo(arquivo).unwrap();
     c.enviar(BATIMENTO).await.unwrap();
-    assert!(esperar(|| s.gerente.conectada(&sid_conta)).await);
+    assert!(
+        esperar(|| s.gerente.conectada(&sid_conta)).await,
+        "esperava {sid_conta}; conectadas: {:?}; recusas: {:?}",
+        s.gerente.contas(),
+        recusas(&s.db).await
+    );
     assert!(
         !s.gerente.conectada(&sid_runner),
         "roteou para a conta errada"
