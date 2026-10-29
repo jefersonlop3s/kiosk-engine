@@ -653,17 +653,30 @@ fn rodar_como(
         "$s = ConvertTo-SecureString '{}' -AsPlainText -Force; \
          $c = New-Object System.Management.Automation.PSCredential('.\\{}', $s); \
          $p = Start-Process -FilePath '{exe}' -ArgumentList {lista} -Credential $c \
-           -WorkingDirectory 'C:\\Windows\\System32' -RedirectStandardOutput '{}' -RedirectStandardError '{}' -Wait -PassThru; \
+           -WorkingDirectory 'C:\\Windows\\System32' -LoadUserProfile -RedirectStandardOutput '{}' -RedirectStandardError '{}' -PassThru; \
+         if (-not $p.WaitForExit(60000)) {{ $p.Kill(); Write-Output 'TEMPO ESGOTADO ao rodar como a conta'; exit 124 }}; \
          exit $p.ExitCode",
         conta.senha,
         conta.nome,
         saida.display(),
         erro.display()
     );
-    let o = Command::new("powershell")
+    let mut filho = Command::new("powershell")
         .args(["-NoProfile", "-Command", &script])
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .unwrap();
+    // prazo de 3 minutos para o PowerShell inteiro: nunca deixa o CI pendurado
+    let limite = Instant::now() + Duration::from_secs(180);
+    while filho.try_wait().unwrap().is_none() {
+        if Instant::now() > limite {
+            let _ = filho.kill();
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let o = filho.wait_with_output().unwrap();
     let ler = |p: &PathBuf| std::fs::read_to_string(p).unwrap_or_default();
     let r = (o.status.code(), ler(&saida), ler(&erro), texto(&o));
     let _ = (std::fs::remove_file(&saida), std::fs::remove_file(&erro));
