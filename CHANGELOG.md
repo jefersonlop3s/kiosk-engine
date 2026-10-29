@@ -4,6 +4,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Corrigido
+- `kioskctl log` passa a aceitar a consulta **sem** `--profile`: lista todos os eventos do PC, e cada linha diz de quem é (`[8 letras do perfil]` ou `[PC]`). Antes só dava para ler o log de um perfil, e os eventos que não são de um perfil, como o `AGENT_STOPPED` (e a recusa de um administrador sem elevação), existiam no banco mas os pais não tinham como vê-los. Visto no teste da 0.0.7 no PC real. A API já aceitava a consulta sem perfil.
+
 ## [0.0.7] - 2026-10-29
 
 Ainda **pré-lançamento**. Traz o rastro das tentativas de comando sem privilégio (ADR-011, visto no PC real com uma conta comum), os comandos `version`, o `AGENT_STOPPED` no log forense e duas correções do pipe de auditoria. O agente, a API e o `kioskctl` da 0.0.6 continuam compatíveis. O serviço aplica sozinho a migração `0007` ao subir; para atualizar, rode `kioskd install --listen ...` da pasta nova (o `kioskd status` mostra a versão instalada e a da pasta).

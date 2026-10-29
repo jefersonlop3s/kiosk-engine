@@ -264,7 +264,9 @@ async fn executar(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         ["log", ..] => {
-            let perfil = exigir(args, "--profile")?;
+            // sem --profile: todos os eventos do PC, inclusive os que não são de um perfil
+            // (AGENT_STOPPED, por exemplo), que de outro modo os pais não veriam
+            let perfil = opcao(args, "--profile");
             let dias: i64 = opcao(args, "--days")
                 .map(|d| {
                     d.parse().map_err(|_| {
@@ -281,8 +283,10 @@ async fn executar(args: &[String]) -> Result<(), String> {
             let mut corpo = serde_json::json!({
                 "from": (agora - chrono::Duration::days(dias)).to_rfc3339(),
                 "to": agora.to_rfc3339(),
-                "profile_id": perfil,
             });
+            if let Some(p) = &perfil {
+                corpo["profile_id"] = serde_json::json!(p);
+            }
             if let Some(l) = opcao(args, "--limit") {
                 let l: u32 = l.parse().map_err(|_| {
                     Msg::OpcaoInvalida {
@@ -302,11 +306,22 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 eprintln!("kioskctl: {}", Msg::NenhumEvento);
             }
             for e in eventos {
+                // lendo o PC todo, diz de quem é cada evento: as 8 primeiras letras do perfil, ou
+                // `PC` se o evento não é de um perfil
+                let de_quem = if perfil.is_none() {
+                    let p = e["profile_id"]
+                        .as_str()
+                        .map_or("PC", |p| &p[..p.len().min(8)]);
+                    format!("[{p}]  ")
+                } else {
+                    String::new()
+                };
                 println!(
-                    "{}  {}  {}  {}",
+                    "{}  {}  {}  {}{}",
                     e["timestamp"].as_str().unwrap_or("?"),
                     e["event_type"].as_str().unwrap_or("?"),
                     e["action"].as_str().unwrap_or("?"),
+                    de_quem,
                     kiosk_engine::detalhes::legivel(e["detail"].as_str().unwrap_or(""), idioma())
                 );
             }
