@@ -14,9 +14,14 @@ use std::process::{Command, Output, Stdio};
 use std::ptr::{null, null_mut};
 use std::time::{Duration, Instant};
 
-use windows_sys::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED, HANDLE};
+use windows_sys::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED, HANDLE, LocalFree};
+use windows_sys::Win32::Security::Authorization::{
+    ConvertSecurityDescriptorToStringSecurityDescriptorW, GetNamedSecurityInfoW, SDDL_REVISION_1,
+    SE_FILE_OBJECT,
+};
 use windows_sys::Win32::Security::{
-    ImpersonateLoggedOnUser, LOGON32_LOGON_INTERACTIVE, LOGON32_PROVIDER_DEFAULT, LogonUserW,
+    DACL_SECURITY_INFORMATION, ImpersonateLoggedOnUser, LOGON32_LOGON_INTERACTIVE,
+    LOGON32_PROVIDER_DEFAULT, LogonUserW, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
     RevertToSelf,
 };
 use windows_sys::Win32::System::Services::{
@@ -87,6 +92,52 @@ fn status_do_pareamento() -> Option<String> {
     let mut resp = String::new();
     s.read_to_string(&mut resp).ok()?;
     Some(resp)
+}
+
+/// Dono e DACL do caminho em SDDL, lidos do próprio Windows (sem PowerShell: no runner, o
+/// `PSModulePath` do pwsh 7 quebra o `Get-Acl` do Windows PowerShell).
+fn sddl_de(caminho: &std::path::Path) -> String {
+    let nome = w(&caminho.to_string_lossy());
+    let info = OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION;
+    let mut sd: PSECURITY_DESCRIPTOR = null_mut();
+    // SAFETY: nome terminado em zero; `sd` é liberado com LocalFree.
+    let erro = unsafe {
+        GetNamedSecurityInfoW(
+            nome.as_ptr(),
+            SE_FILE_OBJECT,
+            info,
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            null_mut(),
+            &mut sd,
+        )
+    };
+    assert_eq!(erro, 0, "GetNamedSecurityInfoW: {erro}");
+    let mut texto: *mut u16 = null_mut();
+    // SAFETY: descritor válido; `texto` é liberado com LocalFree.
+    let ok = unsafe {
+        ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            sd,
+            SDDL_REVISION_1,
+            info,
+            &mut texto,
+            null_mut(),
+        )
+    };
+    assert!(ok != 0, "{}", std::io::Error::last_os_error());
+    let mut n = 0;
+    // SAFETY: string terminada em zero devolvida pelo Windows.
+    while unsafe { *texto.add(n) } != 0 {
+        n += 1;
+    }
+    // SAFETY: `n` u16 válidos; depois os dois blocos são liberados.
+    let sddl = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(texto, n) });
+    unsafe {
+        LocalFree(texto.cast());
+        LocalFree(sd);
+    }
+    sddl
 }
 
 fn w(s: &str) -> Vec<u16> {
@@ -228,15 +279,7 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     );
 
     // pasta de dados: protegida e sem herança de %ProgramData%
-    let acl = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!("(Get-Acl '{}').Sddl", dados.display()),
-        ])
-        .output()
-        .unwrap();
-    let sddl = String::from_utf8_lossy(&acl.stdout).trim().to_owned();
+    let sddl = sddl_de(&dados);
     assert!(sddl.starts_with("O:BA"), "dono: {sddl}");
     assert!(sddl.contains("D:P"), "herança não cortada: {sddl}");
     let donos: Vec<&str> = sddl
