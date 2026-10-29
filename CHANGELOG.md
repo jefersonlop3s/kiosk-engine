@@ -5,6 +5,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ## [Não lançado]
 
 ### Documentação
+- ADR-011 proposta: rastro das tentativas de comando administrativo sem privilégio (GC-21). O comando avisa o serviço por named pipe local, o serviço descobre o chamador pelo token e grava o evento no banco; todo comando que abre o banco passa a conferir a elevação.
 - Registro do teste da 0.0.5 no PC real do dono e do GC-21: a recusa de `kioskd pairing-code` por conta sem privilégio não fica no log forense, porque o banco só abre para administradores.
 
 ## [0.0.5] - 2026-10-29

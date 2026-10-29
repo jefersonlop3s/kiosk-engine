@@ -595,3 +595,14 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Ainda por ver no PC real**: o aviso à criança no idioma da conta dela ([E-012](epics/E-012-internacionalizacao.md) F3) e o agente aplicando uma regra na conta da criança como SYSTEM (GC-16).
 - Nenhum dado do log do dono (IP, conta, caminhos pessoais) foi copiado para o repositório.
 
+## 2026-10-29 — ADR-011 proposta: rastro das tentativas sem privilégio (GC-21)
+
+- **Origem**: achado do teste da 0.0.5 (a recusa de `pairing-code` sem elevação não chega ao log) e pedido do dono para seguir com uma ADR para o canal entre o comando e o serviço.
+- **Resultado**: [ADR-011](adr/ADR-011-rastro-de-tentativas-sem-privilegio.md) **proposta**, ainda sem código:
+  - o comando avisa o serviço por named pipe local (`\\.\pipe\kiosk-audit`) e o serviço grava no banco, ligado ao perfil da criança quando o chamador é um;
+  - o chamador é descoberto pelo token da conexão e nunca pelo conteúdo da mensagem;
+  - esquema fechado, limite de taxa por conta, falha alta quando o serviço não responde;
+  - todo comando que abre o banco confere a elevação primeiro e explica a recusa, no lugar do erro cru do SQLite (outro achado do teste);
+  - alternativas rejeitadas (Log de Eventos do Windows, pasta de entrada, HTTP sem assinatura, abrir o banco) e o plano de testes no CI Windows.
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros.
+
