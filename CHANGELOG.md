@@ -4,6 +4,10 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.5] - 2026-10-29
+
+Ainda **pré-lançamento**. Idiomas (en-US, pt-BR, es-ES), comandos em inglês com o português equivalente, pasta do kiosk no PATH e exigência de administrador para gerar o código de pareamento. **Atualize o `kioskd` e o `kioskctl` juntos**: o corpo do pareamento mudou e um `kioskctl` 0.0.4 não pareia com um serviço 0.0.5. Dispositivos já pareados continuam funcionando. O log gravado pela 0.0.4 mantém o texto em português.
+
 ### Adicionado
 - Mensagens em **en-US, pt-BR e es-ES**, no idioma de quem as lê (ADR-010): `kioskd` e `kioskctl` por `KIOSK_LANG` ou pelo idioma do Windows; serviço no idioma de quem o instalou; avisos à criança no idioma da conta dela. Cada mensagem exige os três idiomas, ou o build falha.
 - `kioskctl log` mostra o detalhe dos eventos traduzido; o log forense passa a guardar um código (JSON) para o enforcement. Linhas antigas aparecem como foram gravadas.
