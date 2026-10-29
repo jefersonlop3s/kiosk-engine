@@ -21,3 +21,4 @@ pub mod servico_windows;
 pub mod sistema_windows;
 pub mod textos;
 pub mod uso;
+pub mod versao;

@@ -140,6 +140,10 @@ async fn enviar(
 async fn executar(args: &[String]) -> Result<(), String> {
     let partes: Vec<&str> = args.iter().map(String::as_str).collect();
     match partes.as_slice() {
+        ["version"] => {
+            println!("{}", kiosk_engine::versao::atual().completa("kioskctl"));
+            Ok(())
+        }
         ["pair", ..] => {
             let servidor = exigir(args, "--server")?;
             let codigo = exigir(args, "--code")?;
