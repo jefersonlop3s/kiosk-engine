@@ -23,6 +23,17 @@ O `kioskd` aplica as regras num **Mac** usado pela criança, com o mesmo modelo 
 - **Decisão do dono na retomada**: conta de desenvolvedor Apple (Developer ID e notarização) tem custo anual. Sem ela, o Gatekeeper bloqueia o pacote.
 - Concorre com o Tempo de Uso nativo da Apple; a ADR registra o que o kiosk oferece além dele (regras pela mesma API dos PCs Windows, log forense local).
 
+## Autoridade local: elevação e responsáveis (dono, 2026-10-29)
+
+Requisito para a retomada, equivalente à regra do Windows (só administrador gera código; ver [E-008](E-008-cliente-grafico-dos-pais.md)):
+
+- **Código de pareamento** só com elevação de privilégio (`sudo kioskd codigo-pareamento`); um usuário comum é recusado, com evento no log forense.
+- **Responsáveis**: também com `sudo`, define-se quais usuários do sistema são **responsáveis** por quais contas monitoradas, as das crianças e adolescentes. É um conceito que o modelo de dados não tem hoje: o perfil liga uma conta a regras, mas não registra quem responde por ela. A ADR de retomada decide:
+  - onde a relação responsável ↔ perfil fica gravada, com evento no log forense a cada mudança;
+  - o que ela libera, por exemplo quem pode gerar código para qual perfil e quem recebe os alertas;
+  - se o mesmo conceito passa a valer no Windows, para os administradores.
+- **Controles negativos**: a conta monitorada não gera código, não se torna responsável de ninguém e não altera a lista de responsáveis.
+
 ## Condição de retomada
 
 As mesmas do [E-009](E-009-servico-linux.md): `kioskd` no Windows maduro (E-004 e E-007 concluídos, sem GAP de enforcement aberto, uso real sem regressão) **e** cliente gráfico maduro ([E-008](E-008-cliente-grafico-dos-pais.md) F4).

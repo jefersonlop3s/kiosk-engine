@@ -492,5 +492,8 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Resultado**:
   - [E-008](epics/E-008-cliente-grafico-dos-pais.md) proposto: app gráfico dos pais para Windows, Linux e macOS na Tailscale, sobre o mesmo cliente do `kioskctl`. Registra a lacuna da API (não há listagem remota de perfis, apps e regras), que vira a F1;
   - [E-009](epics/E-009-servico-linux.md), [E-010](epics/E-010-servico-macos.md) e [E-011](epics/E-011-servico-android.md) congelados, com condição de retomada objetiva: `kioskd` no Windows maduro e cliente gráfico maduro. Cada um exige uma ADR que revise a [ADR-002](adr/ADR-002-identidade-por-conta-windows.md) (GAP Estrutural) e terá CI/CD próprio.
+- **Requisitos do dono, mesma data**:
+  - o cliente só pareia a partir de uma conta de administrador no Windows que roda o serviço. Registrado no E-008, com a lacuna atual (a barreira hoje vem só da ACL da pasta, depois do `instalar`) e a correção na F1;
+  - no Linux e no macOS, `sudo` para gerar o código e para definir os **responsáveis** por cada conta monitorada (conceito novo). Registrado no E-009 e no E-010.
 - **Evidência**: `verificar_refs.py` e `verificar_adr.py` sem erros. Sem código.
 

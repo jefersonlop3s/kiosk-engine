@@ -22,6 +22,17 @@ O `kioskd` aplica as regras num computador **Linux** usado pela criança, com o 
   - dados em `/var/lib/kiosk` só para root;
   - distribuições suportadas e formato de pacote.
 
+## Autoridade local: elevação e responsáveis (dono, 2026-10-29)
+
+Requisito para a retomada, equivalente à regra do Windows (só administrador gera código; ver [E-008](E-008-cliente-grafico-dos-pais.md)):
+
+- **Código de pareamento** só com elevação de privilégio (`sudo kioskd codigo-pareamento`); um usuário comum é recusado, com evento no log forense.
+- **Responsáveis**: também com `sudo`, define-se quais usuários do sistema são **responsáveis** por quais contas monitoradas, as das crianças e adolescentes. É um conceito que o modelo de dados não tem hoje: o perfil liga uma conta a regras, mas não registra quem responde por ela. A ADR de retomada decide:
+  - onde a relação responsável ↔ perfil fica gravada, com evento no log forense a cada mudança;
+  - o que ela libera, por exemplo quem pode gerar código para qual perfil e quem recebe os alertas;
+  - se o mesmo conceito passa a valer no Windows, para os administradores.
+- **Controles negativos**: a conta monitorada não gera código, não se torna responsável de ninguém e não altera a lista de responsáveis.
+
 ## Condição de retomada
 
 Só começa quando **as duas condições** valerem:

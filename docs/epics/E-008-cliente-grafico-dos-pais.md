@@ -18,6 +18,14 @@ Estado: proposto em 2026-10-29 (pedido do dono). Responsável: a definir. Reposi
 - **Exclui**: o app mobile ([E-006](E-006-app-mobile-administracao.md)); administrar sem Tailscale ou pela LAN sem HTTPS (GC-15 no [PENDING](../PENDING.md)); qualquer enforcement no computador dos pais.
 - **Pressupostos**: o `kioskd` no PC Windows segue sendo a única fonte de verdade; o app não abre o banco, só fala com a API de comando ([E-005](E-005-api-comando-e-pareamento.md)), com a mesma assinatura e as mesmas recusas do `kioskctl`.
 
+## Regra de autoridade do pareamento (dono, 2026-10-29)
+
+O cliente só sincroniza com um PC se o pareamento partir de uma **conta de administrador no Windows que roda o serviço** `kioskd`. O código de pareamento é a única porta de entrada de um dispositivo novo ([ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md)). Por isso:
+
+- `kioskd codigo-pareamento` só pode ser executado por administrador elevado (PowerShell como Administrador) no próprio PC do serviço.
+- Uma conta padrão, como a da criança, não gera código e, portanto, não pareia nenhum cliente, nem o próprio.
+- **Estado atual**: hoje isso vale só de forma indireta. Depois do `kioskd instalar`, a pasta do banco fica só para SYSTEM e Administradores, então a conta padrão nem abre o banco. Sem o serviço instalado, ou com `KIOSK_DB` apontando para outro lugar, não há essa barreira. A F1 torna a regra explícita: o comando confere a elevação de quem chama e recusa com evento no log forense.
+
 ## Origem e decisões
 
 - Origem: pedido do dono em 2026-10-29, logo depois da publicação da 0.0.4.
@@ -29,7 +37,7 @@ Estado: proposto em 2026-10-29 (pedido do dono). Responsável: a definir. Reposi
 
 | Fase | Entrega | Depende de | Evidência |
 |---|---|---|---|
-| F1 | API: listar perfis, apps e regras remotamente; `kioskctl perfil|app|regra listar` usando essas ações | [E-005](E-005-api-comando-e-pareamento.md) | Testes de API com assinatura, recusa sem assinatura e sem vazar detalhe; fluxogramas |
+| F1 | API: listar perfis, apps e regras remotamente; `kioskctl perfil|app|regra listar` usando essas ações. `kioskd codigo-pareamento` exige administrador elevado (regra de autoridade acima) | [E-005](E-005-api-comando-e-pareamento.md) | Testes de API com assinatura, recusa sem assinatura e sem vazar detalhe; conta padrão real recusada ao gerar código, no CI Windows; fluxogramas |
 | F2 | App mínimo nas três plataformas: parear, listar, criar/ativar/revogar/limitar regra, uso e log | F1, ADR do toolkit aceita | Teste de ponta a ponta contra um `kioskd servir` real no CI de cada plataforma |
 | F3 | CI/CD: pacotes por plataforma (`.msi`/`.zip`, AppImage ou `.deb`, `.dmg`) publicados no release, com SHA-256 | F2 | Release com os três pacotes; instalação limpa em cada SO |
 | F4 | Uso fluido: atualização automática da tela, PC fora de alcance, alertas de antiadulteração em destaque | F2 | Uso real pelo dono no próprio computador administrando o PC da criança |
@@ -39,7 +47,7 @@ O CI atual roda Ubuntu e Windows; a F2 acrescenta o runner macOS.
 ## Aceites
 
 - Os pais administram o PC Windows de um computador Windows, Linux e macOS sem abrir o terminal.
-- **Controles negativos**: sem pareamento, o app não comanda nada; dispositivo revogado perde o acesso na hora; PC fora de alcance aparece como erro, nunca como sucesso; o app nunca mostra o detalhe que a API omite (AUTH_FAIL, AUTHZ_FAIL, VALIDATION_FAIL, INTERNAL_ERROR).
+- **Controles negativos**: conta padrão do Windows não gera código de pareamento; sem pareamento, o app não comanda nada; dispositivo revogado perde o acesso na hora; PC fora de alcance aparece como erro, nunca como sucesso; o app nunca mostra o detalhe que a API omite (AUTH_FAIL, AUTHZ_FAIL, VALIDATION_FAIL, INTERNAL_ERROR).
 - Textos em pt-BR.
 
 ## Encerramento
