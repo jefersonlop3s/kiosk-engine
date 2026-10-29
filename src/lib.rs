@@ -6,6 +6,8 @@ pub mod cliente;
 pub mod comandos;
 pub mod database_schema;
 pub mod db_manager;
+pub mod detalhes;
+pub mod i18n;
 pub mod ipc;
 pub mod motor;
 pub mod pareamento;

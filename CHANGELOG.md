@@ -4,7 +4,14 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Adicionado
+- Mensagens em **en-US, pt-BR e es-ES**, no idioma de quem as lê (ADR-010): `kioskd` e `kioskctl` por `KIOSK_LANG` ou pelo idioma do Windows; serviço no idioma de quem o instalou; avisos à criança no idioma da conta dela. Cada mensagem exige os três idiomas, ou o build falha.
+- `kioskctl log` mostra o detalhe dos eventos traduzido; o log forense passa a guardar um código (JSON) para o enforcement. Linhas antigas aparecem como foram gravadas.
+- Dias da semana aceitos também em espanhol (`lun,mar,mie,jue,vie,sab,dom`); `uninstall --purge-data` pede `DELETE`, `APAGAR` ou `BORRAR`, conforme o idioma.
+
 ### Alterado
+- Códigos de motivo no log e no protocolo da UI em inglês (`APP_DAILY_LIMIT`, `TOTAL_DAILY_LIMIT`, `APP_BLOCKED`, `APP_OUTSIDE_WINDOW`, `OUTSIDE_WINDOW`).
+- Detalhes das falhas da API (autenticação e validação), gravados só no banco local, em inglês.
 - Comandos e opções do `kioskd` e do `kioskctl` em inglês, que é a convenção (`kioskd status`, `kioskd install --listen`, `kioskd pairing-code`, `kioskctl pair --server` etc.). **Os nomes em português continuam valendo, sem prazo**, e podem ser misturados. Lista em `docs/runbooks/comandos-em-portugues.md`, que também vai no pacote do release (ADR-010).
 - Dias da semana aceitam `mon,tue,...`, além de `seg,ter,...` e de `0` a `6`.
 - `kioskd install` registra o serviço como `kioskd.exe service`. O registro da 0.0.4 (`servico`) segue funcionando; reinstalar atualiza.

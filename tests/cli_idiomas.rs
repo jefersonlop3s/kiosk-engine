@@ -188,3 +188,81 @@ fn o_uso_impresso_esta_em_ingles_e_aponta_os_equivalentes() {
         }
     }
 }
+
+/// `kioskd profile limit <não-uuid>` falha na hora, antes de abrir o banco, com uma mensagem que
+/// depende do idioma; serve para observar a escolha do idioma em qualquer sistema.
+fn mensagem_do_erro(ambiente: &[(&str, &str)]) -> String {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_kioskd"));
+    c.args(["profile", "limit", "nao-e-uuid", "--seconds", "1"])
+        .env_remove("KIOSK_DB")
+        .env_remove("KIOSK_LANG")
+        .env_remove("LC_ALL")
+        .env_remove("LC_MESSAGES")
+        .env_remove("LANG");
+    for (k, v) in ambiente {
+        c.env(k, v);
+    }
+    let o = c.output().unwrap();
+    assert!(!o.status.success());
+    String::from_utf8_lossy(&o.stderr).into_owned()
+}
+
+#[test]
+fn kiosk_lang_escolhe_o_idioma_da_mensagem() {
+    for (tag, esperado) in [
+        ("en-US", "invalid identifier"),
+        ("pt-BR", "identificador inválido"),
+        ("es-ES", "identificador no válido"),
+        ("pt_BR.UTF-8", "identificador inválido"),
+        ("es-MX", "identificador no válido"),
+        ("en-GB", "invalid identifier"),
+    ] {
+        let erro = mensagem_do_erro(&[("KIOSK_LANG", tag)]);
+        assert!(erro.contains(esperado), "{tag}: {erro}");
+    }
+}
+
+#[cfg(not(windows))]
+#[test]
+fn sem_kiosk_lang_vale_o_idioma_do_sistema_e_na_falta_dele_en_us() {
+    // (no Windows o idioma do sistema vem da API do Windows, não destas variáveis)
+    let erro = mensagem_do_erro(&[("LANG", "es_ES.UTF-8")]);
+    assert!(erro.contains("identificador no válido"), "{erro}");
+    let erro = mensagem_do_erro(&[("LC_ALL", "pt_BR.UTF-8"), ("LANG", "es_ES.UTF-8")]);
+    assert!(
+        erro.contains("identificador inválido"),
+        "LC_ALL vale mais: {erro}"
+    );
+    // idioma desconhecido (francês) em KIOSK_LANG é ignorado e a busca segue, sem erro
+    let erro = mensagem_do_erro(&[("KIOSK_LANG", "fr-FR"), ("LANG", "pt_BR.UTF-8")]);
+    assert!(erro.contains("identificador inválido"), "{erro}");
+    // nada reconhecível: en-US
+    let erro = mensagem_do_erro(&[("KIOSK_LANG", "fr-FR"), ("LANG", "C")]);
+    assert!(erro.contains("invalid identifier"), "{erro}");
+    let erro = mensagem_do_erro(&[]);
+    assert!(erro.contains("invalid identifier"), "{erro}");
+}
+
+#[test]
+fn o_idioma_nunca_muda_o_nome_dos_comandos_nem_os_codigos() {
+    // os dois idiomas de comando funcionam em qualquer idioma de exibição e dão a mesma resposta
+    for lang in ["en-US", "pt-BR", "es-ES"] {
+        let mut erros = Vec::new();
+        for args in [["profile", "limit"], ["perfil", "limite"]] {
+            let o = Command::new(env!("CARGO_BIN_EXE_kioskd"))
+                .args([args[0], args[1], "x", "--seconds", "1"])
+                .env("KIOSK_LANG", lang)
+                .env_remove("KIOSK_DB")
+                .output()
+                .unwrap();
+            let t = String::from_utf8_lossy(&o.stderr).into_owned();
+            assert!(t.contains("\"x\""), "{lang} {args:?}: {t}");
+            assert!(
+                !t.contains("uso:") && !t.contains("usage:"),
+                "{lang} {args:?}: {t}"
+            );
+            erros.push(t);
+        }
+        assert_eq!(erros[0], erros[1], "{lang}: inglês e português dão o mesmo");
+    }
+}

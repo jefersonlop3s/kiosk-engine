@@ -46,12 +46,11 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 use windows_sys::core::PWSTR;
 
+use crate::i18n::{Msg, idioma};
 use crate::sistema_windows::{para_utf16, pwstr, ultimo_erro};
 
 /// Nome do serviço no SCM (`sc query kiosk`).
 pub const NOME_SERVICO: &str = "kiosk";
-const NOME_EXIBICAO: &str = "Kiosk (controle parental)";
-const DESCRICAO: &str = "Aplica os limites de uso definidos pelos pais e atende a API de comando (loopback e Tailscale).";
 
 /// Pasta de dados: dono e acesso total só para SYSTEM (SY) e Administradores (BA), herdado
 /// pelo que for criado dentro; `P` corta a herança de `%ProgramData%`, que dá leitura a Usuários.
@@ -122,9 +121,7 @@ fn abrir_scm(acesso: u32) -> Result<Sc, String> {
     if h.is_null() {
         let e = std::io::Error::last_os_error();
         if e.kind() == std::io::ErrorKind::PermissionDenied {
-            return Err(
-                "acesso negado ao gerenciador de serviços: rode num PowerShell aberto com \"Executar como administrador\"".into(),
-            );
+            return Err(Msg::SemAcessoAoScm.to_string());
         }
         return Err(format!("OpenSCManagerW: {e}"));
     }
@@ -174,13 +171,13 @@ fn esperar_estado(svc: &Sc, alvo: u32) -> Result<SERVICE_STATUS_PROCESS, String>
             return Ok(st);
         }
         if Instant::now() > fim {
-            return Err(format!(
-                "o serviço não chegou a \"{}\" em {}s (está \"{}\"); veja {}",
-                nome_estado(alvo),
-                ESPERA_ESTADO.as_secs(),
-                nome_estado(st.dwCurrentState),
-                arquivo_log().display()
-            ));
+            return Err(Msg::EstadoNaoChegou {
+                alvo: nome_estado(alvo),
+                segundos: ESPERA_ESTADO.as_secs(),
+                atual: nome_estado(st.dwCurrentState),
+                log: arquivo_log().display().to_string(),
+            }
+            .to_string());
         }
         std::thread::sleep(Duration::from_millis(250));
     }
@@ -205,14 +202,15 @@ fn parar(svc: &Sc) -> Result<(), String> {
     esperar_estado(svc, SERVICE_STOPPED).map(|_| ())
 }
 
-pub fn nome_estado(estado: u32) -> &'static str {
+pub fn nome_estado(estado: u32) -> String {
     match estado {
-        SERVICE_STOPPED => "parado",
-        SERVICE_START_PENDING => "iniciando",
-        SERVICE_STOP_PENDING => "parando",
-        SERVICE_RUNNING => "em execução",
-        _ => "outro",
+        SERVICE_STOPPED => Msg::EstParado,
+        SERVICE_START_PENDING => Msg::EstIniciando,
+        SERVICE_STOP_PENDING => Msg::EstParando,
+        SERVICE_RUNNING => Msg::EstExecucao,
+        _ => Msg::EstOutro,
     }
+    .to_string()
 }
 
 /// Descritor de segurança a partir de SDDL, liberado ao sair do escopo.
@@ -232,7 +230,7 @@ impl Descritor {
             )
         };
         if ok == 0 {
-            return Err(ultimo_erro(&format!("SDDL inválida {sddl:?}")));
+            return Err(ultimo_erro(&format!("invalid SDDL {sddl:?}")));
         }
         Ok(Self(sd))
     }
@@ -286,11 +284,11 @@ fn aplicar_sddl(
         )
     };
     if erro != NO_ERROR {
-        return Err(format!(
-            "não foi possível proteger {}: {}",
-            caminho.display(),
-            std::io::Error::from_raw_os_error(erro as i32)
-        ));
+        return Err(Msg::NaoProtegeu {
+            pasta: caminho.display().to_string(),
+            erro: std::io::Error::from_raw_os_error(erro as i32).to_string(),
+        }
+        .to_string());
     }
     Ok(())
 }
@@ -299,8 +297,13 @@ fn aplicar_sddl(
 /// dentro (a pasta pode ter sido criada antes por qualquer conta, já que `%ProgramData%` deixa).
 pub fn proteger_pasta_dados() -> Result<PathBuf, String> {
     let pasta = pasta_dados();
-    std::fs::create_dir_all(&pasta)
-        .map_err(|e| format!("não foi possível criar {}: {e}", pasta.display()))?;
+    std::fs::create_dir_all(&pasta).map_err(|e| {
+        Msg::NaoCriouPasta {
+            pasta: pasta.display().to_string(),
+            erro: e.to_string(),
+        }
+        .to_string()
+    })?;
     aplicar_sddl(&pasta, SDDL_DADOS, PROTECTED_DACL_SECURITY_INFORMATION)?;
     let mut pendentes = vec![pasta.clone()];
     while let Some(dir) = pendentes.pop() {
@@ -330,31 +333,37 @@ fn mesmo_arquivo(a: &Path, b: &Path) -> bool {
 
 /// Copia os executáveis da pasta do `kioskd.exe` em uso para `%ProgramFiles%\kiosk`.
 fn copiar_executaveis() -> Result<PathBuf, String> {
-    let atual = std::env::current_exe().map_err(|e| format!("caminho do kioskd: {e}"))?;
+    let atual = std::env::current_exe().map_err(|e| format!("kioskd path: {e}"))?;
     let origem = atual
         .parent()
-        .ok_or("o kioskd não está numa pasta")?
+        .ok_or_else(|| Msg::KioskdSemPasta.to_string())?
         .to_path_buf();
     let destino = pasta_programa();
-    std::fs::create_dir_all(&destino)
-        .map_err(|e| format!("não foi possível criar {}: {e}", destino.display()))?;
+    std::fs::create_dir_all(&destino).map_err(|e| {
+        Msg::NaoCriouPasta {
+            pasta: destino.display().to_string(),
+            erro: e.to_string(),
+        }
+        .to_string()
+    })?;
     for exe in EXECUTAVEIS {
         let (de, para) = (origem.join(exe), destino.join(exe));
         if !de.exists() {
-            return Err(format!(
-                "falta {} ao lado do kioskd: extraia o .zip inteiro e rode de novo",
-                de.display()
-            ));
+            return Err(Msg::FaltaExecutavel {
+                arquivo: de.display().to_string(),
+            }
+            .to_string());
         }
         if mesmo_arquivo(&de, &para) {
             continue;
         }
         com_tentativas(|| std::fs::copy(&de, &para)).map_err(|e| {
-            format!(
-                "não foi possível copiar {} para {}: {e}",
-                de.display(),
-                para.display()
-            )
+            Msg::NaoCopiou {
+                de: de.display().to_string(),
+                para: para.display().to_string(),
+                erro: e.to_string(),
+            }
+            .to_string()
         })?;
     }
     Ok(destino)
@@ -386,7 +395,7 @@ fn gravar_ambiente(variaveis: &[(&str, &str)]) -> Result<(), String> {
     };
     if erro != NO_ERROR {
         return Err(format!(
-            "registro do serviço: {}",
+            "service registry: {}",
             std::io::Error::from_raw_os_error(erro as i32)
         ));
     }
@@ -406,7 +415,7 @@ fn gravar_ambiente(variaveis: &[(&str, &str)]) -> Result<(), String> {
     unsafe { RegCloseKey(chave) };
     if erro != NO_ERROR {
         return Err(format!(
-            "ambiente do serviço: {}",
+            "service environment: {}",
             std::io::Error::from_raw_os_error(erro as i32)
         ));
     }
@@ -465,7 +474,7 @@ fn ler_path_maquina() -> Result<(String, u32), String> {
     };
     if erro != NO_ERROR {
         return Err(format!(
-            "PATH do sistema: {}",
+            "system PATH: {}",
             std::io::Error::from_raw_os_error(erro as i32)
         ));
     }
@@ -484,7 +493,7 @@ fn ler_path_maquina() -> Result<(String, u32), String> {
     };
     if erro != NO_ERROR {
         return Err(format!(
-            "PATH do sistema: {}",
+            "system PATH: {}",
             std::io::Error::from_raw_os_error(erro as i32)
         ));
     }
@@ -507,7 +516,7 @@ fn gravar_path_maquina(texto: &str, tipo: u32) -> Result<(), String> {
     };
     if erro != NO_ERROR {
         return Err(format!(
-            "PATH do sistema: {}",
+            "system PATH: {}",
             std::io::Error::from_raw_os_error(erro as i32)
         ));
     }
@@ -527,7 +536,7 @@ fn gravar_path_maquina(texto: &str, tipo: u32) -> Result<(), String> {
     unsafe { RegCloseKey(chave) };
     if erro != NO_ERROR {
         return Err(format!(
-            "PATH do sistema: {}",
+            "system PATH: {}",
             std::io::Error::from_raw_os_error(erro as i32)
         ));
     }
@@ -595,7 +604,7 @@ fn remover_do_path(pasta: &Path) -> Result<bool, String> {
 }
 
 fn configurar_extras(svc: &Sc) -> Result<(), String> {
-    let mut texto = para_utf16(DESCRICAO);
+    let mut texto = para_utf16(&Msg::ServicoDescricao.to_string());
     let descricao = SERVICE_DESCRIPTIONW {
         lpDescription: texto.as_mut_ptr(),
     };
@@ -618,29 +627,29 @@ fn configurar_extras(svc: &Sc) -> Result<(), String> {
         (
             SERVICE_CONFIG_DESCRIPTION,
             (&descricao as *const SERVICE_DESCRIPTIONW).cast(),
-            "descrição",
+            "service description",
         ),
         (
             SERVICE_CONFIG_FAILURE_ACTIONS,
             (&falhas as *const SERVICE_FAILURE_ACTIONSW).cast(),
-            "reinício em falha",
+            "restart on failure",
         ),
         (
             SERVICE_CONFIG_FAILURE_ACTIONS_FLAG,
             (&bandeira as *const SERVICE_FAILURE_ACTIONS_FLAG).cast(),
-            "reinício em saída com erro",
+            "restart on non-crash exit",
         ),
     ];
     for (nivel, info, o_que) in passos {
         // SAFETY: `info` aponta para a estrutura do nível pedido, viva até aqui.
         if unsafe { ChangeServiceConfig2W(svc.0, nivel, info) } == 0 {
-            return Err(ultimo_erro(&format!("configurar {o_que}")));
+            return Err(ultimo_erro(&format!("configure {o_que}")));
         }
     }
     let sd = Descritor::de_sddl(SDDL_SERVICO)?;
     // SAFETY: descritor válido com DACL.
     if unsafe { SetServiceObjectSecurity(svc.0, DACL_SECURITY_INFORMATION, sd.0) } == 0 {
-        return Err(ultimo_erro("permissões do serviço"));
+        return Err(ultimo_erro("service permissions"));
     }
     Ok(())
 }
@@ -651,21 +660,30 @@ pub fn instalar(escutar: &str) -> Result<u32, String> {
     let scm = abrir_scm(SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE)?;
     let dados = proteger_pasta_dados()?;
     eprintln!(
-        "kioskd: {} protegida (só SYSTEM e Administradores)",
-        dados.display()
+        "kioskd: {}",
+        Msg::PastaProtegida {
+            pasta: dados.display().to_string()
+        }
     );
 
     let existente = abrir_servico(&scm, SERVICE_ALL_ACCESS)?;
     if let Some(svc) = &existente {
-        eprintln!("kioskd: serviço já instalado; parando para atualizar");
+        eprintln!("kioskd: {}", Msg::ServicoJaInstalado);
         parar(svc)?;
     }
     let destino = copiar_executaveis()?;
-    eprintln!("kioskd: executáveis em {}", destino.display());
+    eprintln!(
+        "kioskd: {}",
+        Msg::ExecutaveisEm {
+            pasta: destino.display().to_string()
+        }
+    );
     if incluir_no_path(&destino)? {
         eprintln!(
-            "kioskd: {} incluída no PATH do sistema: em janelas novas do PowerShell basta digitar `kioskd`",
-            destino.display()
+            "kioskd: {}",
+            Msg::NoPath {
+                pasta: destino.display().to_string()
+            }
         );
     }
 
@@ -673,7 +691,7 @@ pub fn instalar(escutar: &str) -> Result<u32, String> {
         "\"{}\" service",
         destino.join("kioskd.exe").display()
     ));
-    let exibicao = para_utf16(NOME_EXIBICAO);
+    let exibicao = para_utf16(&Msg::ServicoNomeExibicao.to_string());
     let svc = match existente {
         Some(svc) => {
             // SAFETY: textos terminados em zero; nulos = sem mudança (conta continua LocalSystem).
@@ -724,10 +742,9 @@ pub fn instalar(escutar: &str) -> Result<u32, String> {
         }
     };
     configurar_extras(&svc)?;
-    gravar_ambiente(&[("KIOSK_LISTEN", escutar)])?;
-    eprintln!(
-        "kioskd: serviço {NOME_SERVICO} registrado (LocalSystem, início automático, reinício em falha)"
-    );
+    // o serviço (SYSTEM) escreve o log no idioma de quem o instalou
+    gravar_ambiente(&[("KIOSK_LISTEN", escutar), ("KIOSK_LANG", idioma().tag())])?;
+    eprintln!("kioskd: {}", Msg::ServicoRegistrado);
 
     // SAFETY: sem argumentos.
     if unsafe { StartServiceW(svc.0, 0, null()) } == 0 {
@@ -738,11 +755,11 @@ pub fn instalar(escutar: &str) -> Result<u32, String> {
     std::thread::sleep(Duration::from_secs(2));
     let st = status(&svc)?;
     if st.dwCurrentState != SERVICE_RUNNING {
-        return Err(format!(
-            "o serviço iniciou e parou (código {}); veja {}",
-            st.dwServiceSpecificExitCode,
-            arquivo_log().display()
-        ));
+        return Err(Msg::ServicoParouLogo {
+            codigo: st.dwServiceSpecificExitCode,
+            log: arquivo_log().display().to_string(),
+        }
+        .to_string());
     }
     Ok(st.dwProcessId)
 }
@@ -757,14 +774,19 @@ fn remover_ou_agendar(caminho: &Path, atual: &Path) -> Result<bool, String> {
         // SAFETY: nome terminado em zero; destino nulo = apagar no reinício.
         if unsafe { MoveFileExW(nome.as_ptr(), null(), MOVEFILE_DELAY_UNTIL_REBOOT) } == 0 {
             return Err(ultimo_erro(&format!(
-                "agendar remoção de {}",
+                "schedule removal of {}",
                 caminho.display()
             )));
         }
         return Ok(true);
     }
-    com_tentativas(|| std::fs::remove_file(caminho))
-        .map_err(|e| format!("não foi possível remover {}: {e}", caminho.display()))?;
+    com_tentativas(|| std::fs::remove_file(caminho)).map_err(|e| {
+        Msg::NaoRemoveu {
+            caminho: caminho.display().to_string(),
+            erro: e.to_string(),
+        }
+        .to_string()
+    })?;
     Ok(false)
 }
 
@@ -779,15 +801,20 @@ pub fn desinstalar(apagar_dados: bool) -> Result<(), String> {
             if unsafe { DeleteService(svc.0) } == 0 {
                 return Err(ultimo_erro("DeleteService"));
             }
-            eprintln!("kioskd: serviço {NOME_SERVICO} parado e removido");
+            eprintln!("kioskd: {}", Msg::ServicoRemovido);
         }
-        None => eprintln!("kioskd: serviço {NOME_SERVICO} não estava instalado"),
+        None => eprintln!("kioskd: {}", Msg::ServicoNaoEstavaInstalado),
     }
 
-    let atual = std::env::current_exe().map_err(|e| format!("caminho do kioskd: {e}"))?;
+    let atual = std::env::current_exe().map_err(|e| format!("kioskd path: {e}"))?;
     let destino = pasta_programa();
     if remover_do_path(&destino)? {
-        eprintln!("kioskd: {} retirada do PATH do sistema", destino.display());
+        eprintln!(
+            "kioskd: {}",
+            Msg::ForaDoPath {
+                pasta: destino.display().to_string()
+            }
+        );
     }
     let mut agendado = false;
     for exe in EXECUTAVEIS {
@@ -799,31 +826,51 @@ pub fn desinstalar(apagar_dados: bool) -> Result<(), String> {
             // SAFETY: idem; a pasta é removida depois do arquivo agendado antes.
             unsafe { MoveFileExW(nome.as_ptr(), null(), MOVEFILE_DELAY_UNTIL_REBOOT) };
             eprintln!(
-                "kioskd: {} será apagada no próximo reinício (o kioskd em uso está lá)",
-                destino.display()
+                "kioskd: {}",
+                Msg::ApagadaNoReinicio {
+                    pasta: destino.display().to_string()
+                }
             );
         } else {
             std::fs::remove_dir(&destino).map_err(|e| {
-                format!(
-                    "{} não ficou vazia: {e}; apague à mão o que sobrou",
-                    destino.display()
-                )
+                Msg::PastaNaoVazia {
+                    pasta: destino.display().to_string(),
+                    erro: e.to_string(),
+                }
+                .to_string()
             })?;
-            eprintln!("kioskd: executáveis removidos de {}", destino.display());
+            eprintln!(
+                "kioskd: {}",
+                Msg::ExecutaveisRemovidos {
+                    pasta: destino.display().to_string()
+                }
+            );
         }
     }
 
     let dados = pasta_dados();
     if apagar_dados {
         if dados.exists() {
-            std::fs::remove_dir_all(&dados)
-                .map_err(|e| format!("não foi possível apagar {}: {e}", dados.display()))?;
+            std::fs::remove_dir_all(&dados).map_err(|e| {
+                Msg::NaoRemoveu {
+                    caminho: dados.display().to_string(),
+                    erro: e.to_string(),
+                }
+                .to_string()
+            })?;
         }
-        eprintln!("kioskd: dados apagados ({})", dados.display());
+        eprintln!(
+            "kioskd: {}",
+            Msg::DadosApagados {
+                pasta: dados.display().to_string()
+            }
+        );
     } else if dados.exists() {
         eprintln!(
-            "kioskd: dados mantidos em {} (use --purge-data para apagar)",
-            dados.display()
+            "kioskd: {}",
+            Msg::DadosMantidos {
+                pasta: dados.display().to_string()
+            }
         );
     }
     Ok(())
@@ -969,9 +1016,11 @@ unsafe extern "system" fn servico_main(_argc: u32, _argv: *mut PWSTR) {
         return;
     }
     eprintln!(
-        "kioskd: serviço iniciado (versão {}, pid {})",
-        env!("CARGO_PKG_VERSION"),
-        std::process::id()
+        "kioskd: {}",
+        Msg::ServicoIniciado {
+            versao: env!("CARGO_PKG_VERSION").to_owned(),
+            pid: std::process::id()
+        }
     );
     informar(SERVICE_RUNNING, 0, 0);
     let Some(servir) = SERVIR.get() else {
@@ -980,15 +1029,15 @@ unsafe extern "system" fn servico_main(_argc: u32, _argv: *mut PWSTR) {
     };
     let codigo = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| servir(parar))) {
         Ok(Ok(())) => {
-            eprintln!("kioskd: serviço parado a pedido do Windows");
+            eprintln!("kioskd: {}", Msg::ServicoParadoPeloWindows);
             0
         }
         Ok(Err(e)) => {
-            eprintln!("kioskd: serviço parou com erro: {e}");
+            eprintln!("kioskd: {}", Msg::ServicoParouComErro { erro: e });
             1
         }
         Err(_) => {
-            eprintln!("kioskd: serviço parou por pânico");
+            eprintln!("kioskd: {}", Msg::ServicoParouPorPanico);
             2
         }
     };
@@ -1012,10 +1061,10 @@ pub fn despachar(servir: Servir) -> Result<(), String> {
     ];
     // SAFETY: tabela terminada pela entrada nula; bloqueia até o serviço parar.
     if unsafe { StartServiceCtrlDispatcherW(tabela.as_ptr()) } == 0 {
-        return Err(format!(
-            "{}: `kioskd service` é chamado pelo Windows; para instalar use `kioskd install`",
-            std::io::Error::last_os_error()
-        ));
+        return Err(Msg::ServicoForaDoScm {
+            erro: std::io::Error::last_os_error().to_string(),
+        }
+        .to_string());
     }
     Ok(())
 }

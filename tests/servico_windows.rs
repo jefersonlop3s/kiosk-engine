@@ -34,6 +34,7 @@ const PORTA: u16 = 18443;
 fn kioskd(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_kioskd"))
         .args(args)
+        .env("KIOSK_LANG", "pt-BR")
         .env_remove("KIOSK_DB")
         .env_remove("KIOSK_LISTEN")
         .stdin(Stdio::null())
@@ -292,6 +293,14 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
         "{estado}"
     );
     assert!(estado.contains(r"\kiosk\kioskd.exe"), "{estado}");
+    // o serviço (SYSTEM) herda o idioma de quem o instalou e o nome de exibição sai nele
+    assert!(estado.contains("ambiente: KIOSK_LANG=pt-BR"), "{estado}");
+    let qc = Command::new("sc").args(["qc", "kiosk"]).output().unwrap();
+    assert!(
+        texto(&qc).contains("Kiosk (controle parental)"),
+        "{}",
+        texto(&qc)
+    );
     // registrado com o nome em inglês; a 0.0.4 usava `servico`, que segue valendo como equivalente
     assert!(estado.contains(r#"kioskd.exe" service"#), "{estado}");
     // a pasta instalada entra no PATH do sistema uma vez, e as outras entradas ficam
@@ -416,6 +425,7 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     // --apagar-dados exige digitar APAGAR
     let mut filho = Command::new(env!("CARGO_BIN_EXE_kioskd"))
         .args(["desinstalar", "--apagar-dados"])
+        .env("KIOSK_LANG", "pt-BR")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -428,6 +438,7 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
 
     let mut filho = Command::new(env!("CARGO_BIN_EXE_kioskd"))
         .args(["uninstall", "--purge-data"])
+        .env("KIOSK_LANG", "pt-BR")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

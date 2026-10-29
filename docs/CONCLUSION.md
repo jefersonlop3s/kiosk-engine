@@ -567,3 +567,17 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - clippy no Linux e cruzado para Windows; diagramas validados no mermaid-cli.
 - **Evidência no CI Windows**: o teste do serviço instala em inglês e reinstala em português, e confere o registro como `kioskd.exe" service`.
 
+## 2026-10-29 — E-012 F2 e F3: mensagens em en-US, pt-BR e es-ES e log com códigos
+
+- **Origem**: [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md), aceita com ajustes do dono; pedido de seguir com as próximas fases.
+- **Resultado**:
+  - `i18n` (idiomas, escolha, catálogo por macro com os três idiomas obrigatórios) e `detalhes` (detalhe do log como código JSON, traduzido ao ler);
+  - `kioskd`, `kioskctl`, cliente e serviço com todas as mensagens ao usuário no catálogo; texto de uso, nome e descrição do serviço também;
+  - avisos à criança nos três idiomas, no idioma da conta dela (`sistema_windows::idioma_da_conta`, perfil carregado em `HKEY_USERS`);
+  - o `install` grava `KIOSK_LANG` no serviço;
+  - desvios e itens fora do escopo registrados na ADR-010 (seção "Implementação e desvios").
+- **Evidência local**: 146 testes no Linux, entre eles `tests/i18n.rs` (tags, catálogo, código do detalhe e tradução), `tests/cli_idiomas.rs` (escolha do idioma por `KIOSK_LANG` e pelo sistema, nomes de comando intactos), o log traduzido nos três idiomas em `tests/cli.rs` e o log do agente em código em `tests/agente.rs`; clippy no Linux e cruzado para Windows; 30 diagramas validados.
+- **Evidência no CI Windows**: leitura do idioma da conta pelo registro (`tests/windows.rs`), serviço instalado com `KIOSK_LANG` e nome de exibição no idioma de quem instala (`tests/servico_windows.rs`).
+- **Falta**: ver no PC real o aviso à criança no idioma da conta dela.
+- **Quebra**: o log gravado pela 0.0.4 tem texto em português; o `kioskctl log` o mostra como está.
+

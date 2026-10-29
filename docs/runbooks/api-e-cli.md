@@ -28,6 +28,17 @@ $env:KIOSK_LISTEN = "100.95.52.48:8443,127.0.0.1:8443"   # IP do `tailscale ip -
 - **Banco:** no Windows o padrão é `C:\ProgramData\kiosk\kiosk.db`, igual em qualquer janela e pasta; a pasta é criada se faltar. Todo comando do `kioskd` mostra na primeira linha qual banco está usando (`kioskd: banco ...`): confira que é sempre o mesmo. Só defina `$env:KIOSK_DB` se quiser outro lugar e, nesse caso, defina-o **em toda janela** (as variáveis `$env:` valem só para a janela em que foram definidas). O arquivo tem dados de crianças: o `kioskd install` (seção 4) deixa a pasta acessível só a SYSTEM e Administradores; a partir daí, os comandos do `kioskd` só funcionam num PowerShell **aberto como Administrador**.
 - `KIOSK_LISTEN`: `ip:porta[,ip:porta...]`, obrigatória para `servir`. Só são aceitos loopback (`127.0.0.1`, `::1`) e a rede Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`); `0.0.0.0` e endereços de LAN são recusados. O `127.0.0.1` permite parear um `kioskctl` no próprio PC.
 
+### Idioma
+
+As mensagens saem em **en-US, pt-BR ou es-ES**, no idioma de quem as lê ([ADR-010](../adr/ADR-010-idiomas-e-comandos-em-ingles.md)):
+
+- **No `kioskd` e no `kioskctl`**: `KIOSK_LANG` (por exemplo `$env:KIOSK_LANG = "es-ES"`) ou, sem ela, o idioma do Windows da conta que roda o comando. Idioma que o kiosk não traduz (francês, por exemplo) cai em en-US.
+- **No serviço**: o idioma de quem rodou o `kioskd install`, gravado no serviço como `KIOSK_LANG` (veja com `kioskd status`). Para trocar, rode o `install` de novo no idioma desejado.
+- **Nos avisos à criança**: o idioma da conta dela no Windows, lido do perfil dela enquanto está logada. Sem ele, o idioma do serviço.
+- **No log (`kioskctl log`)**: o log guarda um código, e quem lê vê o texto no idioma dele. Linhas gravadas por versões anteriores aparecem como foram gravadas.
+- **Não mudam com o idioma**: os nomes dos comandos e das opções (em inglês ou em português, [lista](comandos-em-portugues.md)) e os códigos da API e do log.
+- A palavra que confirma `kioskd uninstall --purge-data` é a do idioma da mensagem: `DELETE`, `APAGAR` ou `BORRAR`. A própria mensagem diz qual digitar.
+
 ## 3. Cadastrar a criança e os apps
 
 ### 3.1 Três identificadores diferentes

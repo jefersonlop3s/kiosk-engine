@@ -32,12 +32,22 @@ Estado: em andamento desde 2026-10-29 ([ADR-010](../adr/ADR-010-idiomas-e-comand
 
 ## Progresso
 
-- **F1** (2026-10-29), aguardando o CI Windows:
+- **F1** (2026-10-29), concluída, CI verde em Ubuntu e Windows:
   - `src/cli.rs` traz as tabelas de equivalentes, e os executáveis traduzem os argumentos para inglês antes de interpretar, então há um caminho só;
   - uso, fluxogramas, runbook e README em inglês;
   - página [comandos em português](../runbooks/comandos-em-portugues.md), conferida contra as tabelas por teste;
   - corpo do pareamento em inglês;
   - serviço registrado como `service`, com `servico` equivalente.
+
+- **F2** (2026-10-29), implementada:
+  - `src/i18n.rs`: `Idioma` (en-US, pt-BR, es-ES), escolha por `KIOSK_LANG`, idioma do sistema e en-US, e o catálogo de mensagens gerado por macro. Cada mensagem exige os três idiomas, ou o build falha;
+  - mensagens do `kioskd`, do `kioskctl`, do cliente, do serviço (instalação, remoção, estado, log do serviço, nome e descrição no Windows) e o texto de uso nos três idiomas;
+  - dias da semana aceitos em inglês, português e espanhol; palavra de confirmação por idioma (`DELETE`, `APAGAR`, `BORRAR`);
+  - o `install` grava `KIOSK_LANG` no serviço.
+- **F3** (2026-10-29), implementada; falta ver num Windows real:
+  - avisos à criança nos três idiomas (`textos`), no idioma da conta dela, lido do perfil carregado (`HKEY_USERS\<SID>`);
+  - o detalhe do log forense do enforcement vira código JSON (`detalhes`), traduzido na hora por `kioskctl log`. Linhas antigas aparecem como estão;
+  - desvios e o que ficou de fora estão na seção "Implementação e desvios" da [ADR-010](../adr/ADR-010-idiomas-e-comandos-em-ingles.md).
 
 ## Aceites
 

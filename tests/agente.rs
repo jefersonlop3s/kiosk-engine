@@ -140,6 +140,8 @@ impl Mundo {
 }
 
 fn agente(m: &Mundo) -> Agente<'_, Fake, Utc> {
+    // os diagnósticos do relatório saem no idioma do processo; estes testes leem em pt-BR
+    kiosk_engine::i18n::definir(kiosk_engine::i18n::Idioma::PtBr);
     Agente::new(&m.db, Fake::default(), Utc)
 }
 
@@ -719,4 +721,47 @@ async fn o_laco_roda_ate_ser_interrompido_e_pode_rodar_em_outra_tarefa() {
             .await
             .unwrap();
     assert_eq!(n, 1);
+}
+
+#[tokio::test]
+async fn o_log_forense_recebe_codigos_e_nao_texto_em_idioma_nenhum() {
+    use kiosk_engine::detalhes::Detalhe;
+    let m = mundo(None).await;
+    m.regra(&m.jogo, Some(1000)).await;
+    let mut a = agente(&m);
+    a.sistema_mut().processos = vec![proc(42, "JOGO.EXE", SID)];
+    for quando in [0, 300, 600, 900, 960, 1040] {
+        a.tick(seg(quando)).await;
+    }
+    let detalhes: Vec<(String, String)> =
+        sqlx::query_as("SELECT event_type, rejection_reason_detail FROM security_log WHERE event_type IN ('WARNING_SHOWN', 'APP_TERMINATED') ORDER BY rowid")
+            .fetch_all(m.db.pool())
+            .await
+            .unwrap();
+    let lidos: Vec<Detalhe> = detalhes
+        .iter()
+        .map(|(_, d)| Detalhe::de_texto(d).unwrap_or_else(|| panic!("não é código: {d}")))
+        .collect();
+    assert_eq!(
+        lidos,
+        [
+            Detalhe::WarningShown {
+                marker: 300,
+                remaining: 100,
+                reason: "APP_DAILY_LIMIT".into(),
+                app: Some("jogo.exe".into())
+            },
+            Detalhe::WarningShown {
+                marker: 60,
+                remaining: 40,
+                reason: "APP_DAILY_LIMIT".into(),
+                app: Some("jogo.exe".into())
+            },
+            Detalhe::AppTerminated {
+                process: "JOGO.EXE".into(),
+                pid: 42,
+                reason: "APP_DAILY_LIMIT".into()
+            },
+        ]
+    );
 }

@@ -31,30 +31,12 @@ use std::sync::Arc;
 use chrono::Utc;
 use kiosk_engine::api;
 use kiosk_engine::db_manager::{EventContext, KioskDbManager};
+use kiosk_engine::i18n::Msg;
 use uuid::Uuid;
 
-const USO: &str = "uso:
-  kioskd serve [--no-agent]
-  kioskd pairing-code   (Windows: PowerShell como administrador)
-  kioskd devices
-  kioskd revoke <id-do-dispositivo>
-  kioskd profile create --account USUARIO --name NOME [--total-limit SEGUNDOS]   (ou --sid S-1-... no lugar de --account)
-  kioskd profile list
-  kioskd profile limit <id-do-perfil> --seconds N | --no-limit
-  kioskd profile window <id-do-perfil> --days mon,tue,wed,thu,fri --window 08:00-20:00
-  kioskd app create --process NOME.exe [--exempt | --ignore]
-  kioskd app list
-  kioskd rule create --profile ID --app ID [--limit SEGUNDOS] [--window HH:MM-HH:MM] [--until RFC3339] [--activate]
-  kioskd rule activate <id-da-regra>
-  kioskd rule revoke <id-da-regra>
-  kioskd rule limit <id-da-regra> --seconds N
-  kioskd rule list [--profile ID]
-  kioskd install --listen ip:porta[,ip:porta...]   (Windows, PowerShell como administrador)
-  kioskd uninstall [--purge-data]
-  kioskd status
-  kioskd service   (chamado pelo Windows ao iniciar o serviço; não rode à mão)
-os mesmos comandos em português também valem (ex.: kioskd estado = kioskd status); lista em docs/runbooks/comandos-em-portugues.md
-variáveis: KIOSK_DB (padrão no Windows: sqlite://C:/ProgramData/kiosk/kiosk.db), KIOSK_LISTEN (ip:porta[,ip:porta...], obrigatória em `serve`)";
+fn uso() -> String {
+    Msg::UsoKioskd.to_string()
+}
 
 fn main() -> ExitCode {
     // português e inglês equivalem; daqui em diante, só inglês (ADR-010)
@@ -86,7 +68,7 @@ const BANCO_PADRAO: &str = "sqlite://kiosk.db";
 async fn abrir_banco() -> Result<KioskDbManager, String> {
     let url = std::env::var("KIOSK_DB").unwrap_or_else(|_| BANCO_PADRAO.into());
     // sem isto, uma janela sem KIOSK_DB criava outro banco em silêncio e os cadastros "sumiam"
-    eprintln!("kioskd: banco {url}");
+    eprintln!("kioskd: {}", Msg::BancoEmUso { url: url.clone() });
     // cria a pasta do arquivo, se faltar (o SQLite cria o arquivo, não a pasta)
     if let Some(caminho) = url.strip_prefix("sqlite://") {
         let arquivo = caminho.split('?').next().unwrap_or(caminho);
@@ -94,19 +76,26 @@ async fn abrir_banco() -> Result<KioskDbManager, String> {
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
         {
-            std::fs::create_dir_all(pasta)
-                .map_err(|e| format!("não foi possível criar a pasta {}: {e}", pasta.display()))?;
+            std::fs::create_dir_all(pasta).map_err(|e| {
+                Msg::PastaNaoCriada {
+                    pasta: pasta.display().to_string(),
+                    erro: e.to_string(),
+                }
+                .to_string()
+            })?;
         }
     }
-    KioskDbManager::new(&url)
-        .await
-        .map_err(|e| format!("não foi possível abrir o banco ({url}): {e}"))
+    KioskDbManager::new(&url).await.map_err(|e| {
+        Msg::BancoNaoAbriu {
+            url: url.clone(),
+            erro: e.to_string(),
+        }
+        .to_string()
+    })
 }
 
 fn enderecos() -> Result<Vec<SocketAddr>, String> {
-    let bruto = std::env::var("KIOSK_LISTEN").map_err(|_| {
-        "KIOSK_LISTEN não definida: informe os endereços de escuta (ADR-005)".to_string()
-    })?;
+    let bruto = std::env::var("KIOSK_LISTEN").map_err(|_| Msg::ListenNaoDefinida.to_string())?;
     lista_de_enderecos(&bruto)
 }
 
@@ -119,15 +108,21 @@ fn lista_de_enderecos(bruto: &str) -> Result<Vec<SocketAddr>, String> {
         .map(|s| {
             s.parse().map_err(|_| {
                 if s.parse::<std::net::IpAddr>().is_ok() {
-                    format!("falta a porta em {s:?}: use ip:porta, por exemplo {s}:8443")
+                    Msg::FaltaPorta {
+                        ender: s.to_owned(),
+                    }
+                    .to_string()
                 } else {
-                    format!("endereço de escuta inválido: {s:?} (use ip:porta)")
+                    Msg::EnderecoInvalido {
+                        ender: s.to_owned(),
+                    }
+                    .to_string()
                 }
             })
         })
         .collect::<Result<Vec<SocketAddr>, String>>()?;
     if lista.is_empty() {
-        return Err("nenhum endereço de escuta informado (use ip:porta)".into());
+        return Err(Msg::NenhumEndereco.to_string());
     }
     api::validar_enderecos(&lista).map_err(|e| e.to_string())?;
     Ok(lista)
@@ -142,7 +137,12 @@ async fn servir(com_agente: bool) -> Result<(), String> {
         iniciar_agente(db.clone());
     }
     let lista: Vec<String> = enderecos.iter().map(ToString::to_string).collect();
-    eprintln!("kioskd: escutando em {}", lista.join(", "));
+    eprintln!(
+        "kioskd: {}",
+        Msg::Escutando {
+            lista: lista.join(", ")
+        }
+    );
     api::servir_em(db, &enderecos)
         .await
         .map_err(|e| e.to_string())
@@ -166,11 +166,8 @@ fn servico() -> Result<(), String> {
 
 #[cfg(not(windows))]
 fn servico() -> Result<(), String> {
-    Err(SO_WINDOWS.into())
+    Err(Msg::SoNoWindows.to_string())
 }
-
-#[cfg(not(windows))]
-const SO_WINDOWS: &str = "este comando só existe no Windows (serviço do Windows, ADR-008)";
 
 /// Só administrador elevado gera código de pareamento no PC do serviço (regra do dono, E-008):
 /// sem isto, a barreira era só a ACL da pasta do banco, que não existe antes do `instalar` nem
@@ -180,18 +177,18 @@ async fn exigir_administrador() -> Result<(), String> {
     if kiosk_engine::sistema_windows::administrador_elevado()? {
         return Ok(());
     }
-    let motivo = "código de pareamento pedido sem administrador elevado";
+    let motivo = kiosk_engine::detalhes::Detalhe::PairingCodeNotAdmin.codigo();
     let registro = match abrir_banco().await {
         Ok(db) => db
-            .recusar_codigo_pareamento(&EventContext::local(), motivo)
+            .recusar_codigo_pareamento(&EventContext::local(), &motivo)
             .await
             .map_err(|e| e.to_string()),
         Err(e) => Err(e),
     };
-    let base = "só um administrador gera o código de pareamento: abra o PowerShell com \"Executar como administrador\"";
+    let base = Msg::SoAdministrador.to_string();
     Err(match registro {
-        Ok(()) => base.to_string(),
-        Err(e) => format!("{base} (a recusa não foi registrada no log forense: {e})"),
+        Ok(()) => base,
+        Err(erro) => Msg::RecusaSemRegistro { base, erro }.to_string(),
     })
 }
 
@@ -201,17 +198,24 @@ async fn exigir_administrador() -> Result<(), String> {
     Ok(())
 }
 
-/// Pede que digitem APAGAR antes de apagar os dados (ADR-008).
+/// Pede que digitem a palavra de confirmação (do idioma) antes de apagar os dados (ADR-008).
 fn confirmar_apagar_dados() -> Result<(), String> {
+    let palavra = kiosk_engine::i18n::idioma().palavra_de_confirmacao();
     eprint!(
-        "kioskd: isto apaga o banco (perfis, regras, uso e log forense). Digite APAGAR para confirmar: "
+        "kioskd: {}",
+        Msg::ConfirmarApagar {
+            palavra: palavra.to_owned()
+        }
     );
     let mut linha = String::new();
-    std::io::stdin()
-        .read_line(&mut linha)
-        .map_err(|e| format!("leitura da confirmação: {e}"))?;
-    if linha.trim() != "APAGAR" {
-        return Err("não confirmado: nada foi alterado".into());
+    std::io::stdin().read_line(&mut linha).map_err(|e| {
+        Msg::ErroLeitura {
+            erro: e.to_string(),
+        }
+        .to_string()
+    })?;
+    if linha.trim() != palavra {
+        return Err(Msg::NaoConfirmado.to_string());
     }
     Ok(())
 }
@@ -224,8 +228,13 @@ fn iniciar_manutencao(db: Arc<KioskDbManager>) {
             relogio.tick().await;
             match db.purge_expired_events(&EventContext::local()).await {
                 Ok(0) => {}
-                Ok(n) => eprintln!("kioskd: retenção: {n} eventos antigos removidos"),
-                Err(e) => eprintln!("kioskd: retenção falhou: {e}"),
+                Ok(n) => eprintln!("kioskd: {}", Msg::Retencao { n }),
+                Err(e) => eprintln!(
+                    "kioskd: {}",
+                    Msg::RetencaoFalhou {
+                        erro: e.to_string()
+                    }
+                ),
             }
         }
     });
@@ -238,8 +247,10 @@ const TICK_AGENTE: std::time::Duration = std::time::Duration::from_secs(2);
 #[cfg(windows)]
 fn iniciar_agente(db: Arc<KioskDbManager>) {
     eprintln!(
-        "kioskd: agente de enforcement ativo (tick de {}s)",
-        TICK_AGENTE.as_secs()
+        "kioskd: {}",
+        Msg::AgenteAtivo {
+            segundos: TICK_AGENTE.as_secs()
+        }
     );
     tokio::spawn(async move {
         kiosk_engine::agente::rodar_em_laco(
@@ -249,7 +260,7 @@ fn iniciar_agente(db: Arc<KioskDbManager>) {
             TICK_AGENTE,
             |rel| {
                 for e in &rel.erros {
-                    eprintln!("kioskd: agente: {e}");
+                    eprintln!("kioskd: {}", Msg::AgenteErro { erro: e.clone() });
                 }
                 true
             },
@@ -260,7 +271,7 @@ fn iniciar_agente(db: Arc<KioskDbManager>) {
 
 #[cfg(not(windows))]
 fn iniciar_agente(_db: Arc<KioskDbManager>) {
-    eprintln!("kioskd: agente de enforcement só existe no Windows; servindo apenas a API");
+    eprintln!("kioskd: {}", Msg::AgenteSoWindows);
 }
 
 fn opcao(args: &[String], nome: &str) -> Option<String> {
@@ -271,50 +282,76 @@ fn opcao(args: &[String], nome: &str) -> Option<String> {
 }
 
 fn exigir(args: &[String], nome: &str) -> Result<String, String> {
-    opcao(args, nome).ok_or_else(|| format!("falta {nome}\n{USO}"))
+    opcao(args, nome).ok_or_else(|| {
+        format!(
+            "{}\n{}",
+            Msg::FaltaOpcao {
+                nome: nome.to_owned()
+            },
+            uso()
+        )
+    })
 }
 
 fn id(texto: &str) -> Result<Uuid, String> {
-    Uuid::parse_str(texto).map_err(|_| format!("identificador inválido: {texto:?}"))
+    Uuid::parse_str(texto).map_err(|_| {
+        Msg::IdInvalido {
+            valor: texto.to_owned(),
+        }
+        .to_string()
+    })
 }
 
 fn segundos(texto: &str, nome: &str) -> Result<u64, String> {
-    texto
-        .parse()
-        .map_err(|_| format!("{nome} inválido: {texto:?}"))
+    texto.parse().map_err(|_| {
+        Msg::OpcaoInvalida {
+            nome: nome.to_owned(),
+            valor: texto.to_owned(),
+        }
+        .to_string()
+    })
 }
 
 /// `sun,mon,...`, `dom,seg,...` ou `0,1,...` -> dias da semana (0 = domingo).
 fn dias(texto: &str) -> Result<Vec<u8>, String> {
-    const NOMES: [&str; 7] = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
-    const NAMES: [&str; 7] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    use kiosk_engine::i18n::Idioma;
     texto
         .split(',')
         .map(|d| {
-            let d = d.trim().to_lowercase().replace('á', "a");
-            NOMES
-                .iter()
-                .position(|n| d.starts_with(n))
-                .or_else(|| NAMES.iter().position(|n| d.starts_with(n)))
-                .map(|i| i as u8)
-                .or_else(|| d.parse::<u8>().ok().filter(|n| *n <= 6))
-                .ok_or_else(|| {
-                    format!("dia inválido: {d:?} (use mon, tue, wed, thu, fri, sat, sun)")
+            let d: String = d
+                .trim()
+                .to_lowercase()
+                .chars()
+                .map(|c| match c {
+                    'á' => 'a',
+                    'é' => 'e',
+                    'í' => 'i',
+                    _ => c,
                 })
+                .collect();
+            // os nomes de qualquer idioma valem, além dos números de 0 (domingo) a 6
+            (0..7u8)
+                .find(|i| Idioma::TODOS.iter().any(|l| d.starts_with(l.dia_curto(*i))))
+                .or_else(|| d.parse::<u8>().ok().filter(|n| *n <= 6))
+                .ok_or_else(|| Msg::DiaInvalido { valor: d.clone() }.to_string())
         })
         .collect()
 }
 
 fn hora(texto: &str) -> Result<chrono::NaiveTime, String> {
-    chrono::NaiveTime::parse_from_str(texto, "%H:%M")
-        .map_err(|_| format!("hora inválida: {texto:?} (use HH:MM)"))
+    chrono::NaiveTime::parse_from_str(texto, "%H:%M").map_err(|_| {
+        Msg::HoraInvalida {
+            valor: texto.to_owned(),
+        }
+        .to_string()
+    })
 }
 
 /// SID da conta: `--sid` explícito, ou `--account` resolvida pelo Windows.
 fn sid_do_argumento(args: &[String]) -> Result<String, String> {
     if let Some(sid) = opcao(args, "--sid") {
         if !sid.starts_with("S-1-") {
-            return Err(format!("SID inválido: {sid:?}"));
+            return Err(Msg::SidInvalido { valor: sid }.to_string());
         }
         return Ok(sid);
     }
@@ -325,9 +362,7 @@ fn sid_do_argumento(args: &[String]) -> Result<String, String> {
     }
     #[cfg(not(windows))]
     {
-        Err(format!(
-            "--account {conta:?} só é resolvida no Windows; informe --sid"
-        ))
+        Err(Msg::ContaSoNoWindows { conta }.to_string())
     }
 }
 
@@ -335,10 +370,18 @@ fn sid_do_argumento(args: &[String]) -> Result<String, String> {
 fn instalar(escutar: &str) -> Result<(), String> {
     use kiosk_engine::servico_windows as sv;
     let pid = sv::instalar(escutar)?;
-    eprintln!("kioskd: serviço em execução (pid {pid}), escutando em {escutar}");
     eprintln!(
-        "kioskd: log do serviço em {}; os comandos de cadastro agora pedem PowerShell como administrador",
-        sv::arquivo_log().display()
+        "kioskd: {}",
+        Msg::InstaladoEmExecucao {
+            pid,
+            escutar: escutar.to_owned()
+        }
+    );
+    eprintln!(
+        "kioskd: {}",
+        Msg::LogDoServicoInstalado {
+            caminho: sv::arquivo_log().display().to_string()
+        }
     );
     Ok(())
 }
@@ -352,50 +395,94 @@ fn desinstalar(apagar_dados: bool) -> Result<(), String> {
 fn estado() -> Result<(), String> {
     use kiosk_engine::servico_windows as sv;
     let Some(e) = sv::estado()? else {
-        println!("serviço: {} não instalado", sv::NOME_SERVICO);
+        println!(
+            "{}",
+            Msg::LblServico {
+                v: format!("{} {}", sv::NOME_SERVICO, Msg::NaoInstalado)
+            }
+        );
         return Ok(());
     };
-    println!("serviço: {}", sv::NOME_SERVICO);
-    if e.pid != 0 {
-        println!("estado: {} (pid {})", sv::nome_estado(e.estado), e.pid);
+    println!(
+        "{}",
+        Msg::LblServico {
+            v: sv::NOME_SERVICO.to_owned()
+        }
+    );
+    let estado = sv::nome_estado(e.estado);
+    let estado = if e.pid != 0 {
+        format!("{estado} (pid {})", e.pid)
     } else {
-        println!("estado: {}", sv::nome_estado(e.estado));
-    }
-    let inicio = if e.inicio_automatico {
-        "automático"
-    } else {
-        "manual ou desativado"
+        estado
     };
-    println!("início: {inicio}");
-    println!("conta: {}", e.conta);
-    println!("executável: {}", e.executavel);
-    for v in &e.ambiente {
-        println!("ambiente: {v}");
+    println!("{}", Msg::LblEstado { v: estado });
+    let inicio = if e.inicio_automatico {
+        Msg::InicioAutomatico
+    } else {
+        Msg::InicioManual
+    };
+    println!(
+        "{}",
+        Msg::LblInicio {
+            v: inicio.to_string()
+        }
+    );
+    println!("{}", Msg::LblConta { v: e.conta });
+    println!("{}", Msg::LblExecutavel { v: e.executavel });
+    for v in e.ambiente {
+        println!("{}", Msg::LblAmbiente { v });
     }
     let no_path = if e.no_path {
-        "sim"
+        Msg::PathSim
     } else {
-        "não (rode `kioskd install` de novo)"
+        Msg::PathNao
     };
-    println!("PATH do sistema: {no_path}");
-    println!("dados: {}", sv::pasta_dados().display());
-    println!("log: {}", sv::arquivo_log().display());
+    println!(
+        "{}",
+        Msg::LblPath {
+            v: no_path.to_string()
+        }
+    );
+    println!(
+        "{}",
+        Msg::LblDados {
+            v: sv::pasta_dados().display().to_string()
+        }
+    );
+    println!(
+        "{}",
+        Msg::LblLog {
+            v: sv::arquivo_log().display().to_string()
+        }
+    );
     Ok(())
 }
 
 #[cfg(not(windows))]
 fn instalar(_escutar: &str) -> Result<(), String> {
-    Err(SO_WINDOWS.into())
+    Err(Msg::SoNoWindows.to_string())
 }
 
 #[cfg(not(windows))]
 fn desinstalar(_apagar_dados: bool) -> Result<(), String> {
-    Err(SO_WINDOWS.into())
+    Err(Msg::SoNoWindows.to_string())
 }
 
 #[cfg(not(windows))]
 fn estado() -> Result<(), String> {
-    Err(SO_WINDOWS.into())
+    Err(Msg::SoNoWindows.to_string())
+}
+
+/// Erro de validação do comando, traduzido quando o `kioskd` o mostra a um adulto.
+fn erro_de_comando(e: kiosk_engine::comandos::ErroComando) -> String {
+    use kiosk_engine::comandos::ErroComando as E;
+    match e {
+        E::LimitAbove(max) => Msg::LimiteAcimaDe { max }.to_string(),
+        E::WindowOrder => Msg::InicioAntesDoFim.to_string(),
+        E::UntilNotRfc => Msg::UntilNaoRfc.to_string(),
+        E::UntilPast => Msg::UntilNoPassado.to_string(),
+        outro => outro.to_string(),
+    }
 }
 
 fn duracao(s: u64) -> String {
@@ -413,7 +500,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
             let com_agente = match resto {
                 [] => true,
                 ["--no-agent"] => false,
-                _ => return Err(USO.to_string()),
+                _ => return Err(uso()),
             };
             servir(com_agente).await
         }
@@ -426,7 +513,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
             let apagar = match resto {
                 [] => false,
                 ["--purge-data"] => true,
-                _ => return Err(USO.to_string()),
+                _ => return Err(uso()),
             };
             if apagar {
                 confirmar_apagar_dados()?;
@@ -441,7 +528,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 .criar_codigo_pareamento(&EventContext::local(), Utc::now())
                 .await
                 .map_err(|e| e.to_string())?;
-            eprintln!("kioskd: código válido por 5 minutos, de uso único:");
+            eprintln!("kioskd: {}", Msg::CodigoDePareamento);
             println!("{codigo}");
             Ok(())
         }
@@ -449,26 +536,30 @@ async fn executar(args: &[String]) -> Result<(), String> {
             let db = abrir_banco().await?;
             let lista = db.listar_dispositivos().await.map_err(|e| e.to_string())?;
             if lista.is_empty() {
-                eprintln!("kioskd: nenhum dispositivo pareado");
+                eprintln!("kioskd: {}", Msg::NenhumDispositivo);
             }
             for (id, nome, criado, revogado) in lista {
-                let estado = revogado.map_or("ativo".to_string(), |r| format!("revogado em {r}"));
-                println!("{id}\t{nome}\tcriado em {criado}\t{estado}");
+                let estado = revogado.map_or(Msg::DispositivoAtivo.to_string(), |r| {
+                    Msg::DispositivoRevogadoEm { quando: r }.to_string()
+                });
+                let criado = Msg::CriadoEm { quando: criado };
+                println!("{id}\t{nome}\t{criado}\t{estado}");
             }
             Ok(())
         }
         ["revoke", id] => {
-            let id = Uuid::parse_str(id).map_err(|_| format!("identificador inválido: {id:?}"))?;
+            let id = self::id(id)?;
             let db = abrir_banco().await?;
             db.revogar_dispositivo(&EventContext::local(), id, Utc::now())
                 .await
                 .map_err(|e| match e {
-                    sqlx::Error::RowNotFound => {
-                        "dispositivo inexistente ou já revogado".to_string()
-                    }
+                    sqlx::Error::RowNotFound => Msg::DispositivoInexistente.to_string(),
                     outro => outro.to_string(),
                 })?;
-            eprintln!("kioskd: dispositivo {id} revogado");
+            eprintln!(
+                "kioskd: {}",
+                Msg::DispositivoRevogado { id: id.to_string() }
+            );
             Ok(())
         }
         ["profile", "create", ..] => {
@@ -488,47 +579,48 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 .await
                 .map_err(|e| match e {
                     sqlx::Error::Database(d) if d.is_unique_violation() => {
-                        format!("já existe um perfil para o SID {sid}")
+                        Msg::PerfilJaExiste { sid: sid.clone() }.to_string()
                     }
                     outro => outro.to_string(),
                 })?;
             println!("{}", perfil.profile_id);
-            eprintln!("kioskd: perfil {nome:?} criado para a conta {sid}");
+            eprintln!("kioskd: {}", Msg::PerfilCriado { nome, sid });
             Ok(())
         }
         ["profile", "list"] => {
             let db = abrir_banco().await?;
             let perfis = db.listar_perfis().await.map_err(|e| e.to_string())?;
             if perfis.is_empty() {
-                eprintln!("kioskd: nenhum perfil cadastrado");
+                eprintln!("kioskd: {}", Msg::NenhumPerfil);
             }
             for p in perfis {
                 let limite = p
                     .daily_total_limit_seconds
-                    .map_or("sem limite".into(), duracao);
+                    .map_or(Msg::SemLimite.to_string(), duracao);
                 let janelas = db
                     .janelas_do_perfil(p.profile_id)
                     .await
                     .map_err(|e| e.to_string())?;
-                const NOMES: [&str; 7] = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+                let idioma = kiosk_engine::i18n::idioma();
                 let janelas: Vec<String> = janelas
                     .iter()
                     .map(|(d, j)| {
                         format!(
                             "{} {}-{}",
-                            NOMES[*d as usize],
+                            idioma.dia_curto(*d),
                             j.start.format("%H:%M"),
                             j.end.format("%H:%M")
                         )
                     })
                     .collect();
                 let janelas = if janelas.is_empty() {
-                    "sem janela".into()
+                    Msg::SemJanela.to_string()
                 } else {
                     janelas.join(", ")
                 };
+                let rotulo = Msg::RotuloLimiteDiario { limite };
                 println!(
-                    "{}\t{}\t{}\tlimite diário: {limite}\t{janelas}",
+                    "{}\t{}\t{}\t{rotulo}\t{janelas}",
                     p.profile_id, p.display_name, p.windows_sid
                 );
             }
@@ -545,12 +637,14 @@ async fn executar(args: &[String]) -> Result<(), String> {
             db.set_profile_limit(&EventContext::local(), perfil, limite)
                 .await
                 .map_err(|e| match e {
-                    sqlx::Error::RowNotFound => "perfil inexistente".to_string(),
+                    sqlx::Error::RowNotFound => Msg::PerfilInexistente.to_string(),
                     outro => outro.to_string(),
                 })?;
             eprintln!(
-                "kioskd: limite diário do perfil agora é {}",
-                limite.map_or("sem limite".into(), duracao)
+                "kioskd: {}",
+                Msg::PerfilLimiteAgora {
+                    limite: limite.map_or(Msg::SemLimite.to_string(), duracao)
+                }
             );
             Ok(())
         }
@@ -558,23 +652,31 @@ async fn executar(args: &[String]) -> Result<(), String> {
             let perfil = id(perfil)?;
             let dias = dias(&exigir(args, "--days")?)?;
             let janela = exigir(args, "--window")?;
-            let (a, b) = janela
-                .split_once('-')
-                .ok_or_else(|| format!("--window deve ser HH:MM-HH:MM, recebi {janela:?}"))?;
+            let (a, b) = janela.split_once('-').ok_or_else(|| {
+                Msg::JanelaFormato {
+                    recebido: janela.clone(),
+                }
+                .to_string()
+            })?;
             let janela = kiosk_engine::database_schema::TimeWindow {
                 start: hora(a)?,
                 end: hora(b)?,
             };
             if janela.start >= janela.end {
-                return Err("o início da janela deve ser anterior ao fim".into());
+                return Err(Msg::InicioAntesDoFim.to_string());
             }
             let db = abrir_banco().await?;
             for d in &dias {
                 db.set_profile_window(&EventContext::local(), perfil, *d, &janela)
                     .await
-                    .map_err(|e| format!("janela não gravada (o perfil existe?): {e}"))?;
+                    .map_err(|e| {
+                        Msg::JanelaNaoGravada {
+                            erro: e.to_string(),
+                        }
+                        .to_string()
+                    })?;
             }
-            eprintln!("kioskd: janela gravada para {} dia(s)", dias.len());
+            eprintln!("kioskd: {}", Msg::JanelaGravada { dias: dias.len() });
             Ok(())
         }
         ["app", "create", ..] => {
@@ -584,7 +686,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 args.iter().any(|a| a == "--exempt"),
                 args.iter().any(|a| a == "--ignore"),
             ) {
-                (true, true) => return Err("use --exempt ou --ignore, não os dois".into()),
+                (true, true) => return Err(Msg::ExemptOuIgnore.to_string()),
                 (true, false) => ProcessStatus::Whitelisted,
                 (false, true) => ProcessStatus::Ignored,
                 (false, false) => ProcessStatus::Monitored,
@@ -598,20 +700,27 @@ async fn executar(args: &[String]) -> Result<(), String> {
             db.create_app(&EventContext::local(), &app)
                 .await
                 .map_err(|e| match e {
-                    sqlx::Error::Database(d) if d.is_unique_violation() => {
-                        format!("{processo} já está cadastrado")
+                    sqlx::Error::Database(d) if d.is_unique_violation() => Msg::AppJaCadastrado {
+                        processo: processo.clone(),
                     }
+                    .to_string(),
                     outro => outro.to_string(),
                 })?;
             println!("{}", app.app_id);
-            eprintln!("kioskd: app {processo} cadastrado ({})", status.as_str());
+            eprintln!(
+                "kioskd: {}",
+                Msg::AppCadastrado {
+                    processo,
+                    status: status.as_str().to_owned()
+                }
+            );
             Ok(())
         }
         ["app", "list"] => {
             let db = abrir_banco().await?;
             let apps = db.listar_apps().await.map_err(|e| e.to_string())?;
             if apps.is_empty() {
-                eprintln!("kioskd: nenhum app cadastrado");
+                eprintln!("kioskd: {}", Msg::NenhumApp);
             }
             for a in apps {
                 println!("{}\t{}\t{}", a.app_id, a.process_name, a.status.as_str());
@@ -630,9 +739,12 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 corpo["daily_limit_seconds"] = segundos(&l, "--limit")?.into();
             }
             if let Some(j) = opcao(args, "--window") {
-                let (a, b) = j
-                    .split_once('-')
-                    .ok_or_else(|| format!("--window deve ser HH:MM-HH:MM, recebi {j:?}"))?;
+                let (a, b) = j.split_once('-').ok_or_else(|| {
+                    Msg::JanelaFormato {
+                        recebido: j.clone(),
+                    }
+                    .to_string()
+                })?;
                 corpo["window_start"] = a.into();
                 corpo["window_end"] = b.into();
             }
@@ -641,7 +753,8 @@ async fn executar(args: &[String]) -> Result<(), String> {
             }
             let agora = Utc::now();
             let Comando::AddRule(nova) =
-                interpretar("add_rule", corpo.to_string().as_bytes(), agora)?
+                interpretar("add_rule", corpo.to_string().as_bytes(), agora)
+                    .map_err(erro_de_comando)?
             else {
                 unreachable!("add_rule sempre produz AddRule")
             };
@@ -651,14 +764,14 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 .await
                 .map_err(|e| e.to_string())?
             {
-                return Err("perfil inexistente (veja `kioskd profile list`)".into());
+                return Err(Msg::PerfilInexistenteVeja.to_string());
             }
             if !db
                 .existe_app(nova.app_id)
                 .await
                 .map_err(|e| e.to_string())?
             {
-                return Err("app inexistente (veja `kioskd app list`)".into());
+                return Err(Msg::AppInexistenteVeja.to_string());
             }
             let regra = ActiveRule {
                 rule_id: Uuid::new_v4(),
@@ -682,11 +795,11 @@ async fn executar(args: &[String]) -> Result<(), String> {
             }
             println!("{}", regra.rule_id);
             eprintln!(
-                "kioskd: regra criada ({})",
+                "kioskd: {}",
                 if ativar {
-                    "ativa"
+                    Msg::RegraCriadaAtiva
                 } else {
-                    "pendente: use `regra ativar`"
+                    Msg::RegraCriadaPendente
                 }
             );
             Ok(())
@@ -703,15 +816,15 @@ async fn executar(args: &[String]) -> Result<(), String> {
             db.set_rule_state(&EventContext::local(), regra, estado)
                 .await
                 .map_err(|e| match e {
-                    sqlx::Error::RowNotFound => "regra inexistente".to_string(),
+                    sqlx::Error::RowNotFound => Msg::RegraInexistente.to_string(),
                     outro => outro.to_string(),
                 })?;
             eprintln!(
-                "kioskd: regra {}",
+                "kioskd: {}",
                 if *acao == "activate" {
-                    "ativada"
+                    Msg::RegraAtivadaLocal
                 } else {
-                    "revogada"
+                    Msg::RegraRevogadaLocal
                 }
             );
             Ok(())
@@ -720,19 +833,19 @@ async fn executar(args: &[String]) -> Result<(), String> {
             let regra = id(regra)?;
             let s = segundos(&exigir(args, "--seconds")?, "--seconds")?;
             if s > kiosk_engine::comandos::MAX_LIMITE_SEGUNDOS {
-                return Err(format!(
-                    "--seconds acima de {}",
-                    kiosk_engine::comandos::MAX_LIMITE_SEGUNDOS
-                ));
+                return Err(Msg::SegundosAcima {
+                    max: kiosk_engine::comandos::MAX_LIMITE_SEGUNDOS,
+                }
+                .to_string());
             }
             let db = abrir_banco().await?;
             db.set_rule_limit(&EventContext::local(), regra, s)
                 .await
                 .map_err(|e| match e {
-                    sqlx::Error::RowNotFound => "regra inexistente ou revogada".to_string(),
+                    sqlx::Error::RowNotFound => Msg::RegraInexistenteOuRevogada.to_string(),
                     outro => outro.to_string(),
                 })?;
-            eprintln!("kioskd: limite diário da regra agora é {}", duracao(s));
+            eprintln!("kioskd: {}", Msg::LimiteDaRegraAgora { limite: duracao(s) });
             Ok(())
         }
         ["rule", "list", ..] => {
@@ -747,16 +860,19 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 .collect();
             let regras = db.listar_regras(perfil).await.map_err(|e| e.to_string())?;
             if regras.is_empty() {
-                eprintln!("kioskd: nenhuma regra cadastrada");
+                eprintln!("kioskd: {}", Msg::NenhumaRegra);
             }
             for r in regras {
                 let app = apps.get(&r.app_id).map_or("?", String::as_str);
-                let limite = r.daily_limit_seconds.map_or("sem limite".into(), duracao);
-                let janela = r.time_window.map_or("sem janela".into(), |j| {
+                let limite = r
+                    .daily_limit_seconds
+                    .map_or(Msg::SemLimite.to_string(), duracao);
+                let rotulo = Msg::RotuloLimite { limite };
+                let janela = r.time_window.map_or(Msg::SemJanela.to_string(), |j| {
                     format!("{}-{}", j.start.format("%H:%M"), j.end.format("%H:%M"))
                 });
                 println!(
-                    "{}\t{}\t{app}\t{}\tlimite: {limite}\t{janela}",
+                    "{}\t{}\t{app}\t{}\t{rotulo}\t{janela}",
                     r.rule_id,
                     r.profile_id,
                     r.state.as_str()
@@ -764,6 +880,6 @@ async fn executar(args: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        _ => Err(USO.to_string()),
+        _ => Err(uso()),
     }
 }

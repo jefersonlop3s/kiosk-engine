@@ -86,7 +86,7 @@ fn o_servico_empurra_estado_e_aviso_em_uma_linha_versionada() {
     let texto = std::str::from_utf8(&bytes).unwrap();
     assert_eq!(
         texto.trim_end(),
-        r#"{"v":1,"tipo":"aviso","restante_segundos":60,"motivo":"LIMITE_DIARIO_APP","app":"jogo.exe"}"#
+        r#"{"v":1,"tipo":"aviso","restante_segundos":60,"motivo":"APP_DAILY_LIMIT","app":"jogo.exe"}"#
     );
     let estado = codificar_para_ui(&ParaUi::Estado {
         restante_segundos: None,

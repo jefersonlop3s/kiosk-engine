@@ -28,6 +28,9 @@ use windows_sys::Win32::Security::{
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
+use windows_sys::Win32::System::Registry::{
+    HKEY, HKEY_USERS, RRF_RT_REG_MULTI_SZ, RRF_RT_REG_SZ, RegGetValueW,
+};
 use windows_sys::Win32::System::RemoteDesktop::{
     WTS_CURRENT_SERVER_HANDLE, WTS_SESSION_INFOW, WTS_SESSIONSTATE_UNLOCK, WTSActive,
     WTSDisconnectSession, WTSDomainName, WTSEnumerateSessionsW, WTSFreeMemory, WTSINFOEXW,
@@ -238,6 +241,60 @@ fn procurar_conta(conta: &str) -> Result<(String, SID_NAME_USE), String> {
     }
 }
 
+/// Primeiro texto de um valor do registro (`REG_SZ`, ou o 1º item de um `REG_MULTI_SZ`).
+fn texto_do_registro(raiz: HKEY, subchave: &str, valor: &str) -> Option<String> {
+    let (sub, val) = (para_utf16(subchave), para_utf16(valor));
+    let flags = RRF_RT_REG_SZ | RRF_RT_REG_MULTI_SZ;
+    let mut bytes = 0u32;
+    // SAFETY: primeira chamada só mede o tamanho.
+    let erro = unsafe {
+        RegGetValueW(
+            raiz,
+            sub.as_ptr(),
+            val.as_ptr(),
+            flags,
+            null_mut(),
+            null_mut(),
+            &mut bytes,
+        )
+    };
+    if erro != 0 || bytes == 0 {
+        return None;
+    }
+    let mut buf = vec![0u16; (bytes as usize).div_ceil(2)];
+    // SAFETY: buffer com `bytes` bytes graváveis.
+    let erro = unsafe {
+        RegGetValueW(
+            raiz,
+            sub.as_ptr(),
+            val.as_ptr(),
+            flags,
+            null_mut(),
+            buf.as_mut_ptr().cast(),
+            &mut bytes,
+        )
+    };
+    if erro != 0 {
+        return None;
+    }
+    let texto = de_utf16(&buf);
+    (!texto.is_empty()).then_some(texto)
+}
+
+/// Idioma de exibição da conta com este SID, lido do perfil dela, que fica carregado enquanto ela
+/// está logada (`HKEY_USERS\<SID>`): `PreferredUILanguages`, ou o `LocaleName` da conta. `None` se
+/// a conta não está logada ou o idioma não é um dos suportados.
+pub fn idioma_da_conta(sid: &str) -> Option<crate::i18n::Idioma> {
+    use crate::i18n::Idioma;
+    [
+        (r"Control Panel\Desktop", "PreferredUILanguages"),
+        (r"Control Panel\International", "LocaleName"),
+    ]
+    .iter()
+    .filter_map(|(sub, valor)| texto_do_registro(HKEY_USERS, &format!(r"{sid}\{sub}"), valor))
+    .find_map(|t| Idioma::de_tag(&t))
+}
+
 /// Quem chama é administrador **elevado**: o grupo Administradores está ativo no token
 /// efetivo (o da personificação, se houver). Com o UAC, uma conta de administrador fora do
 /// "Executar como administrador" tem o grupo só para negação e dá `false`.
@@ -439,7 +496,9 @@ impl Sistema for SistemaWindows {
 
     fn avisar(&mut self, aviso: &Aviso) -> Result<(), String> {
         let id = sessao_do_sid(&aviso.sid)?;
-        let (titulo, mensagem) = crate::textos::aviso(aviso);
+        // no idioma da conta da criança (ADR-010); sem ele, no do serviço
+        let idioma = idioma_da_conta(&aviso.sid).unwrap_or_else(crate::i18n::idioma);
+        let (titulo, mensagem) = crate::textos::aviso(aviso, idioma);
         let (t, m) = (para_utf16(&titulo), para_utf16(&mensagem));
         let mut resposta = 0;
         // SAFETY: buffers UTF-16 vivos durante a chamada; tamanhos em bytes sem o zero final;

@@ -280,7 +280,7 @@ impl KioskDbManager {
                 ActionType::System,
                 EventType::Success,
                 TransactionStatus::Success,
-                &format!("retenção: {removed} eventos com mais de 90 dias removidos"),
+                &crate::detalhes::Detalhe::RetentionPurged { removed }.codigo(),
             );
             insert_event(&mut tx, &e).await?;
         }
@@ -301,19 +301,22 @@ impl KioskDbManager {
     ) -> Result<Vec<(NaiveDate, i64)>, sqlx::Error> {
         let duracao = (fim - inicio).num_seconds();
         if !(0..=MAX_INTERVALO_SEGUNDOS).contains(&duracao) {
-            let detalhe = format!(
-                "intervalo de uso suspeito: {inicio} -> {fim} ({duracao}s; aceito 0..={MAX_INTERVALO_SEGUNDOS}s)"
-            );
+            let d = crate::detalhes::Detalhe::SuspiciousUsageInterval {
+                from: inicio.to_string(),
+                to: fim.to_string(),
+                seconds: duracao,
+                max: MAX_INTERVALO_SEGUNDOS,
+            };
             let e = SecurityEvent::new(
                 &ctx.client_ip,
                 ActionType::System,
                 EventType::TamperSuspected,
                 TransactionStatus::Failure,
-                &detalhe,
+                &d.codigo(),
             )
             .with_profile(Some(profile_id));
             self.record_event(&e).await?;
-            return Err(sqlx::Error::Protocol(detalhe));
+            return Err(sqlx::Error::Protocol(d.texto(crate::i18n::idioma())));
         }
         dividir_por_dia_local(tz, inicio, fim)
             .map_err(sqlx::Error::Protocol)?

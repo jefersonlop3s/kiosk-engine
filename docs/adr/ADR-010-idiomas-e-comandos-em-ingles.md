@@ -91,3 +91,15 @@ Alternativas rejeitadas:
 
 - Consome: [E-012](../epics/E-012-internacionalizacao.md).
 - Relaciona-se com: [ADR-001](ADR-001-enforcement-ativo-e-visivel.md) (avisos visíveis, agora no idioma da criança), [ADR-008](ADR-008-formato-do-instalador.md) (binário registrado no serviço), [E-008](../epics/E-008-cliente-grafico-dos-pais.md) (o cliente gráfico usa o mesmo catálogo).
+
+## Implementação e desvios (2026-10-29)
+
+A decisão acima não mudou. Ao implementar o E-012 F2 e F3, ficaram estes detalhes, que o dono pode revisar:
+
+1. **Detalhe das falhas da API em inglês fixo, e não em código com parâmetros.** Só o detalhe de enforcement e de operação (o que aparece em `kioskctl log`) virou código traduzível. As falhas das camadas da API (`AUTH_FAIL`, `AUTHZ_FAIL`, `VALIDATION_FAIL`) guardam uma frase curta em inglês, porque ficam só no banco local, nunca saem pela API e falam de campos e fluxos da própria API ("invalid signature from device ...").
+2. **Código de motivo em inglês.** `Motivo::as_str` passou de `LIMITE_DIARIO_APP` para `APP_DAILY_LIMIT` (e os demais), no log e no protocolo da UI. Linhas antigas ficam como foram gravadas.
+3. **Campo de idioma no perfil: não implementado.** A ADR dizia "um campo opcional no perfil pode fixar outro"; o idioma da criança vem só da conta dela no Windows (perfil de usuário do Windows, `PreferredUILanguages` e, na falta, `LocaleName`). Um campo no banco (migração) fica para quando houver pedido.
+4. **O serviço herda o idioma de quem o instala**: o `install` grava `KIOSK_LANG` no serviço, em vez de usar o idioma da conta SYSTEM.
+5. **Validação do comando no `kioskd rule create`**: os erros mais comuns (limite acima do máximo, início da janela depois do fim, `--until` inválido ou no passado) saem traduzidos; os demais saem na frase em inglês da API.
+6. **Ainda em português**: rótulos de erros brutos do Windows (por exemplo, falha de registro ou de SDDL, em inglês técnico com o texto do próprio Windows), os erros do protocolo da UI (`ipc`) e os erros internos de fuso (`uso`), que não chegam ao usuário no estado atual.
+

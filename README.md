@@ -72,6 +72,10 @@ Quando duas regras se aplicam, vale a mais restritiva. Programa monitorado sem r
 
 O passo a passo completo, com cada comando, está no [runbook](docs/runbooks/api-e-cli.md). O fluxo de cada comando, com o caminho da informação entre o cliente e o serviço, está nos [fluxogramas dos comandos](docs/architecture/fluxos-dos-comandos.md).
 
+## Idiomas
+
+Mensagens em **inglês (en-US), português (pt-BR) e espanhol (es-ES)**, no idioma de quem as lê: os pais no cliente, a criança nos avisos, no idioma da conta dela. Escolha com `KIOSK_LANG` ou pelo idioma do Windows. Os nomes dos comandos não se traduzem: são em inglês, com os equivalentes em português ([lista](docs/runbooks/comandos-em-portugues.md)). Detalhes no [runbook](docs/runbooks/api-e-cli.md#idioma).
+
 ## Plataformas
 
 | | Hoje | Planejado |

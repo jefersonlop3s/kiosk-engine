@@ -313,7 +313,7 @@ async fn dispositivo_revogado_e_recusado_na_proxima_requisicao() {
         eventos(&db, "AUTH_FAIL")
             .await
             .iter()
-            .any(|d| d.contains("revogado"))
+            .any(|d| d.contains("revoked"))
     );
     assert!(
         db.revogar_dispositivo(&ctx(), Uuid::new_v4(), agora())
@@ -426,7 +426,7 @@ async fn muitas_tentativas_de_codigo_errado_bloqueiam_o_pareamento() {
         eventos(&db, "AUTH_FAIL")
             .await
             .iter()
-            .any(|d| d.contains("pareamento bloqueado"))
+            .any(|d| d.contains("pairing blocked"))
     );
     // passado o período, volta a funcionar
     let depois = agora() + Duration::seconds(VALIDADE_CODIGO_SEGUNDOS + 1);
@@ -446,8 +446,7 @@ async fn a_recusa_externa_nao_vaza_o_motivo() {
     assert_eq!(erro.to_string(), "requisição recusada");
     let detalhes = eventos(&db, "AUTH_FAIL").await;
     assert!(
-        detalhes[0].contains("assinatura inválida")
-            && detalhes[0].contains(&c.device_id.to_string())
+        detalhes[0].contains("invalid signature") && detalhes[0].contains(&c.device_id.to_string())
     );
 }
 

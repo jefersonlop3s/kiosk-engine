@@ -69,15 +69,28 @@ pub enum Motivo {
 }
 
 impl Motivo {
-    /// Texto estável para o log forense.
+    /// Código estável, em inglês, para o log forense e o protocolo da UI (ADR-010).
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::AppBloqueado => "APP_BLOQUEADO",
-            Self::LimiteDiarioApp => "LIMITE_DIARIO_APP",
-            Self::LimiteDiarioTotal => "LIMITE_DIARIO_TOTAL",
-            Self::ForaDaJanelaApp => "FORA_DA_JANELA_APP",
-            Self::ForaDaJanelaGeral => "FORA_DA_JANELA_GERAL",
+            Self::AppBloqueado => "APP_BLOCKED",
+            Self::LimiteDiarioApp => "APP_DAILY_LIMIT",
+            Self::LimiteDiarioTotal => "TOTAL_DAILY_LIMIT",
+            Self::ForaDaJanelaApp => "APP_OUTSIDE_WINDOW",
+            Self::ForaDaJanelaGeral => "OUTSIDE_WINDOW",
         }
+    }
+
+    /// Inverso de [`Motivo::as_str`].
+    pub fn de_codigo(codigo: &str) -> Option<Self> {
+        [
+            Self::AppBloqueado,
+            Self::LimiteDiarioApp,
+            Self::LimiteDiarioTotal,
+            Self::ForaDaJanelaApp,
+            Self::ForaDaJanelaGeral,
+        ]
+        .into_iter()
+        .find(|m| m.as_str() == codigo)
     }
 
     /// `true` se o motivo vem do perfil (sessão), `false` se vem de regra de app.

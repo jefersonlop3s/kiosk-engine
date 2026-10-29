@@ -2,6 +2,7 @@
 //! HTTP/1.1 simples sobre TCP, sem TLS: a API só escuta em loopback e na rede Tailscale
 //! (ADR-005), cujo transporte já é cifrado pela VPN.
 
+use crate::i18n::Msg;
 use std::path::Path;
 use std::time::Duration;
 
@@ -72,18 +73,28 @@ impl Credenciais {
     pub fn chave(&self) -> Result<SigningKey, String> {
         let bytes = URL_SAFE_NO_PAD
             .decode(&self.chave_privada)
-            .map_err(|_| "chave privada ilegível no arquivo de credenciais".to_string())?;
+            .map_err(|_| Msg::ChavePrivadaIlegivel.to_string())?;
         let bytes: [u8; 32] = bytes
             .try_into()
-            .map_err(|_| "chave privada com tamanho inválido".to_string())?;
+            .map_err(|_| Msg::ChavePrivadaTamanho.to_string())?;
         Ok(SigningKey::from_bytes(&bytes))
     }
 
     pub fn carregar(caminho: &Path) -> Result<Self, String> {
-        let texto = std::fs::read_to_string(caminho)
-            .map_err(|e| format!("não foi possível ler {}: {e}", caminho.display()))?;
-        serde_json::from_str(&texto)
-            .map_err(|e| format!("credenciais em {} inválidas: {e}", caminho.display()))
+        let texto = std::fs::read_to_string(caminho).map_err(|e| {
+            Msg::NaoLeu {
+                caminho: caminho.display().to_string(),
+                erro: e.to_string(),
+            }
+            .to_string()
+        })?;
+        serde_json::from_str(&texto).map_err(|e| {
+            Msg::CredenciaisInvalidas {
+                caminho: caminho.display().to_string(),
+                erro: e.to_string(),
+            }
+            .to_string()
+        })
     }
 
     /// Grava o arquivo; no Unix com permissão `0600` desde a criação (sem janela legível).
@@ -91,8 +102,13 @@ impl Credenciais {
         use std::io::Write;
         let texto = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         if let Some(pai) = caminho.parent().filter(|p| !p.as_os_str().is_empty()) {
-            std::fs::create_dir_all(pai)
-                .map_err(|e| format!("não foi possível criar {}: {e}", pai.display()))?;
+            std::fs::create_dir_all(pai).map_err(|e| {
+                Msg::NaoCriouPasta {
+                    pasta: pai.display().to_string(),
+                    erro: e.to_string(),
+                }
+                .to_string()
+            })?;
         }
         let mut opcoes = std::fs::OpenOptions::new();
         opcoes.write(true).create(true).truncate(true);
@@ -101,17 +117,32 @@ impl Credenciais {
             use std::os::unix::fs::OpenOptionsExt;
             opcoes.mode(0o600);
         }
-        let mut f = opcoes
-            .open(caminho)
-            .map_err(|e| format!("não foi possível gravar {}: {e}", caminho.display()))?;
+        let mut f = opcoes.open(caminho).map_err(|e| {
+            Msg::NaoGravou {
+                caminho: caminho.display().to_string(),
+                erro: e.to_string(),
+            }
+            .to_string()
+        })?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             f.set_permissions(std::fs::Permissions::from_mode(0o600))
-                .map_err(|e| format!("permissão de {}: {e}", caminho.display()))?;
+                .map_err(|e| {
+                    Msg::PermissaoDe {
+                        caminho: caminho.display().to_string(),
+                        erro: e.to_string(),
+                    }
+                    .to_string()
+                })?;
         }
-        f.write_all(texto.as_bytes())
-            .map_err(|e| format!("não foi possível gravar {}: {e}", caminho.display()))
+        f.write_all(texto.as_bytes()).map_err(|e| {
+            Msg::NaoGravou {
+                caminho: caminho.display().to_string(),
+                erro: e.to_string(),
+            }
+            .to_string()
+        })
     }
 }
 
@@ -125,7 +156,13 @@ pub async fn post(
     let limite = Duration::from_secs(TIMEOUT_SEGUNDOS);
     tokio::time::timeout(limite, post_sem_prazo(servidor, caminho, cabecalhos, corpo))
         .await
-        .map_err(|_| format!("sem resposta de {servidor} em {TIMEOUT_SEGUNDOS}s"))?
+        .map_err(|_| {
+            Msg::SemResposta {
+                servidor: servidor.to_owned(),
+                segundos: TIMEOUT_SEGUNDOS,
+            }
+            .to_string()
+        })?
 }
 
 async fn post_sem_prazo(
@@ -134,9 +171,13 @@ async fn post_sem_prazo(
     cabecalhos: &[(String, String)],
     corpo: &[u8],
 ) -> Result<RespostaApi, String> {
-    let mut s = TcpStream::connect(servidor)
-        .await
-        .map_err(|e| format!("não foi possível conectar a {servidor}: {e}"))?;
+    let mut s = TcpStream::connect(servidor).await.map_err(|e| {
+        Msg::NaoConectou {
+            servidor: servidor.to_owned(),
+            erro: e.to_string(),
+        }
+        .to_string()
+    })?;
     let mut req = format!(
         "POST {caminho} HTTP/1.1\r\nHost: {servidor}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",
         corpo.len()
@@ -153,13 +194,18 @@ async fn post_sem_prazo(
     s.take(MAX_RESPOSTA_BYTES as u64)
         .read_to_end(&mut resp)
         .await
-        .map_err(|e| format!("falha ao ler a resposta: {e}"))?;
+        .map_err(|e| {
+            Msg::FalhaAoLerResposta {
+                erro: e.to_string(),
+            }
+            .to_string()
+        })?;
     let texto = String::from_utf8_lossy(&resp).into_owned();
     let status = texto
         .split(' ')
         .nth(1)
         .and_then(|c| c.parse().ok())
-        .ok_or_else(|| "resposta HTTP ilegível".to_string())?;
+        .ok_or_else(|| Msg::RespostaHttpIlegivel.to_string())?;
     let corpo = texto.split("\r\n\r\n").nth(1).unwrap_or("").to_owned();
     Ok(RespostaApi { status, corpo })
 }
@@ -170,9 +216,7 @@ pub async fn comando(
     acao: &str,
     corpo_json: &str,
 ) -> Result<RespostaApi, String> {
-    let device_id = cred
-        .device_id
-        .ok_or("este dispositivo ainda não foi pareado (use o comando `parear`)")?;
+    let device_id = cred.device_id.ok_or_else(|| Msg::NaoPareado.to_string())?;
     let chave = cred.chave()?;
     let caminho = format!("/api/windows/{acao}");
     let (ts, nonce) = (chrono::Utc::now().timestamp(), novo_nonce());
@@ -201,17 +245,12 @@ pub async fn parear(
     .to_string();
     let r = post(servidor, "/api/pair", &[], corpo.as_bytes()).await?;
     if !r.aceita() {
-        return Err(format!(
-            "pareamento recusado pelo serviço (HTTP {}). O código tem 8 caracteres, vale por 5 minutos \
-             e só pode ser usado uma vez; gere outro no PC com `kioskd pairing-code`, usando o \
-             mesmo KIOSK_DB do `kioskd serve`",
-            r.status
-        ));
+        return Err(Msg::PareamentoRecusado { status: r.status }.to_string());
     }
     let v: serde_json::Value = serde_json::from_str(&r.corpo)
-        .map_err(|_| "resposta de pareamento ilegível".to_string())?;
+        .map_err(|_| Msg::RespostaDePareamentoIlegivel.to_string())?;
     v["device_id"]
         .as_str()
         .and_then(|s| Uuid::parse_str(s).ok())
-        .ok_or_else(|| "resposta de pareamento sem identificador do dispositivo".to_string())
+        .ok_or_else(|| Msg::RespostaSemIdDoDispositivo.to_string())
 }

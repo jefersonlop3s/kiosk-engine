@@ -74,7 +74,7 @@ flowchart TD
     T2 --> T3["registra uso do app e tempo de sessão ativa<br/>em usage_ledger e session_usage"]
     T3 --> T4["motor decidir: sessão e cada app"]
     T4 --> T5{"decisão"}
-    T5 -->|Avisar| T6["WTSSendMessage na sessão<br/>evento WARNING_SHOWN"]
+    T5 -->|Avisar| T6["WTSSendMessage na sessão, no idioma da conta da criança<br/>evento WARNING_SHOWN com o detalhe como código"]
     T5 -->|EncerrarApp| T7["TerminateProcess<br/>evento APP_TERMINATED"]
     T5 -->|BloquearSessao| T8["lock, e logoff após 2 desbloqueios<br/>evento SESSION_LOCKED"]
     T5 -->|Permitir| T9["nada"]
@@ -274,7 +274,7 @@ flowchart TD
     I --> P["registro: Path do sistema ganha Program Files\kiosk, se faltar;<br/>aviso WM_SETTINGCHANGE para janelas novas"]
     P --> J["SCM: cria ou reconfigura o serviço<br/>LocalSystem, início automático, binário kioskd service"]
     J --> K["SCM: descrição, reinício 5 s após falha,<br/>permissões do serviço: conta padrão só consulta"]
-    K --> L["registro: Environment do serviço com KIOSK_LISTEN"]
+    K --> L["registro: Environment do serviço com KIOSK_LISTEN<br/>e KIOSK_LANG, o idioma de quem instala"]
     L --> M["SCM: inicia e espera em execução por até 30 s"]
     M --> N{"continua em execução 2 s depois?"}
     N -->|não| E3["erro: iniciou e parou, veja kioskd.log"]
@@ -315,7 +315,7 @@ flowchart TD
     C -->|não| R1["imprime: não instalado"]
     C -->|sim| D["SCM: estado e pid; configuração: início, conta e executável"]
     D --> E["registro: Environment do serviço e Path do sistema"]
-    E --> R2["imprime estado, pid, início, conta, executável,<br/>KIOSK_LISTEN, se está no PATH, pasta de dados e log"]
+    E --> R2["imprime estado, pid, início, conta, executável,<br/>KIOSK_LISTEN e KIOSK_LANG, se está no PATH, pasta de dados e log,<br/>no idioma de quem pergunta"]
 ```
 
 Só lê; não abre o banco nem grava evento.
@@ -324,7 +324,7 @@ Só lê; não abre o banco nem grava evento.
 
 ```mermaid
 flowchart TD
-    W["Windows: SCM inicia Program Files\kiosk\kioskd.exe service,<br/>como LocalSystem, com KIOSK_LISTEN do registro"] --> A["entrega a thread principal ao SCM"]
+    W["Windows: SCM inicia Program Files\kiosk\kioskd.exe service,<br/>como LocalSystem, com KIOSK_LISTEN e KIOSK_LANG do registro"] --> A["entrega a thread principal ao SCM"]
     A --> B["registra o tratador de controle; informa iniciando"]
     B --> C{"abre ProgramData\kiosk\kioskd.log?"}
     C -->|não| E1["informa parado com código 3"]
@@ -485,5 +485,5 @@ flowchart TD
     D -->|recusa| R1["403 rejected"]
     I --> R2["200 com a lista de eventos"]
     R1 --> J1["kioskctl: recusou"]
-    R2 --> J2["kioskctl imprime: horário, tipo, ação e detalhe"]
+    R2 --> J2["kioskctl imprime: horário, tipo, ação e o detalhe,<br/>traduzido para o idioma de quem lê (o log guarda um código)"]
 ```

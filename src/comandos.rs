@@ -107,21 +107,64 @@ struct RegraRef {
     rule_id: String,
 }
 
-fn uuid(campo: &str, valor: &str) -> Result<Uuid, String> {
-    Uuid::parse_str(valor).map_err(|_| format!("{campo} não é um UUID"))
+/// Por que um comando foi recusado na Camada 3. O texto (`Display`) é em inglês e fixo, porque
+/// vai para o log forense; quem mostra a um adulto (o `kioskd` local) traduz o que puder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ErroComando {
+    NotUuid(String),
+    BadTime(String),
+    InvalidBody(String),
+    LimitAbove(u64),
+    WindowOrder,
+    WindowPair,
+    UntilNotRfc,
+    UntilPast,
+    DateFormat,
+    NotRfc(String),
+    FromAfterTo,
+    PeriodAbove(i64),
+    LimitRange(u32),
+    UnknownAction(String),
+}
+
+impl std::fmt::Display for ErroComando {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotUuid(c) => write!(f, "{c} is not a UUID"),
+            Self::BadTime(c) => write!(f, "{c} is not in HH:MM format"),
+            Self::InvalidBody(e) => write!(f, "invalid body: {e}"),
+            Self::LimitAbove(m) => write!(f, "daily_limit_seconds above {m}"),
+            Self::WindowOrder => f.write_str("window_start must be before window_end"),
+            Self::WindowPair => f.write_str("window_start and window_end must come together"),
+            Self::UntilNotRfc => f.write_str("effective_until is not RFC 3339"),
+            Self::UntilPast => f.write_str("effective_until must be in the future"),
+            Self::DateFormat => f.write_str("date is not in YYYY-MM-DD format"),
+            Self::NotRfc(c) => write!(f, "{c} is not RFC 3339"),
+            Self::FromAfterTo => f.write_str("from must be before to"),
+            Self::PeriodAbove(d) => write!(f, "period above {d} days"),
+            Self::LimitRange(m) => write!(f, "limit outside 1..={m}"),
+            Self::UnknownAction(a) => write!(f, "unknown action: {a}"),
+        }
+    }
+}
+
+impl std::error::Error for ErroComando {}
+
+fn uuid(campo: &str, valor: &str) -> Result<Uuid, ErroComando> {
+    Uuid::parse_str(valor).map_err(|_| ErroComando::NotUuid(campo.to_owned()))
 }
 
 /// Hora no formato estrito `HH:MM` (dois dígitos).
-fn hora(campo: &str, valor: &str) -> Result<NaiveTime, String> {
+fn hora(campo: &str, valor: &str) -> Result<NaiveTime, ErroComando> {
     let ok_formato = valor.len() == 5 && valor.as_bytes()[2] == b':';
     NaiveTime::parse_from_str(valor, "%H:%M")
         .ok()
         .filter(|_| ok_formato)
-        .ok_or_else(|| format!("{campo} não está no formato HH:MM"))
+        .ok_or_else(|| ErroComando::BadTime(campo.to_owned()))
 }
 
-fn json<'a, T: Deserialize<'a>>(corpo: &'a [u8]) -> Result<T, String> {
-    serde_json::from_slice(corpo).map_err(|e| format!("corpo inválido: {e}"))
+fn json<'a, T: Deserialize<'a>>(corpo: &'a [u8]) -> Result<T, ErroComando> {
+    serde_json::from_slice(corpo).map_err(|e| ErroComando::InvalidBody(e.to_string()))
 }
 
 /// Ação pedida pelo nome na URL, quando é conhecida (a autorização, Camada 2, vem antes da validação).
@@ -138,35 +181,33 @@ pub fn acao_do_nome(nome: &str) -> Option<ActionType> {
 }
 
 /// Interpreta e valida o comando. `agora` serve para exigir que `effective_until` esteja no futuro.
-pub fn interpretar(acao: &str, corpo: &[u8], agora: DateTime<Utc>) -> Result<Comando, String> {
+pub fn interpretar(acao: &str, corpo: &[u8], agora: DateTime<Utc>) -> Result<Comando, ErroComando> {
     match acao {
         "add_rule" => {
             let b: AddRuleBruto = json(corpo)?;
             if b.daily_limit_seconds
                 .is_some_and(|l| l > MAX_LIMITE_SEGUNDOS)
             {
-                return Err(format!(
-                    "daily_limit_seconds acima de {MAX_LIMITE_SEGUNDOS}"
-                ));
+                return Err(ErroComando::LimitAbove(MAX_LIMITE_SEGUNDOS));
             }
             let time_window = match (&b.window_start, &b.window_end) {
                 (Some(a), Some(z)) => {
                     let (start, end) = (hora("window_start", a)?, hora("window_end", z)?);
                     if start >= end {
-                        return Err("window_start deve ser anterior a window_end".into());
+                        return Err(ErroComando::WindowOrder);
                     }
                     Some(TimeWindow { start, end })
                 }
                 (None, None) => None,
-                _ => return Err("window_start e window_end devem vir juntos".into()),
+                _ => return Err(ErroComando::WindowPair),
             };
             let effective_until = match &b.effective_until {
                 Some(t) => {
                     let t = DateTime::parse_from_rfc3339(t)
-                        .map_err(|_| "effective_until não é RFC 3339".to_string())?
+                        .map_err(|_| ErroComando::UntilNotRfc)?
                         .with_timezone(&Utc);
                     if t <= agora {
-                        return Err("effective_until deve estar no futuro".into());
+                        return Err(ErroComando::UntilPast);
                     }
                     Some(t)
                 }
@@ -189,9 +230,7 @@ pub fn interpretar(acao: &str, corpo: &[u8], agora: DateTime<Utc>) -> Result<Com
         "modify_limit" => {
             let b: ModifyLimitBruto = json(corpo)?;
             if b.daily_limit_seconds > MAX_LIMITE_SEGUNDOS {
-                return Err(format!(
-                    "daily_limit_seconds acima de {MAX_LIMITE_SEGUNDOS}"
-                ));
+                return Err(ErroComando::LimitAbove(MAX_LIMITE_SEGUNDOS));
             }
             Ok(Comando::ModifyLimit {
                 rule_id: uuid("rule_id", &b.rule_id)?,
@@ -201,7 +240,7 @@ pub fn interpretar(acao: &str, corpo: &[u8], agora: DateTime<Utc>) -> Result<Com
         "usage" => {
             let b: UsageBruto = json(corpo)?;
             let dia = NaiveDate::parse_from_str(&b.date, "%Y-%m-%d")
-                .map_err(|_| "date não está no formato AAAA-MM-DD".to_string())?;
+                .map_err(|_| ErroComando::DateFormat)?;
             Ok(Comando::Usage {
                 profile_id: uuid("profile_id", &b.profile_id)?,
                 dia,
@@ -212,18 +251,18 @@ pub fn interpretar(acao: &str, corpo: &[u8], agora: DateTime<Utc>) -> Result<Com
             let data = |campo: &str, v: &str| {
                 DateTime::parse_from_rfc3339(v)
                     .map(|d| d.with_timezone(&Utc))
-                    .map_err(|_| format!("{campo} não é RFC 3339"))
+                    .map_err(|_| ErroComando::NotRfc(campo.to_owned()))
             };
             let (de, ate) = (data("from", &b.from)?, data("to", &b.to)?);
             if de > ate {
-                return Err("from deve ser anterior a to".into());
+                return Err(ErroComando::FromAfterTo);
             }
             if ate - de > Duration::days(MAX_DIAS_DE_LOG) {
-                return Err(format!("período acima de {MAX_DIAS_DE_LOG} dias"));
+                return Err(ErroComando::PeriodAbove(MAX_DIAS_DE_LOG));
             }
             let limite = b.limit.unwrap_or(LIMITE_PADRAO_LOG);
             if !(1..=LIMITE_MAXIMO_LOG).contains(&limite) {
-                return Err(format!("limit fora de 1..={LIMITE_MAXIMO_LOG}"));
+                return Err(ErroComando::LimitRange(LIMITE_MAXIMO_LOG));
             }
             let profile_id = b
                 .profile_id
@@ -237,9 +276,8 @@ pub fn interpretar(acao: &str, corpo: &[u8], agora: DateTime<Utc>) -> Result<Com
                 limite,
             }))
         }
-        outra => Err(format!(
-            "ação desconhecida: {}",
-            outra.chars().take(64).collect::<String>()
+        outra => Err(ErroComando::UnknownAction(
+            outra.chars().take(64).collect::<String>(),
         )),
     }
 }
