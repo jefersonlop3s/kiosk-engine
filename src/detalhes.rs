@@ -71,6 +71,10 @@ pub enum Detalhe {
     HeartbeatNotRecorded {
         error: String,
     },
+    /// Conexão ao pipe da UI recusada (ADR-004): `INVALID_MESSAGE`, `WRONG_IMAGE` ou `RATE_LIMIT`.
+    UiRejected {
+        reason: String,
+    },
     PairingCodeNotAdmin,
     /// Comando administrativo tentado sem elevação (ADR-011). `caller_sid` só quando a conta não
     /// é um perfil de criança; a API dos pais o omite.
@@ -235,6 +239,14 @@ impl Detalhe {
                 }
             }
             Self::HeartbeatNotRecorded { error } => Msg::LogBatimentoNaoGravado { erro: error },
+            Self::UiRejected { reason } => Msg::LogUiRecusada {
+                motivo: match reason.as_str() {
+                    "WRONG_IMAGE" => Msg::UiMotivoOutroPrograma.em(idioma),
+                    "INVALID_MESSAGE" => Msg::UiMotivoMensagemInvalida.em(idioma),
+                    "RATE_LIMIT" => Msg::UiMotivoExcessoDeMensagens.em(idioma),
+                    outro => outro.to_owned(),
+                },
+            },
             Self::PairingCodeNotAdmin => Msg::LogCodigoSemAdmin,
             Self::AdminRequired {
                 command,

@@ -20,5 +20,7 @@ pub mod servico_windows;
 #[cfg(windows)]
 pub mod sistema_windows;
 pub mod textos;
+#[cfg(windows)]
+pub mod ui_windows;
 pub mod uso;
 pub mod versao;

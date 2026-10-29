@@ -60,6 +60,12 @@ Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam
 - Testes: `tests/agente_parada.rs` (9, com tempo simulado e SQLite real) e, no CI Windows, parada de propósito e `taskkill` seguidos de reinício com o intervalo acima do limiar.
 - Falta da F4: o batimento da UI (3 batimentos perdidos geram `TAMPER_SUSPECTED`) e o teste negativo de `taskkill` na UI, que dependem da bandeja (F3).
 
+## Bandeja, etapa 1: o canal serviço ↔ UI (2026-10-29)
+
+- `ui_windows` (servidor do pipe `kiosk-ui` e `GerenteUi`, que o agente usará para empurrar avisos e conferir o batimento) e `ipc` (protocolo) estão prontos. Desvios da ADR-004, na seção "Implementação e desvios" dela: um pipe só com roteamento pelo SID do token, e conferência do executável do cliente.
+- Testes no CI Windows (`tests/ui_windows.rs`): UI conecta e troca batimento, aviso e confirmação; primeira mensagem inválida, lixo depois do batimento e rajada derrubam e registram; outro executável é recusado; UI nova toma o lugar da antiga; uma conta padrão real conecta, só recebe o que é dela e não cria uma instância do pipe.
+- Próximas etapas: o serviço iniciar o `kiosk-ui.exe` na sessão da criança (`WTSQueryUserToken` + `CreateProcessAsUser`), o `kiosk-ui.exe` (bandeja), o agente usar o canal, e o `TAMPER_SUSPECTED` por batimento perdido.
+
 ## Aceites
 
 - Todo aceite deste épico exige Windows real ou VM; build no macOS não certifica comportamento.

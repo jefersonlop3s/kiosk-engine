@@ -1095,6 +1095,26 @@ catalogo! {
         pt: "batimento do agente não gravado: {erro}",
         es: "latido del agente no registrado: {erro}",
     },
+    LogUiRecusada { motivo: String } => {
+        en: "tray connection refused: {motivo}",
+        pt: "conexão da bandeja recusada: {motivo}",
+        es: "conexión de la bandeja rechazada: {motivo}",
+    },
+    UiMotivoOutroPrograma => {
+        en: "the program is not the installed kiosk-ui",
+        pt: "o programa não é o kiosk-ui instalado",
+        es: "el programa no es el kiosk-ui instalado",
+    },
+    UiMotivoMensagemInvalida => {
+        en: "invalid message",
+        pt: "mensagem inválida",
+        es: "mensaje no válido",
+    },
+    UiMotivoExcessoDeMensagens => {
+        en: "too many messages",
+        pt: "mensagens demais",
+        es: "demasiados mensajes",
+    },
     LogRetencao { removidos: u64 } => {
         en: "retention: {removidos} events older than 90 days removed",
         pt: "retenção: {removidos} eventos com mais de 90 dias removidos",
