@@ -285,7 +285,18 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     // instala e confere o que o Windows diz (em inglês, a convenção; o resto do teste mistura)
     let saida = ok(&["install", "--listen", &format!("127.0.0.1:{PORTA}")]);
     assert!(saida.contains("serviço em execução"), "{saida}");
+    let versao = kiosk_engine::versao::atual().curta();
+    assert!(
+        saida.contains(&format!("versão instalada {versao}")),
+        "{saida}"
+    );
     let estado = ok(&["status"]);
+    // este executável e o instalado (uma cópia dele) dizem a mesma versão
+    assert!(estado.contains(&format!("versão: {versao}")), "{estado}");
+    assert!(
+        estado.contains(&format!("versão instalada: {versao}")),
+        "{estado}"
+    );
     assert!(estado.contains("início: automático"), "{estado}");
     assert!(estado.contains("conta: LocalSystem"), "{estado}");
     assert!(
@@ -504,6 +515,26 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
         .then_some(()))
         .is_some(),
         "o serviço não abriu o pipe de auditoria"
+    );
+
+    // 0. uma sondagem (conecta e fecha sem enviar nada, como o `Test-Path` do roteiro do dono) não é
+    //    erro do serviço: nada no log, e o pipe segue atendendo
+    use std::os::windows::fs::OpenOptionsExt as _;
+    // o serviço recria a instância do pipe depois de cada conexão (o `exists()` acima já foi uma):
+    // "todas ocupadas" (231) é a janela entre as duas, como no cliente real
+    let sondagem = esperar(Duration::from_secs(10), || {
+        std::fs::OpenOptions::new()
+            .access_mode(kiosk_engine::auditoria_windows::DIREITOS_DO_CLIENTE)
+            .open(NOME_DO_PIPE)
+            .ok()
+    });
+    drop(sondagem.expect("a sondagem devia conectar"));
+    std::thread::sleep(Duration::from_millis(1500));
+    let log_do_servico =
+        std::fs::read_to_string(pasta("ProgramData").join("kioskd.log")).expect("kioskd.log");
+    assert!(
+        !log_do_servico.contains("ImpersonateNamedPipeClient"),
+        "a sondagem vazia virou erro no log: {log_do_servico}"
     );
 
     // 1. mensagem forjada: tenta se passar por outra conta; é recusada e o serviço responde ok:false

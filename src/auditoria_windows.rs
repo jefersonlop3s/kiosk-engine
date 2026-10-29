@@ -97,7 +97,8 @@ pub async fn servir(db: Arc<KioskDbManager>) -> Result<(), String> {
     }
 }
 
-/// Lê até o fim da linha, ou um pouco além do máximo (a validação recusa o excesso).
+/// Lê até o fim da linha, ou um pouco além do máximo (a validação recusa o excesso). Erro se o
+/// cliente fechou sem enviar um byte.
 async fn ler_linha(s: &mut NamedPipeServer) -> std::io::Result<Vec<u8>> {
     let mut linha = Vec::with_capacity(128);
     let mut pedaco = [0u8; 128];
@@ -110,6 +111,11 @@ async fn ler_linha(s: &mut NamedPipeServer) -> std::io::Result<Vec<u8>> {
         if linha.contains(&b'\n') || linha.len() > MAX_BYTES {
             break;
         }
+    }
+    if linha.is_empty() {
+        // conectou e fechou sem enviar nada (uma sondagem, como `Test-Path`): não há quem
+        // identificar nem o que validar, e a personificação seria recusada (erro 1368)
+        return Err(std::io::ErrorKind::UnexpectedEof.into());
     }
     if let Some(i) = linha.iter().position(|b| *b == b'\n') {
         linha.truncate(i);

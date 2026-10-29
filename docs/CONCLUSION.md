@@ -634,3 +634,10 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência no CI Windows**: conta padrão real conecta ao pipe, o serviço grava o evento com o SID do **token**, a mensagem forjada com outro SID é recusada, o evento leva o perfil quando a conta é uma criança cadastrada, a inundação para em 5 por minuto. O `kioskd.exe` inteiro rodando como a conta padrão **não** é exercitado no CI (`Start-Process -Credential` trava nos runners); fica atrás de `KIOSK_TESTE_PROCESSO_COMO_CONTA=1` para rodar num PC real.
 - **Falta**: ver no PC do dono, numa conta comum, a tentativa aparecer em `kioskctl log --profile` (GC-21 segue aberto até lá).
 
+## 2026-10-29 — GC-21 visto no PC real; `version`; sondagem do pipe
+
+- **GC-21 validado no PC real** (build de ensaio do commit `fe2461d`, sem release): uma conta comum rodando `pairing-code` e `profile list` gerou `AUTHZ_FAIL` em `kioskctl log --profile`, ligado ao perfil da criança e sem SID; na rajada, só 5 eventos por minuto; o administrador elevado gera o código normalmente; o serviço parou e voltou com `Stop-Service`/`Start-Service`. Não foi visto no PC: a recusa com o **serviço parado** ("NÃO registrada"). Os dados do teste (IP, conta, IDs) ficam fora do repositório.
+- **`kioskd version` e `kioskctl version`** (pedido do dono): `src/versao.rs` e `build.rs` gravam commit, data, alvo e perfil no binário. `status` e `install` mostram a versão; o `status` lê também a do executável instalado. Fluxogramas novos (`kioskd version`, `kioskctl version`) e atualizados (`kioskd status`, `kioskd install`), 30 diagramas validados com o mermaid-cli. Testes: `tests/versao.rs` (7) e, no CI Windows, versão no `install` e no `status`.
+- **Sondagem do pipe**: o erro 1368 no `kioskd.log` do PC real vinha de uma conexão que fechou sem enviar nada (o `Test-Path` do roteiro). `ler_linha` agora trata "nenhum byte" como encerramento sem erro; o teste Windows conecta e fecha e confere que o log não registra falha.
+- Fica para a 0.0.7, a pedido do dono, junto das correções que o teste em andamento achar.
+

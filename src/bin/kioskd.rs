@@ -403,6 +403,12 @@ fn instalar(escutar: &str) -> Result<(), String> {
     );
     eprintln!(
         "kioskd: {}",
+        Msg::VersaoInstalada {
+            v: kiosk_engine::versao::atual().curta()
+        }
+    );
+    eprintln!(
+        "kioskd: {}",
         Msg::LogDoServicoInstalado {
             caminho: sv::arquivo_log().display().to_string()
         }
@@ -415,6 +421,27 @@ fn desinstalar(apagar_dados: bool) -> Result<(), String> {
     kiosk_engine::servico_windows::desinstalar(apagar_dados)
 }
 
+/// Versão do executável que o serviço roda, lida de `<executável> version`: é a que importa
+/// quando o `status` é rodado de uma pasta com outra versão. `executavel` é a linha de comando do
+/// serviço (`"C:\\...\\kioskd.exe" service`). Prazo de 5 s; `None` se não deu para ler.
+#[cfg(windows)]
+fn versao_instalada(executavel: &str) -> Option<String> {
+    let caminho = executavel.strip_prefix('"')?.split('"').next()?.to_owned();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let saida = std::process::Command::new(caminho)
+            .arg("version")
+            .stdin(std::process::Stdio::null())
+            .output();
+        let _ = tx.send(saida);
+    });
+    let saida = rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .ok()?
+        .ok()?;
+    kiosk_engine::versao::da_primeira_linha(&String::from_utf8_lossy(&saida.stdout), "kioskd")
+}
+
 #[cfg(windows)]
 fn estado() -> Result<(), String> {
     use kiosk_engine::servico_windows as sv;
@@ -423,6 +450,12 @@ fn estado() -> Result<(), String> {
             "{}",
             Msg::LblServico {
                 v: format!("{} {}", sv::NOME_SERVICO, Msg::NaoInstalado)
+            }
+        );
+        println!(
+            "{}",
+            Msg::LblVersao {
+                v: kiosk_engine::versao::atual().curta()
             }
         );
         return Ok(());
@@ -452,7 +485,25 @@ fn estado() -> Result<(), String> {
         }
     );
     println!("{}", Msg::LblConta { v: e.conta });
-    println!("{}", Msg::LblExecutavel { v: e.executavel });
+    println!(
+        "{}",
+        Msg::LblExecutavel {
+            v: e.executavel.clone()
+        }
+    );
+    println!(
+        "{}",
+        Msg::LblVersao {
+            v: kiosk_engine::versao::atual().curta()
+        }
+    );
+    println!(
+        "{}",
+        Msg::LblVersaoInstalada {
+            v: versao_instalada(&e.executavel)
+                .unwrap_or_else(|| Msg::VersaoIndisponivel.to_string())
+        }
+    );
     for v in e.ambiente {
         println!("{}", Msg::LblAmbiente { v });
     }
@@ -606,6 +657,10 @@ async fn executar(args: &[String]) -> Result<(), String> {
             desinstalar(apagar)
         }
         ["status"] => estado(),
+        ["version"] => {
+            println!("{}", kiosk_engine::versao::atual().completa("kioskd"));
+            Ok(())
+        }
         ["pairing-code"] => {
             let db = abrir_banco().await?;
             let codigo = db

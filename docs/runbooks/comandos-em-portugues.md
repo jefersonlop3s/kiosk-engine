@@ -24,6 +24,7 @@ A API fala só inglês; isto vale apenas para quem digita os comandos.
 | `instalar` | `install` |
 | `desinstalar` | `uninstall` |
 | `estado` | `status` |
+| `versao` | `version` |
 | `servico` | `service` |
 | `parear` | `pair` |
 | `uso` | `usage` |
@@ -63,6 +64,7 @@ A API fala só inglês; isto vale apenas para quem digita os comandos.
 | `kioskd regra criar --perfil ID --app ID --limite 3600 --ativar` | `kioskd rule create --profile ID --app ID --limit 3600 --activate` |
 | `kioskd instalar --escutar 127.0.0.1:8443` | `kioskd install --listen 127.0.0.1:8443` |
 | `kioskd estado` | `kioskd status` |
+| `kioskd versao` | `kioskd version` |
 | `kioskctl parear --servidor 127.0.0.1:8443 --codigo ABCD2345` | `kioskctl pair --server 127.0.0.1:8443 --code ABCD2345` |
 | `kioskctl uso --perfil ID` | `kioskctl usage --profile ID` |
 

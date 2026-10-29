@@ -295,7 +295,7 @@ flowchart TD
     L --> M["SCM: inicia e espera em execução por até 30 s"]
     M --> N{"continua em execução 2 s depois?"}
     N -->|não| E3["erro: iniciou e parou, veja kioskd.log"]
-    N -->|sim| R["imprime o pid, o endereço e onde fica o log"]
+    N -->|sim| R["imprime o pid, o endereço, a versão instalada (a deste executável)<br/>e onde fica o log"]
 ```
 
 O banco não é tocado pela instalação; o serviço o abre e aplica as migrações ao subir. Nada vai para o log forense: a instalação é ato do administrador do PC.
@@ -331,13 +331,24 @@ flowchart TD
 flowchart TD
     A["kioskd status"] --> B["SCM: abre o serviço kiosk só para consulta"]
     B --> C{"existe?"}
-    C -->|não| R1["imprime: não instalado"]
+    C -->|não| R1["imprime: não instalado e a versão deste executável"]
     C -->|sim| D["SCM: estado e pid; configuração: início, conta e executável"]
     D --> E["registro: Environment do serviço e Path do sistema"]
-    E --> R2["imprime estado, pid, início, conta, executável,<br/>KIOSK_LISTEN e KIOSK_LANG, se está no PATH, pasta de dados e log,<br/>no idioma de quem pergunta"]
+    E --> V["roda o kioskd instalado com version, com prazo de 5 s,<br/>e lê a primeira linha"]
+    V --> R2["imprime estado, pid, início, conta, executável,<br/>a versão deste executável e a do instalado (ou: desconhecida),<br/>KIOSK_LISTEN e KIOSK_LANG, se está no PATH, pasta de dados e log,<br/>no idioma de quem pergunta"]
 ```
 
-Só lê; não abre o banco nem grava evento.
+Só lê; não abre o banco nem grava evento. As duas versões divergem quando o `status` roda de uma pasta com outro pacote que o instalado: rode `kioskd install` dessa pasta para atualizar.
+
+### `kioskd version`
+
+```mermaid
+flowchart TD
+    A["kioskd version (ou --version, -V; em português: versao)"] --> B["lê o que foi gravado no binário na compilação:<br/>versão do Cargo.toml, commit, data, alvo e perfil"]
+    B --> R["imprime a linha fixa: kioskd versão (commit)<br/>e depois commit, data, alvo e perfil no idioma de quem pergunta"]
+```
+
+Só lê o próprio binário: não abre o banco, não fala com o serviço, não exige administrador e não grava evento. A primeira linha tem formato fixo porque o `kioskd status` a lê do executável instalado.
 
 ### `kioskd service`
 
@@ -506,3 +517,13 @@ flowchart TD
     R1 --> J1["kioskctl: recusou"]
     R2 --> J2["kioskctl imprime: horário, tipo, ação e o detalhe,<br/>traduzido para o idioma de quem lê (o log guarda um código)"]
 ```
+
+### `kioskctl version`
+
+```mermaid
+flowchart TD
+    A["kioskctl version (ou --version, -V; em português: versao)"] --> B["lê o que foi gravado no binário na compilação:<br/>versão do Cargo.toml, commit, data, alvo e perfil"]
+    B --> R["imprime a linha fixa: kioskctl versão (commit)<br/>e depois commit, data, alvo e perfil no idioma de quem pergunta"]
+```
+
+Só lê o próprio binário: não usa credenciais, não fala com o `kioskd` e não grava evento. Serve para conferir se o `kioskctl` e o `kioskd` são do mesmo pacote.

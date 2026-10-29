@@ -20,6 +20,7 @@ pub const COMANDOS: &[(&str, &str)] = &[
     ("instalar", "install"),
     ("desinstalar", "uninstall"),
     ("estado", "status"),
+    ("versao", "version"),
     ("servico", "service"),
     ("parear", "pair"),
     ("uso", "usage"),
@@ -74,6 +75,10 @@ pub fn em_ingles(args: &[String]) -> Vec<String> {
             a.clone()
         };
         saida.push(traduzido);
+    }
+    // `--version` e `-V`, sozinhos, valem como o comando `version`
+    if saida == ["--version"] || saida == ["-V"] {
+        return vec!["version".to_owned()];
     }
     saida
 }
@@ -136,6 +141,7 @@ pub const FORMAS_KIOSKD: &[Forma] = &[
     forma(&["install"], &["--listen"], &[], 0),
     forma(&["uninstall"], &[], &["--purge-data"], 0),
     forma(&["status"], &[], &[], 0),
+    forma(&["version"], &[], &[], 0),
     forma(&["service"], &[], &[], 0),
 ];
 
@@ -153,6 +159,7 @@ pub const FORMAS_KIOSKCTL: &[Forma] = &[
     forma(&["rule", "limit"], &["--seconds"], &[], 1),
     forma(&["usage"], &["--profile", "--date"], &[], 0),
     forma(&["log"], &["--profile", "--days", "--limit"], &[], 0),
+    forma(&["version"], &[], &[], 0),
 ];
 
 /// Por que os argumentos foram recusados.

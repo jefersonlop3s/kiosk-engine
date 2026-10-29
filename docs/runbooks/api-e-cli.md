@@ -113,9 +113,13 @@ Num só passo, o `instalar`:
 Rodar de novo atualiza a instalação, por exemplo com uma versão nova do pacote ou outro endereço. Para conferir:
 
 ```powershell
-.\kioskd.exe status          # estado, pid, início automático, conta, endereço e onde fica o log
-Get-Content C:\ProgramData\kiosk\kioskd.log -Tail 20
+.\kioskd.exe status          # estado, pid, versão, início automático, conta, endereço e onde fica o log
+Get-Content C:\ProgramData\kiosk\kioskd.log -Tail 20 -Encoding UTF8
 ```
+
+`-Encoding UTF8` evita que o PowerShell 5 mostre `Ã§` no lugar de `ç`: o log é UTF-8.
+
+O `status` mostra duas versões: `versão`, a deste executável (o da pasta de onde você o rodou), e `versão instalada`, a do executável que o serviço roda. Se divergem, rode `.\kioskd.exe install --listen ...` desta pasta para atualizar. `kioskd version` (e `kioskctl version`) mostra o detalhe da compilação: versão, commit, data, alvo e perfil. Ao pedir ajuda com um problema, cole essa saída.
 
 Para remover, use `.\kioskd.exe uninstall`: para e apaga o serviço e os executáveis, e **mantém** o banco. Com `--purge-data`, apaga também `C:\ProgramData\kiosk`, mas só depois de você digitar `APAGAR`. O Windows pode pedir permissão de firewall para a porta: libere só para redes privadas (a Tailscale).
 

@@ -8,8 +8,14 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - **Rastro das tentativas de comando sem privilégio** (ADR-011): quando uma conta sem elevação (a da criança, por exemplo) tenta um comando administrativo do `kioskd`, ele recusa e avisa o serviço por um named pipe local (`kiosk-audit`); o serviço, que é SYSTEM, grava um `AUTHZ_FAIL` no log forense, ligado ao perfil da criança. O chamador é lido do token da conexão, nunca da mensagem; no máximo 5 avisos por minuto por conta. Administrador que esqueceu de elevar também é registrado, marcado como tal. `kioskctl log --profile` mostra a tentativa (sem o SID).
 - Todo comando do `kioskd` que mexe nos dados (`pairing-code`, `devices`, `revoke`, `profile *`, `app *`, `rule *`, `install`, `uninstall`) confere a elevação antes de abrir o banco e explica a recusa, no lugar do erro cru do SQLite (`unable to open database file (code: 14)`). A mensagem diz se a tentativa foi ou não registrada.
 
+- **`kioskd version` e `kioskctl version`** (também `--version`, `-V` e, em português, `versao`): versão, commit, data, alvo e perfil da compilação. A primeira linha tem formato fixo (`kioskd 0.0.6 (a1b2c3d)`); o resto sai no idioma de quem lê.
+- `kioskd status` mostra a versão deste executável e a do executável instalado (lida de `kioskd version` do que o serviço roda), e `kioskd install` diz a versão instalada. O log do serviço também grava o commit na linha de início.
+
 ### Alterado
 - Em `kioskctl log`, o detalhe de `AUTHZ_FAIL` continua omitido, exceto o da tentativa sem privilégio.
+
+### Corrigido
+- O serviço registrava `ImpersonateNamedPipeClient ... (os error 1368)` no `kioskd.log` quando algo conectava ao pipe `kiosk-audit` e fechava sem enviar nada (visto no PC real, com `Test-Path \\.\pipe\kiosk-audit`). Uma sondagem assim não é erro e agora é descartada em silêncio; uma linha vazia enviada de verdade continua virando `VALIDATION_FAIL`.
 
 ## [0.0.6] - 2026-10-29
 

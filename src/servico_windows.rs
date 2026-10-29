@@ -1030,7 +1030,7 @@ unsafe extern "system" fn servico_main(_argc: u32, _argv: *mut PWSTR) {
     eprintln!(
         "kioskd: {}",
         Msg::ServicoIniciado {
-            versao: env!("CARGO_PKG_VERSION").to_owned(),
+            versao: crate::versao::atual().curta(),
             pid: std::process::id()
         }
     );
