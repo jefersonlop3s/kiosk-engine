@@ -250,6 +250,89 @@ flowchart TD
     D --> E["imprime ID, perfil, app, estado, limite e janela"]
 ```
 
+### `kioskd instalar`
+
+```mermaid
+flowchart TD
+    A["kioskd instalar --escutar ip:porta, num PowerShell como administrador"] --> B{"cada endereço tem porta<br/>e é loopback ou Tailscale?"}
+    B -->|não| E1["erro e saída: nada é alterado"]
+    B -->|sim| C{"SCM aceita criar serviço?"}
+    C -->|"não: acesso negado"| E2["erro: rode como administrador"]
+    C -->|sim| D["cria ProgramData\kiosk e aplica o dono e as permissões:<br/>só SYSTEM e Administradores, sem herança, inclusive no que já havia dentro"]
+    D --> F{"serviço kiosk já existe?"}
+    F -->|sim| G["para o serviço e espera parar"]
+    F -->|não| H["segue"]
+    G --> I["copia kioskd.exe e kioskctl.exe para Program Files\kiosk"]
+    H --> I
+    I --> J["SCM: cria ou reconfigura o serviço<br/>LocalSystem, início automático, binário kioskd servico"]
+    J --> K["SCM: descrição, reinício 5 s após falha,<br/>permissões do serviço: conta padrão só consulta"]
+    K --> L["registro: Environment do serviço com KIOSK_LISTEN"]
+    L --> M["SCM: inicia e espera em execução por até 30 s"]
+    M --> N{"continua em execução 2 s depois?"}
+    N -->|não| E3["erro: iniciou e parou, veja kioskd.log"]
+    N -->|sim| R["imprime o pid, o endereço e onde fica o log"]
+```
+
+O banco não é tocado pela instalação; o serviço o abre e aplica as migrações ao subir. Nada vai para o log forense: a instalação é ato do administrador do PC.
+
+### `kioskd desinstalar`
+
+```mermaid
+flowchart TD
+    A["kioskd desinstalar, com ou sem --apagar-dados"] --> B{"--apagar-dados?"}
+    B -->|sim| C{"digitou APAGAR?"}
+    C -->|não| E1["erro: nada foi alterado"]
+    C -->|sim| D
+    B -->|não| D{"serviço kiosk existe?"}
+    D -->|sim| F["SCM: para, espera parar e remove o serviço"]
+    D -->|não| G["avisa que não estava instalado"]
+    F --> H["remove kioskd.exe e kioskctl.exe de Program Files\kiosk"]
+    G --> H
+    H --> I{"o kioskd em uso está nessa pasta?"}
+    I -->|sim| J["agenda a remoção dele e da pasta para o próximo reinício"]
+    I -->|não| K["remove a pasta"]
+    J --> L{"--apagar-dados confirmado?"}
+    K --> L
+    L -->|sim| M["apaga ProgramData\kiosk: banco, uso, log forense e kioskd.log"]
+    L -->|não| N["mantém ProgramData\kiosk e diz onde está"]
+```
+
+### `kioskd estado`
+
+```mermaid
+flowchart TD
+    A["kioskd estado"] --> B["SCM: abre o serviço kiosk só para consulta"]
+    B --> C{"existe?"}
+    C -->|não| R1["imprime: não instalado"]
+    C -->|sim| D["SCM: estado e pid; configuração: início, conta e executável"]
+    D --> E["registro: Environment do serviço"]
+    E --> R2["imprime estado, pid, início, conta, executável,<br/>KIOSK_LISTEN, pasta de dados e log"]
+```
+
+Só lê; não abre o banco nem grava evento.
+
+### `kioskd servico`
+
+```mermaid
+flowchart TD
+    W["Windows: SCM inicia Program Files\kiosk\kioskd.exe servico,<br/>como LocalSystem, com KIOSK_LISTEN do registro"] --> A["entrega a thread principal ao SCM"]
+    A --> B["registra o tratador de controle; informa iniciando"]
+    B --> C{"abre ProgramData\kiosk\kioskd.log?"}
+    C -->|não| E1["informa parado com código 3"]
+    C -->|sim| D["stderr vai para o log; gira para .1 acima de 10 MiB"]
+    D --> F["informa em execução"]
+    F --> G["mesmo fluxo do kioskd servir com o agente"]
+    G --> H{"o que acontece primeiro?"}
+    H -->|"SCM pede parar ou desligamento"| I["informa parando; encerra as tarefas em até 5 s"]
+    H -->|"servir falha, por exemplo porta ocupada"| J["registra o erro no log"]
+    I --> K["informa parado, código 0"]
+    J --> L["informa parado com código 1"]
+    L --> M["SCM reinicia o serviço após 5 s"]
+    E1 --> M
+```
+
+Rodado à mão, fora do SCM, falha e explica que o caminho é `kioskd instalar`.
+
 ## kioskctl
 
 ### `kioskctl parear`

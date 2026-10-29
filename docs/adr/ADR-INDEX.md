@@ -11,8 +11,8 @@ Status: Proposto → Aceito | Rejeitado | Descontinuado | Substituído. **O acei
 | [ADR-004](ADR-004-comunicacao-servico-ui-por-named-pipe.md) | Comunicação serviço ↔ UI por named pipe | Aceito | 2026-10-28 | kiosk |
 | [ADR-005](ADR-005-rede-da-api-de-comando.md) | Topologia de rede da API de comando | Aceito | 2026-10-28 | kiosk |
 | [ADR-006](ADR-006-assinatura-de-requisicoes-e-pareamento.md) | Assinatura de requisições e pareamento de dispositivos | Aceito | 2026-10-28 | kiosk |
-| [ADR-007](ADR-007-forma-do-assistente-de-configuracao.md) | Forma do assistente de primeira configuração | Proposto | 2026-10-29 | kiosk |
-| [ADR-008](ADR-008-formato-do-instalador.md) | Formato do instalador | Proposto | 2026-10-29 | kiosk |
-| [ADR-009](ADR-009-origem-da-lista-de-programas.md) | Origem da lista de programas do assistente | Proposto | 2026-10-29 | kiosk |
+| [ADR-007](ADR-007-forma-do-assistente-de-configuracao.md) | Forma do assistente de primeira configuração | Aceito | 2026-10-29 | kiosk |
+| [ADR-008](ADR-008-formato-do-instalador.md) | Formato do instalador | Aceito | 2026-10-29 | kiosk |
+| [ADR-009](ADR-009-origem-da-lista-de-programas.md) | Origem da lista de programas do assistente | Aceito | 2026-10-29 | kiosk |
 
 **Próximo número livre**: ADR-010.

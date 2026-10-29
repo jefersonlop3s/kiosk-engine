@@ -31,4 +31,4 @@ Marco do MVP: fim da sprint 5. Nela, um PC Windows com duas crianças tem regras
 ## Condições de retomada
 
 - E-006 congelado até E-005 F3.
-- E-007 depende do aceite das ADR-007 (forma do assistente), ADR-008 (formato do instalador) e ADR-009 (origem da lista de programas), propostas em 2026-10-29. As ADRs de detecção, IPC, rede e assinatura (ADR-003 a ADR-006) já foram aceitas.
+- E-007 em execução: ADR-007 (forma do assistente), ADR-008 (formato do instalador) e ADR-009 (origem da lista de programas) aceitas em 2026-10-29. As ADRs de detecção, IPC, rede e assinatura (ADR-003 a ADR-006) já foram aceitas.

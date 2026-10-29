@@ -10,6 +10,6 @@ Frentes de trabalho com resultado, fases, dependências e aceites. Use o [templa
 | [E-004](E-004-agente-windows-enforcement.md) | Agente Windows de enforcement | em andamento | ADR-001 a ADR-004 |
 | [E-005](E-005-api-comando-e-pareamento.md) | API de comando e pareamento | concluído no que não exige Windows | ADR-005, ADR-006 |
 | [E-006](E-006-app-mobile-administracao.md) | App mobile de administração | congelado | — |
-| [E-007](E-007-onboarding-e-instalador.md) | Onboarding e instalador | proposto | ADR-007, ADR-008, ADR-009 (propostas) |
+| [E-007](E-007-onboarding-e-instalador.md) | Onboarding e instalador | em andamento | ADR-007, ADR-008, ADR-009 |
 
 Consulte a [organização documental](../README.md).

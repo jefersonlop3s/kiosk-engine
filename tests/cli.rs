@@ -822,3 +822,43 @@ async fn regras_administradas_no_proprio_pc_pelo_kioskd() {
         ]
     );
 }
+
+#[test]
+fn instalar_recusa_escuta_fora_da_adr005_antes_de_tocar_no_sistema() {
+    let dir = TempDir::new().unwrap();
+    let db = format!("sqlite://{}", dir.path().join("k.db").display());
+    for (ruim, esperado) in [
+        ("0.0.0.0:8443", "recus"),
+        ("192.168.0.10:8443", "recus"),
+        ("127.0.0.1", "falta a porta"),
+        ("", "nenhum endereço"),
+    ] {
+        let o = kioskd(&db, None, &["instalar", "--escutar", ruim]);
+        assert!(!o.status.success(), "aceitou {ruim:?}");
+        let erro = texto(&o.stderr).to_lowercase();
+        assert!(erro.contains(esperado), "{ruim:?}: {erro}");
+    }
+    // sem --escutar não há instalação (a ADR-005 não tem endereço padrão)
+    assert!(!kioskd(&db, None, &["instalar"]).status.success());
+    assert!(!dir.path().join("k.db").exists(), "abriu o banco");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn comandos_do_servico_do_windows_falham_fora_do_windows() {
+    let dir = TempDir::new().unwrap();
+    let db = format!("sqlite://{}", dir.path().join("k.db").display());
+    for args in [
+        &["instalar", "--escutar", "127.0.0.1:8443"][..],
+        &["desinstalar"],
+        &["estado"],
+        &["servico"],
+    ] {
+        let o = kioskd(&db, None, args);
+        assert!(!o.status.success(), "{args:?}");
+        assert!(
+            texto(&o.stderr).contains("só existe no Windows"),
+            "{args:?}"
+        );
+    }
+}

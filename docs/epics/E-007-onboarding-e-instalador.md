@@ -1,6 +1,6 @@
 # E-007 — Onboarding e instalador
 
-Estado: proposto em 2026-10-29 (ideia do dono; não é para agora). Responsável: a definir. Repositório: kiosk.
+Estado: em andamento desde 2026-10-29 (ADR-007 a ADR-009 aceitas; começa pela etapa 1 da ADR-008). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -24,7 +24,7 @@ Estado: proposto em 2026-10-29 (ideia do dono; não é para agora). Responsável
 
 - Origem: pedido do dono em 2026-10-29, depois dos testes no próprio PC ([CONCLUSION](../CONCLUSION.md), entradas de 2026-10-28 e 2026-10-29).
 - Reaproveita: `kioskd perfil|app|regra` e `sistema_windows::sid_de_usuario` (a lógica já existe; falta o fluxo guiado).
-- **ADRs propostas (2026-10-29), aguardando aceite do dono**:
+- **ADRs aceitas pelo dono em 2026-10-29**:
   - [ADR-007](../adr/ADR-007-forma-do-assistente-de-configuracao.md): assistente interativo no terminal (`kioskd configurar`), com modo não interativo para CI e reinstalação; interface gráfica depois, junto da bandeja;
   - [ADR-008](../adr/ADR-008-formato-do-instalador.md): primeiro autoinstalação (`kioskd instalar|desinstalar`, serviço SYSTEM no SCM), depois `.msi` com WiX e winget;
   - [ADR-009](../adr/ADR-009-origem-da-lista-de-programas.md): atalhos do menu Iniciar e processos em execução, com entrada manual; nada além das escolhas é gravado.
@@ -36,6 +36,11 @@ Estado: proposto em 2026-10-29 (ideia do dono; não é para agora). Responsável
 | F1 | Assistente em terminal: pasta e permissões, lista de contas locais para escolher perfis, lista de programas para escolher apps, regras iniciais, endereço de escuta, código de pareamento | ADR-007 e ADR-009 aceitas | Execução de ponta a ponta num Windows limpo, com o fluxograma no padrão do [AGENTS.md](../../AGENTS.md#fluxogramas-dos-comandos) |
 | F2 | `kioskd` como serviço do Windows (SCM, conta SYSTEM, recuperação automática) e remoção limpa | F1, [E-004](E-004-agente-windows-enforcement.md), ADR-008 aceita | Serviço sobrevive a reinício; conta da criança não consegue parar o serviço |
 | F3 | Instalador e lançador | F2, ADR-008 aceita | Instalação e desinstalação num Windows limpo sem passos manuais |
+
+## Progresso
+
+- **F2** (2026-10-29): `kioskd instalar|desinstalar|estado|servico` implementados (`src/servico_windows.rs`) e validados no CI Windows por `tests/servico_windows.rs`. O teste instala, confere o SCM e o registro, chama a API servida pelo serviço, derruba o processo e vê o reinício, prova que uma conta padrão não para nem inicia o serviço e não lê a pasta de dados, reinstala e desinstala com e sem `--apagar-dados`. Falta o reinício do PC real (GC-16 no [PENDING](../PENDING.md)).
+- A F2 veio antes da F1 porque o assistente vai chamar o `instalar` no fim.
 
 ## Aceites
 

@@ -462,3 +462,17 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros; E-007, índice de épicos, ROADMAP e PENDING apontam para as ADRs.
 - **Limitações**: nenhuma alternativa foi exercitada; são análise, não medição.
 
+## 2026-10-29 — Aceite das ADR-007 a ADR-009 e início do E-007
+
+- **Origem**: aceite explícito do dono ("aceito.. inicie").
+- **Resultado**: [ADR-007](adr/ADR-007-forma-do-assistente-de-configuracao.md), [ADR-008](adr/ADR-008-formato-do-instalador.md) e [ADR-009](adr/ADR-009-origem-da-lista-de-programas.md) passam a **Aceito**; o [E-007](epics/E-007-onboarding-e-instalador.md) entra em andamento, começando pela etapa 1 da ADR-008 (autoinstalação e serviço do Windows).
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros antes do commit.
+
+
+## 2026-10-29 — Serviço do Windows: `kioskd instalar`, `desinstalar` e `estado` (E-007 F2, ADR-008 etapa 1)
+
+- **Origem**: [ADR-008](adr/ADR-008-formato-do-instalador.md) aceita; GC-16 do [PENDING](PENDING.md).
+- **Resultado**: `src/servico_windows.rs` implementa a autoinstalação (cópia para `%ProgramFiles%\kiosk`, pasta de dados com dono e acesso só de SYSTEM e Administradores, serviço `kiosk` LocalSystem com início automático, reinício em falha e DACL que só deixa a conta padrão consultar, `KIOSK_LISTEN` no `Environment` do serviço) e o modo serviço (`kioskd servico`, despachante do SCM, stderr para `kioskd.log`). Fluxogramas dos quatro comandos; runbook com a seção 4.1.
+- **Evidência local**: `cargo clippy -D warnings` no Linux e cruzado para `x86_64-pc-windows-gnu`, 127 testes passando no Linux, 28 diagramas validados com o mermaid-cli.
+- **Evidência de aceite**: `tests/servico_windows.rs` no runner Windows do CI (`KIOSK_TESTE_SERVICO=1`), com controles negativos (escuta fora da ADR-005, conta padrão tentando parar e iniciar o serviço e ler os dados, `--apagar-dados` sem confirmação).
+- **Pendente**: reinício do PC real (GC-16).

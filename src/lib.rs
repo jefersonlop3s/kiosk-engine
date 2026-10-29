@@ -10,6 +10,8 @@ pub mod motor;
 pub mod pareamento;
 pub mod security_logger_impl;
 #[cfg(windows)]
+pub mod servico_windows;
+#[cfg(windows)]
 pub mod sistema_windows;
 pub mod textos;
 pub mod uso;
