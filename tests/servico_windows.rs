@@ -576,7 +576,15 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
         .find(|p| uuid::Uuid::parse_str(p).is_ok())
         .expect("id do perfil")
         .to_owned();
-    assert_eq!(como(conta, || avisar_tentativa("rule create")), Ok(()));
+    let confirmou = como(conta, || avisar_tentativa("rule create"));
+    assert_eq!(
+        confirmou,
+        Ok(()),
+        "log do serviço: {}",
+        std::fs::read_to_string(pasta("ProgramData").join("kioskd.log"))
+            .map(|l| l.lines().rev().take(8).collect::<Vec<_>>().join(" | "))
+            .unwrap_or_else(|e| e.to_string())
+    );
     let e = eventos();
     let ultimo = e.last().unwrap();
     assert_eq!(
