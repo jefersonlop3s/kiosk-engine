@@ -11,6 +11,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - `kioskd codigo-pareamento` no Windows exige administrador elevado. Sem isso, recusa, grava `AUTHZ_FAIL` no log forense e não cria código. Antes, sem o `kioskd instalar` ou com `KIOSK_DB` em outro lugar, uma conta padrão conseguia gerar código e parear um cliente.
 
 ### Documentação
+- E-012 "Internacionalização" e ADR-010 propostos: en-US, pt-BR e es-ES nas interfaces, no serviço e nas respostas; comandos e opções da CLI em inglês, com os nomes em português aceitos até a 0.1.0.
 - `README.md` novo: o que é o kiosk, como o cliente e o serviço funcionam, conceitos, plataformas e dois fluxogramas para entender o projeto num olhar.
 - ROADMAP com a maturidade de cada épico em porcentagem (critério: média das fases, concluída 100%, parcial 50%).
 - Responsáveis são os administradores: todos gerem todas as contas monitoradas, no Windows, no Linux e no macOS (decisão do dono).

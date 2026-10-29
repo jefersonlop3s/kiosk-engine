@@ -15,5 +15,6 @@ Frentes de trabalho com resultado, fases, dependências e aceites. Use o [templa
 | [E-009](E-009-servico-linux.md) | Serviço em Linux | congelado | revisão da ADR-002 na retomada |
 | [E-010](E-010-servico-macos.md) | Serviço em macOS | congelado | revisão da ADR-002 na retomada |
 | [E-011](E-011-servico-android.md) | Serviço em Android | congelado | revisão da ADR-002 na retomada |
+| [E-012](E-012-internacionalizacao.md) | Internacionalização (en-US, pt-BR, es-ES) e CLI em inglês | proposto | ADR-010 (proposta) |
 
 Consulte a [organização documental](../README.md).

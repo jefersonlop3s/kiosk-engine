@@ -533,3 +533,9 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - fluxogramas de `instalar`, `desinstalar` e `estado` e o runbook atualizados; ROADMAP: E-004 em 70% e E-007 em 35%.
 - **Evidência**: log do dono (nenhum dado pessoal copiado); `tests/servico_windows.rs` no CI Windows confere, pelo `reg query`, que a pasta entra uma vez, que a reinstalação não duplica e que o PATH volta ao original depois do `desinstalar`.
 
+## 2026-10-29 — E-012 e ADR-010: idiomas e CLI em inglês (proposta)
+
+- **Origem**: pedido do dono: en-US, pt-BR e es-ES nas interfaces, no serviço e nas respostas; comandos da CLI com equivalentes em inglês como padrão (`kioskd estado` → `kioskd status`).
+- **Resultado**: [E-012](epics/E-012-internacionalizacao.md) e [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md) **propostos**. A ADR traz a tabela completa de nomes, os apelidos em português até a 0.1.0 (o serviço instalado na 0.0.4 está registrado como `servico`), o catálogo no código com `match` exaustivo, a ordem de escolha do idioma e o log forense com códigos. Nada implementado antes do aceite.
+- **Evidência**: `verificar_refs.py` e `verificar_adr.py` sem erros.
+
