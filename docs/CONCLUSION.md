@@ -462,3 +462,9 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros; E-007, índice de épicos, ROADMAP e PENDING apontam para as ADRs.
 - **Limitações**: nenhuma alternativa foi exercitada; são análise, não medição.
 
+## 2026-10-29 — Aceite das ADR-007 a ADR-009 e início do E-007
+
+- **Origem**: aceite explícito do dono ("aceito.. inicie").
+- **Resultado**: [ADR-007](adr/ADR-007-forma-do-assistente-de-configuracao.md), [ADR-008](adr/ADR-008-formato-do-instalador.md) e [ADR-009](adr/ADR-009-origem-da-lista-de-programas.md) passam a **Aceito**; o [E-007](epics/E-007-onboarding-e-instalador.md) entra em andamento, começando pela etapa 1 da ADR-008 (autoinstalação e serviço do Windows).
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros antes do commit.
+

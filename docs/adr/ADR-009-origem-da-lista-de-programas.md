@@ -1,6 +1,6 @@
 # ADR-009 — Origem da lista de programas do assistente
 
-Status: Proposto. Data: 2026-10-29. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-29 pelo dono (Jeferson Lopes). Data: 2026-10-29. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; [E-007](../epics/E-007-onboarding-e-instalador.md) F1.
 
 ## Contexto

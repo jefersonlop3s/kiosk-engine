@@ -1,6 +1,6 @@
 # ADR-007 — Forma do assistente de primeira configuração
 
-Status: Proposto. Data: 2026-10-29. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-29 pelo dono (Jeferson Lopes). Data: 2026-10-29. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; [E-007](../epics/E-007-onboarding-e-instalador.md) F1.
 
 ## Contexto
