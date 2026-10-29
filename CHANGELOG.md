@@ -60,6 +60,7 @@ Binários: `kioskd` (serviço) e `kioskctl` (CLI dos pais); uso em `api-e-cli.md
 - Estrutura documental do método sovereign-harness em `docs/`, com índice, PENDING, ROADMAP e CONCLUSION.
 - `AGENTS.md` como fonte única de instruções para agentes; `CLAUDE.md` passa a ser symlink para ele.
 - Arquitetura movida para `docs/architecture/README.md`; `ARCHITECTURE.md` vira stub.
+- Repositório publicado em github.com/jefersonlop3s/kiosk-engine; fluxo de trabalho por Pull Request e proibição de dados reais de crianças no Git descritos no AGENTS.md.
 - ADR-003 a ADR-006 propostas (detecção de processos, IPC serviço↔UI, rede da API, assinatura e pareamento); as quatro aceitas pelo dono em 2026-10-28.
 - ADR-001 (enforcement ativo e visível) e ADR-002 (perfil por conta Windows, somente Windows) propostas e aceitas em 2026-10-27.
 

@@ -26,7 +26,16 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - [ADR-001](adr/ADR-001-enforcement-ativo-e-visivel.md) e [ADR-002](adr/ADR-002-identidade-por-conta-windows.md) passam a **Aceito**; E-001 F2 fica desbloqueada;
   - o trabalho em andamento do dono em `src/` foi commitado como está, num commit próprio. Ele não compila e segue rastreado como GC-07 no [PENDING](PENDING.md).
 - **Limitações**: nenhum código foi corrigido; o build continua quebrado até E-001 F1.
-- **Commit**: branch `claude/aceite-adrs`, integrada em `main` por fast-forward.
+- **Commit**: `cde74c3` (src) e `f1f48d4` (ADRs), integrados em `main` por fast-forward.
+
+## 2026-10-27 — Publicação no GitHub e fluxo por Pull Request
+
+- **Origem**: decisão do dono de continuar via GitHub, com repositório público `jefersonlop3s/kiosk-engine`.
+- **Resultado**:
+  - repositório criado e `main` enviada (`f1f48d4`), depois de varrer o histórico atrás de segredos (nada encontrado);
+  - o [AGENTS.md](../AGENTS.md) passa a exigir PR com merge feito pelo dono e proíbe dados reais de crianças no Git.
+- **Limitações** (na data): não havia CI nem gates locais. Vieram depois: CI em Ubuntu e Windows e harness com 5 gates (entradas de 2026-10-28).
+- **Commit**: jefersonlop3s/kiosk-engine#1 (branch `claude/fluxo-github`), mesclado em 2026-10-29 a pedido do dono, com a `main` trazida para o branch por merge e conflitos resolvidos (a linha do PENDING sobre CI ficou obsoleta e saiu).
 
 ## 2026-10-28 — E-001 F1: manifesto na raiz e `cargo check` verde
 
