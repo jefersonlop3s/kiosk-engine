@@ -506,3 +506,13 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Limitação**: o teste negativo exercita a checagem sob personificação da conta padrão, não um processo `kioskd` inteiro aberto por ela.
 - **Erro corrigido no CI**: a primeira versão usava `CheckTokenMembership(NULL, ...)`, que sob personificação abre o token com a identidade da conta padrão e recebe "acesso negado". O teste negativo pegou isso como erro, sem passar por administrador. A versão final abre o token efetivo com a identidade do processo e lê os grupos (`TokenGroups`).
 
+## 2026-10-29 — README, maturidade por épico, responsáveis e insight do responsável temporário
+
+- **Origem**: pedidos e decisões do dono na mesma data.
+- **Resultado**:
+  - `README.md` na raiz (não existia): o que é o kiosk, como funcionam o serviço e o cliente, conceitos, plataformas e dois fluxogramas (arquitetura e "o que acontece quando o tempo acaba");
+  - [ROADMAP](ROADMAP.md) com a seção "Maturidade por épico": porcentagem com critério declarado (média das fases; concluída 100%, parcial 50%, não iniciada 0%);
+  - responsáveis = administradores, todos sobre todas as contas monitoradas, sem vínculo por criança; vale para Windows, Linux e macOS ([E-008](epics/E-008-cliente-grafico-dos-pais.md), [E-009](epics/E-009-servico-linux.md), [E-010](epics/E-010-servico-macos.md));
+  - [insight do responsável temporário](insights/2026-10-29-responsavel-temporario.md): delegação de até 5 dias a contas não administrativas, com revisão ao fim. O dono registrou que o raciocínio ainda não fecha, então fica sem épico.
+- **Evidência**: os dois diagramas do README renderizados no mermaid-cli e conferidos visualmente (um rótulo sobreposto foi corrigido); `verificar_refs.py` e `verificar_adr.py` sem erros.
+

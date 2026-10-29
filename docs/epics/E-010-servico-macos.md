@@ -28,11 +28,9 @@ O `kioskd` aplica as regras num **Mac** usado pela criança, com o mesmo modelo 
 Requisito para a retomada, equivalente à regra do Windows (só administrador gera código; ver [E-008](E-008-cliente-grafico-dos-pais.md)):
 
 - **Código de pareamento** só com elevação de privilégio (`sudo kioskd codigo-pareamento`); um usuário comum é recusado, com evento no log forense.
-- **Responsáveis**: também com `sudo`, define-se quais usuários do sistema são **responsáveis** por quais contas monitoradas, as das crianças e adolescentes. É um conceito que o modelo de dados não tem hoje: o perfil liga uma conta a regras, mas não registra quem responde por ela. A ADR de retomada decide:
-  - onde a relação responsável ↔ perfil fica gravada, com evento no log forense a cada mudança;
-  - o que ela libera, por exemplo quem pode gerar código para qual perfil e quem recebe os alertas;
-  - se o mesmo conceito passa a valer no Windows, para os administradores.
-- **Controles negativos**: a conta monitorada não gera código, não se torna responsável de ninguém e não altera a lista de responsáveis.
+- **Responsáveis = administradores (decisão do dono, 2026-10-29)**: toda conta com elevação (`admin`) é responsável por **todas** as contas monitoradas daquela máquina, como no Windows: pai, mãe ou outro responsável com conta administrativa. Não há vínculo de um responsável com uma criança específica. Com `sudo`, define-se quais contas são monitoradas e quais regras valem.
+- A delegação temporária a contas não administrativas fica como hipótese no [insight do responsável temporário](../insights/2026-10-29-responsavel-temporario.md), sem compromisso.
+- **Controles negativos**: a conta monitorada não gera código nem altera perfis, apps e regras; só uma conta com elevação faz isso.
 
 ## Condição de retomada
 
