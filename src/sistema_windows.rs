@@ -19,8 +19,9 @@ use std::ptr::{null, null_mut};
 use windows_sys::Win32::Foundation::{CloseHandle, FALSE, HANDLE, INVALID_HANDLE_VALUE, LocalFree};
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows_sys::Win32::Security::{
-    GetTokenInformation, LookupAccountNameW, PSID, SID_NAME_USE, SidTypeUser, TOKEN_QUERY,
-    TOKEN_USER, TokenUser,
+    CheckTokenMembership, CreateWellKnownSid, GetTokenInformation, LookupAccountNameW, PSID,
+    SECURITY_MAX_SID_SIZE, SID_NAME_USE, SidTypeUser, TOKEN_QUERY, TOKEN_USER, TokenUser,
+    WinBuiltinAdministratorsSid,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
@@ -233,6 +234,32 @@ fn procurar_conta(conta: &str) -> Result<(String, SID_NAME_USE), String> {
         }
         Ok((sid_em_texto(sid.as_mut_ptr() as PSID)?, uso))
     }
+}
+
+/// Quem chama é administrador **elevado**: o grupo Administradores está ativo no token
+/// efetivo (o da personificação, se houver). Com o UAC, uma conta de administrador fora do
+/// "Executar como administrador" tem o grupo só para negação e dá `false`.
+pub fn administrador_elevado() -> Result<bool, String> {
+    let mut sid = [0u8; SECURITY_MAX_SID_SIZE as usize];
+    let mut tamanho = SECURITY_MAX_SID_SIZE;
+    // SAFETY: buffer do tamanho máximo de um SID.
+    let ok = unsafe {
+        CreateWellKnownSid(
+            WinBuiltinAdministratorsSid,
+            null_mut(),
+            sid.as_mut_ptr().cast(),
+            &mut tamanho,
+        )
+    };
+    if ok == 0 {
+        return Err(ultimo_erro("CreateWellKnownSid(Administradores)"));
+    }
+    let mut membro = FALSE;
+    // SAFETY: token nulo = token efetivo da thread; SID válido acima.
+    if unsafe { CheckTokenMembership(null_mut(), sid.as_mut_ptr().cast(), &mut membro) } == 0 {
+        return Err(ultimo_erro("CheckTokenMembership"));
+    }
+    Ok(membro != FALSE)
 }
 
 /// SID de uma conta de **usuário** do Windows (recusa grupos, computadores etc.), para cadastrar

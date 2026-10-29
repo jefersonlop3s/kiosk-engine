@@ -24,7 +24,7 @@ O cliente só sincroniza com um PC se o pareamento partir de uma **conta de admi
 
 - `kioskd codigo-pareamento` só pode ser executado por administrador elevado (PowerShell como Administrador) no próprio PC do serviço.
 - Uma conta padrão, como a da criança, não gera código e, portanto, não pareia nenhum cliente, nem o próprio.
-- **Estado atual**: hoje isso vale só de forma indireta. Depois do `kioskd instalar`, a pasta do banco fica só para SYSTEM e Administradores, então a conta padrão nem abre o banco. Sem o serviço instalado, ou com `KIOSK_DB` apontando para outro lugar, não há essa barreira. A F1 torna a regra explícita: o comando confere a elevação de quem chama e recusa com evento no log forense.
+- **Antecipado a pedido do dono (2026-10-29)**: o `kioskd codigo-pareamento` confere se quem chama é administrador elevado (`CheckTokenMembership` com o grupo Administradores). Se não for, recusa, grava `AUTHZ_FAIL` com a ação `CREATE_PAIRING_CODE` no log forense e não cria código. Antes disso, a barreira era só a ACL da pasta do banco, que não existe sem o `instalar` ou com `KIOSK_DB` em outro lugar. Testes: controle positivo no runner Windows (administrador elevado) e negativo com uma conta padrão real em `tests/servico_windows.rs`.
 
 ## Origem e decisões
 
@@ -37,7 +37,7 @@ O cliente só sincroniza com um PC se o pareamento partir de uma **conta de admi
 
 | Fase | Entrega | Depende de | Evidência |
 |---|---|---|---|
-| F1 | API: listar perfis, apps e regras remotamente; `kioskctl perfil|app|regra listar` usando essas ações. `kioskd codigo-pareamento` exige administrador elevado (regra de autoridade acima) | [E-005](E-005-api-comando-e-pareamento.md) | Testes de API com assinatura, recusa sem assinatura e sem vazar detalhe; conta padrão real recusada ao gerar código, no CI Windows; fluxogramas |
+| F1 | API: listar perfis, apps e regras remotamente; `kioskctl perfil|app|regra listar` usando essas ações. (a exigência de administrador no `codigo-pareamento` já foi antecipada) | [E-005](E-005-api-comando-e-pareamento.md) | Testes de API com assinatura, recusa sem assinatura e sem vazar detalhe; fluxogramas |
 | F2 | App mínimo nas três plataformas: parear, listar, criar/ativar/revogar/limitar regra, uso e log | F1, ADR do toolkit aceita | Teste de ponta a ponta contra um `kioskd servir` real no CI de cada plataforma |
 | F3 | CI/CD: pacotes por plataforma (`.msi`/`.zip`, AppImage ou `.deb`, `.dmg`) publicados no release, com SHA-256 | F2 | Release com os três pacotes; instalação limpa em cada SO |
 | F4 | Uso fluido: atualização automática da tela, PC fora de alcance, alertas de antiadulteração em destaque | F2 | Uso real pelo dono no próprio computador administrando o PC da criança |

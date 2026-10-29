@@ -497,3 +497,11 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - no Linux e no macOS, `sudo` para gerar o código e para definir os **responsáveis** por cada conta monitorada (conceito novo). Registrado no E-009 e no E-010.
 - **Evidência**: `verificar_refs.py` e `verificar_adr.py` sem erros. Sem código.
 
+## 2026-10-29 — Só administrador gera código de pareamento (antecipado do E-008)
+
+- **Origem**: regra do dono (o cliente só pareia a partir de uma conta de administrador no PC do serviço) e pedido para antecipá-la, antes do resto do [E-008](epics/E-008-cliente-grafico-dos-pais.md).
+- **Resultado**: `sistema_windows::administrador_elevado` (grupo Administradores ativo no token efetivo) e `KioskDbManager::recusar_codigo_pareamento` (`AUTHZ_FAIL`, ação `CREATE_PAIRING_CODE`). O `kioskd codigo-pareamento` recusa quem não é administrador elevado e não cria código. Fluxograma do comando e runbook atualizados.
+- **Evidência local**: clippy `-D warnings` no Linux e cruzado para Windows, 128 testes no Linux (incluindo a gravação do `AUTHZ_FAIL` sem código criado) e 28 diagramas validados.
+- **Evidência no CI Windows**: o runner, administrador elevado, passa (controle positivo); a conta padrão real de `tests/servico_windows.rs` dá `false` (controle negativo).
+- **Limitação**: o teste negativo exercita a checagem sob personificação da conta padrão, não um processo `kioskd` inteiro aberto por ela.
+

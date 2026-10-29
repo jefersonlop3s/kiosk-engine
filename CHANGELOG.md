@@ -4,6 +4,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Segurança
+- `kioskd codigo-pareamento` no Windows exige administrador elevado. Sem isso, recusa, grava `AUTHZ_FAIL` no log forense e não cria código. Antes, sem o `kioskd instalar` ou com `KIOSK_DB` em outro lugar, uma conta padrão conseguia gerar código e parear um cliente.
+
 ### Documentação
 - E-008 "Cliente gráfico dos pais" proposto (Windows, Linux e macOS na Tailscale, usando o cliente do `kioskctl`; começa pela listagem remota na API).
 - E-009, E-010 e E-011 (serviço em Linux, macOS e Android) registrados como congelados, até o `kioskd` no Windows e o cliente gráfico amadurecerem; cada um revisa a ADR-002 e traz o próprio CI/CD.
