@@ -660,3 +660,10 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - Desvios da ADR-004 (um pipe só; conferência do executável) registrados na própria ADR.
 - `tests/ui_windows.rs` (7 testes) no CI Windows; a conta padrão de teste foi extraída para `tests/comum`.
 
+## 2026-10-29 — v0.0.7 publicada
+
+- **v0.0.7** ([release](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.7), pré-lançamento, de `1dada17`), para teste local do dono. SHA-256 do `.zip` do Windows: `45a4be10ee2252f3099a0d08beb184431a472f78a2cec9e68b5d3a727087bda3` (também no `SHA256SUMS.txt` do release).
+- Traz: rastro das tentativas sem privilégio (ADR-011, visto no PC real), `kioskd version` e `kioskctl version`, `AGENT_STOPPED` por batimento (migração `0007`), correções do pipe de auditoria. O canal da bandeja (`kiosk-ui`) vem pronto e testado no CI, mas ainda não ligado ao `kioskd`.
+- Para atualizar: rodar `kioskd install --listen ...` da pasta nova. O `kioskd status` mostra a versão da pasta e a instalada.
+- Para ver no PC real: `AGENT_STOPPED` em `kioskctl log` depois de parar e subir o serviço com mais de 30 s de intervalo; `kioskd version`; a recusa com o serviço parado (GC-21).
+
