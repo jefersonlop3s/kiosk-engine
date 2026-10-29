@@ -492,9 +492,7 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
     let sid = sid_de_usuario(&conta.nome).expect("SID da conta de teste");
     let antes = eventos().len();
     // o que o Windows diz dos grupos da conta, para as mensagens de falha abaixo
-    let (_, grupos, _, ps_grupos) =
-        rodar_como(conta, r"C:\Windows\System32\whoami.exe", &["/groups"]);
-    let grupos = format!("{grupos}{ps_grupos}");
+    let grupos = como(conta, grupos_da_thread);
 
     // o serviço abre o pipe logo depois de subir
     assert!(
@@ -632,6 +630,61 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
         assert_eq!(ultimo.2.as_deref(), Some(id_do_perfil.as_str()));
         assert!(ultimo.3.contains("rule list"), "{}", ultimo.3);
     }
+}
+
+/// Grupos do token da thread atual (SID e atributos), para as mensagens de falha.
+fn grupos_da_thread() -> String {
+    use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TOKEN_GROUPS, TOKEN_QUERY, TokenGroups,
+    };
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, GetCurrentThread, OpenProcessToken, OpenThreadToken,
+    };
+    let mut token: HANDLE = null_mut();
+    // SAFETY: handles pseudo do processo; o token é fechado ao fim.
+    let (de_thread, aberto) = unsafe {
+        if OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut token) != 0 {
+            ("thread", true)
+        } else if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) != 0 {
+            ("processo", true)
+        } else {
+            ("nenhum", false)
+        }
+    };
+    if !aberto {
+        return "token ilegível".into();
+    }
+    let mut n = 0u32;
+    // SAFETY: primeira chamada só mede o buffer.
+    unsafe { GetTokenInformation(token, TokenGroups, null_mut(), 0, &mut n) };
+    let mut buf = vec![0u64; (n as usize).div_ceil(8)];
+    // SAFETY: buffer alinhado com `n` bytes.
+    let lido =
+        unsafe { GetTokenInformation(token, TokenGroups, buf.as_mut_ptr().cast(), n, &mut n) };
+    let mut saida = format!("[token da {de_thread}]");
+    if lido != 0 {
+        // SAFETY: preenchido acima.
+        let g = unsafe { &*(buf.as_ptr() as *const TOKEN_GROUPS) };
+        let grupos =
+            unsafe { std::slice::from_raw_parts(g.Groups.as_ptr(), g.GroupCount as usize) };
+        for e in grupos {
+            let mut t: *mut u16 = null_mut();
+            // SAFETY: SID válido; `t` é liberado com LocalFree.
+            if unsafe { ConvertSidToStringSidW(e.Sid, &mut t) } != 0 {
+                let mut len = 0;
+                while unsafe { *t.add(len) } != 0 {
+                    len += 1;
+                }
+                let sid = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(t, len) });
+                unsafe { LocalFree(t.cast()) };
+                saida.push_str(&format!(" {sid}=0x{:x}", e.Attributes));
+            }
+        }
+    }
+    // SAFETY: fecha o token aberto acima.
+    unsafe { CloseHandle(token) };
+    saida
 }
 
 /// Roda `exe` como a conta de teste (`Start-Process -Credential`), com a saída em arquivos que a
