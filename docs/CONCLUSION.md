@@ -539,3 +539,16 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Resultado**: [E-012](epics/E-012-internacionalizacao.md) e [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md) **propostos**. A ADR traz a tabela completa de nomes, os apelidos em português até a 0.1.0 (o serviço instalado na 0.0.4 está registrado como `servico`), o catálogo no código com `match` exaustivo, a ordem de escolha do idioma e o log forense com códigos. Nada implementado antes do aceite.
 - **Evidência**: `verificar_refs.py` e `verificar_adr.py` sem erros.
 
+## 2026-10-29 — Aceite da ADR-010 com ajustes do dono
+
+- **Origem**: respostas do dono aos três pontos da [ADR-010](adr/ADR-010-idiomas-e-comandos-em-ingles.md).
+- **Resultado**: ADR-010 **Aceita**, com os ajustes registrados na própria ADR:
+  - comandos em português e em inglês permanentes, sem obsolescência;
+  - API só em inglês, inclusive o corpo do pareamento;
+  - documentação em inglês, com uma página de equivalentes em português;
+  - texto no idioma do perfil de quem o vê;
+  - mensagens da CLI traduzidas e palavra de confirmação no idioma da mensagem.
+
+  O [E-012](epics/E-012-internacionalizacao.md) entra em andamento pela F1.
+- **Evidência**: `verificar_adr.py` e `verificar_refs.py` sem erros.
+

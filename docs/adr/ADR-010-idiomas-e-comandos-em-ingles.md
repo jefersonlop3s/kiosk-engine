@@ -1,6 +1,6 @@
 # ADR-010 — Idiomas (en-US, pt-BR, es-ES) e comandos de CLI em inglês
 
-Status: Proposto. Data: 2026-10-29. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-29 pelo dono (Jeferson Lopes), com os ajustes da seção "Aceite". Data: 2026-10-29. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; nomes de comandos e opções do `kioskd` e do `kioskctl`; textos mostrados à criança e aos pais; binário registrado no serviço do Windows; [E-012](../epics/E-012-internacionalizacao.md).
 
 ## Contexto
@@ -12,9 +12,19 @@ Pedido do dono em 2026-10-29:
 
 Hoje todo texto está em pt-BR e espalhado pelo código: `src/textos.rs` (avisos à criança), mensagens do `kioskd`, `kioskctl`, `cliente.rs` e `servico_windows.rs`, e os detalhes gravados no log forense. Não há escolha de idioma.
 
+## Aceite (2026-10-29)
+
+O dono aceitou com três ajustes, que **prevalecem** sobre o texto da proposta abaixo:
+
+1. **Português e inglês, os dois para sempre.** Os comandos em português são mantidos, sem aviso nem data de remoção. O inglês é a convenção, e a tabela de equivalentes foi aceita. Localmente, o usuário digita na língua que preferir.
+   - **A API fala só inglês**: rotas, ações e campos JSON. Os clientes conversam com ela em inglês. Por isso, o corpo do pareamento passa de `codigo`/`chave_publica`/`nome` para `code`/`public_key`/`name`.
+   - **A documentação cita os comandos em inglês**, e uma página em Markdown lista os equivalentes em português.
+2. **Os três idiomas** (en-US, pt-BR, es-ES) aprovados. O texto exibido é traduzido na hora, conforme o idioma do perfil do usuário que o vê, seja no cliente, seja no servidor. A criança vê os avisos no idioma da conta dela.
+3. **Mensagens da CLI traduzidas** e palavra de confirmação no idioma da mensagem: aprovadas.
+
 ## Decisão
 
-Proposta:
+Proposta original (os ajustes acima prevalecem):
 
 1. **Comandos e opções da CLI em inglês, fixos e iguais em qualquer idioma** (tabela abaixo). O texto de uso, os fluxogramas ([AGENTS.md](../../AGENTS.md#fluxogramas-dos-comandos)), o runbook e o README passam aos nomes em inglês.
    - **Os nomes em português continuam aceitos como apelidos** até a 0.1.0, sem aparecer no uso e com um aviso de "obsoleto" no stderr. Assim, o serviço já instalado (registrado como `kioskd.exe servico`) e os hábitos atuais não quebram. Na 0.1.0, os apelidos saem.
