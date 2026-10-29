@@ -654,3 +654,9 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Correção ao que eu disse**: o salto de relógio já estava coberto desde o E-003 (intervalos negativos ou acima de 600 s viram `TAMPER_SUSPECTED` e não são contados); não é GAP novo.
 - Vai no mesmo PR do encerramento do E-012.
 
+## 2026-10-29 — Bandeja, etapa 1: canal serviço ↔ UI (E-004 F3)
+
+- `src/ui_windows.rs`: servidor do pipe `kiosk-ui`, `GerenteUi` e conferência do executável do cliente (`imagem_do_cliente_do_pipe`). `Detalhe::UiRejected` e mensagens nos três idiomas. Ainda não ligado ao `kioskd`: nada muda para quem usa a 0.0.6.
+- Desvios da ADR-004 (um pipe só; conferência do executável) registrados na própria ADR.
+- `tests/ui_windows.rs` (7 testes) no CI Windows; a conta padrão de teste foi extraída para `tests/comum`.
+

@@ -7,6 +7,8 @@
 //! runner Windows (descartável, com administrador). Num PC de uso, não defina.
 #![cfg(windows)]
 
+mod comum;
+
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -14,15 +16,15 @@ use std::process::{Command, Output, Stdio};
 use std::ptr::{null, null_mut};
 use std::time::{Duration, Instant};
 
+use comum::{ContaPadrao, como, w};
+
 use windows_sys::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED, HANDLE, LocalFree};
 use windows_sys::Win32::Security::Authorization::{
     ConvertSecurityDescriptorToStringSecurityDescriptorW, GetNamedSecurityInfoW, SDDL_REVISION_1,
     SE_FILE_OBJECT,
 };
 use windows_sys::Win32::Security::{
-    DACL_SECURITY_INFORMATION, ImpersonateLoggedOnUser, LOGON32_LOGON_INTERACTIVE,
-    LOGON32_PROVIDER_DEFAULT, LogonUserW, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
-    RevertToSelf,
+    DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
 };
 use windows_sys::Win32::System::Services::{
     CloseServiceHandle, OpenSCManagerW, OpenServiceW, SC_MANAGER_CONNECT, SERVICE_QUERY_STATUS,
@@ -169,79 +171,6 @@ fn path_do_sistema() -> Vec<String> {
         .filter(|e| !e.trim().is_empty())
         .map(str::to_owned)
         .collect()
-}
-
-fn w(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
-}
-
-/// Conta local padrão (grupo Usuários), apagada ao sair.
-struct ContaPadrao {
-    nome: String,
-    senha: String,
-}
-
-impl ContaPadrao {
-    fn criar() -> Self {
-        let nome = "kioskteste".to_string();
-        // gerada a cada execução; a conta só existe durante o teste. Até 14 caracteres: acima
-        // disso o `net user` pergunta S/N e travaria o teste.
-        let senha = format!("Kt9-{}", &uuid::Uuid::new_v4().simple().to_string()[..10]);
-        let _ = Command::new("net")
-            .args(["user", &nome, "/delete"])
-            .output();
-        let o = Command::new("net")
-            .args(["user", &nome, &senha, "/add"])
-            .output()
-            .unwrap();
-        assert!(o.status.success(), "net user /add: {}", texto(&o));
-        Self { nome, senha }
-    }
-
-    fn token(&self) -> HANDLE {
-        let (nome, ponto, senha) = (w(&self.nome), w("."), w(&self.senha));
-        let mut token: HANDLE = null_mut();
-        // SAFETY: textos terminados em zero; o token é fechado por quem chama.
-        let ok = unsafe {
-            LogonUserW(
-                nome.as_ptr(),
-                ponto.as_ptr(),
-                senha.as_ptr(),
-                LOGON32_LOGON_INTERACTIVE,
-                LOGON32_PROVIDER_DEFAULT,
-                &mut token,
-            )
-        };
-        assert!(ok != 0, "LogonUserW: {}", std::io::Error::last_os_error());
-        token
-    }
-}
-
-impl Drop for ContaPadrao {
-    fn drop(&mut self) {
-        let _ = Command::new("net")
-            .args(["user", &self.nome, "/delete"])
-            .output();
-    }
-}
-
-/// Roda `f` na thread atual como a conta padrão.
-fn como<T>(conta: &ContaPadrao, f: impl FnOnce() -> T) -> T {
-    struct Volta(HANDLE);
-    impl Drop for Volta {
-        fn drop(&mut self) {
-            // SAFETY: desfaz a personificação da thread e fecha o token.
-            unsafe {
-                RevertToSelf();
-                CloseHandle(self.0);
-            }
-        }
-    }
-    let token = conta.token();
-    let _volta = Volta(token);
-    // SAFETY: token válido de LogonUserW.
-    assert!(unsafe { ImpersonateLoggedOnUser(token) } != 0);
-    f()
 }
 
 /// Abre o serviço com `acesso`; `Err(código)` se negado.

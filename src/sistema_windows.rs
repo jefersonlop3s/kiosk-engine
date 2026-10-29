@@ -28,7 +28,9 @@ use windows_sys::Win32::Security::{
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
-use windows_sys::Win32::System::Pipes::{GetNamedPipeServerProcessId, ImpersonateNamedPipeClient};
+use windows_sys::Win32::System::Pipes::{
+    GetNamedPipeClientProcessId, GetNamedPipeServerProcessId, ImpersonateNamedPipeClient,
+};
 use windows_sys::Win32::System::Registry::{
     HKEY, HKEY_USERS, RRF_RT_REG_MULTI_SZ, RRF_RT_REG_SZ, RegGetValueW,
 };
@@ -39,7 +41,8 @@ use windows_sys::Win32::System::RemoteDesktop::{
 };
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentThread, OpenProcess, OpenProcessToken, OpenThreadToken,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, TerminateProcess,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+    QueryFullProcessImageNameW, TerminateProcess,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONWARNING, MB_OK};
 
@@ -388,6 +391,43 @@ pub fn identidade_do_cliente_do_pipe(
     let sid = sid_do_token(token.0).ok_or("SID do cliente ilegível")?;
     let conta_admin = token_e_de_conta_admin(token.0)?;
     Ok(crate::auditoria::Chamador { sid, conta_admin })
+}
+
+/// Caminho do executável do processo que está do outro lado de um named pipe (`kiosk-ui`,
+/// ADR-004): quem tem direito de abrir o pipe é qualquer conta, mas só o `kiosk-ui.exe` instalado,
+/// que a conta da criança não consegue trocar, vale como a UI. Só vale com o pipe conectado.
+pub fn imagem_do_cliente_do_pipe(
+    pipe: &impl std::os::windows::io::AsRawHandle,
+) -> Result<std::path::PathBuf, String> {
+    let pipe: HANDLE = pipe.as_raw_handle();
+    let mut pid = 0u32;
+    // SAFETY: `pipe` é o handle de um pipe do servidor, vivo durante a chamada.
+    if unsafe { GetNamedPipeClientProcessId(pipe, &mut pid) } == 0 {
+        return Err(ultimo_erro("GetNamedPipeClientProcessId"));
+    }
+    // SAFETY: abre só para consulta; o handle é fechado por `Handle`.
+    let processo = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid) };
+    if processo.is_null() {
+        return Err(ultimo_erro("OpenProcess(cliente do pipe)"));
+    }
+    let processo = Handle(processo);
+    let mut buf = vec![0u16; 32_768];
+    let mut tamanho = buf.len() as u32;
+    // SAFETY: buffer de `tamanho` unidades; `tamanho` volta com o comprimento escrito.
+    if unsafe {
+        QueryFullProcessImageNameW(
+            processo.0,
+            PROCESS_NAME_WIN32,
+            buf.as_mut_ptr(),
+            &mut tamanho,
+        )
+    } == 0
+    {
+        return Err(ultimo_erro("QueryFullProcessImageNameW"));
+    }
+    Ok(std::path::PathBuf::from(String::from_utf16_lossy(
+        &buf[..tamanho as usize],
+    )))
 }
 
 /// PID do processo que serve um pipe (para o cliente conferir que é o serviço).

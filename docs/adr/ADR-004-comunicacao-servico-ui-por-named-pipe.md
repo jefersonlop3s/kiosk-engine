@@ -37,3 +37,14 @@ Alternativas rejeitadas:
 
 - Consome: [E-004](../epics/E-004-agente-windows-enforcement.md) F3 (bandeja) e F4 (antiadulteração).
 - Complementa: [ADR-001](ADR-001-enforcement-ativo-e-visivel.md), [ADR-003](ADR-003-deteccao-de-processos-e-tempo-de-uso.md).
+
+## Implementação e desvios (2026-10-29)
+
+A decisão não mudou. Ao implementar o canal (`src/ui_windows.rs`), ficaram estes detalhes, que o dono deve conhecer:
+
+1. **Um pipe só, `\\.\pipe\kiosk-ui`, e não um por sessão.** A DACL é a do pipe de auditoria (SYSTEM e Administradores com controle total; usuários autenticados leem e escrevem dados, sem criar instâncias). Quem é cada UI vem do **token da conexão**, e o serviço entrega a cada uma só as mensagens do SID dela. Resultado equivalente, sem criar e destruir pipes a cada logon e sem pôr o SID de cada perfil na DACL.
+2. **Só o `kiosk-ui.exe` instalado vale como UI.** O serviço confere o executável do processo do outro lado (`GetNamedPipeClientProcessId` + `QueryFullProcessImageNameW`) contra o `kiosk-ui.exe` ao lado do `kioskd.exe` em `Program Files`, que a conta da criança não consegue trocar. Sem isso, a criança mataria a UI de verdade e abriria um pipe com um programa dela que só manda batimentos, e o `TAMPER_SUSPECTED` nunca dispararia. Outro programa é recusado e vira `AUTHZ_FAIL` (`WRONG_IMAGE`).
+3. **A primeira mensagem tem de ser um batimento**, em até 5 s: a identidade só pode ser lida depois de o servidor ter lido do pipe. Mensagem inválida (versão, esquema, marco, linha acima de 4096 bytes) e rajada acima de 10 por segundo derrubam a UI e viram `VALIDATION_FAIL` (`INVALID_MESSAGE`, `RATE_LIMIT`), no máximo 5 por minuto por conta, ligado ao perfil da criança. O detalhe não leva o SID.
+4. **Uma UI nova da mesma conta toma o lugar da anterior**, que é largada. A fila do serviço para a UI tem 16 mensagens e a escrita tem prazo de 2 s; se a UI não lê, a conexão cai e o aviso volta para quem chamou (o agente cai na caixa de mensagem do Windows).
+5. Falta, em etapas seguintes: o serviço iniciar o `kiosk-ui.exe` na sessão da criança, o `kiosk-ui.exe` em si, o agente usar o canal para avisos e estado, e o `TAMPER_SUSPECTED` por batimento perdido.
+
