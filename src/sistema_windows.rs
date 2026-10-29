@@ -16,12 +16,14 @@
 use std::ffi::c_void;
 use std::ptr::{null, null_mut};
 
-use windows_sys::Win32::Foundation::{CloseHandle, FALSE, HANDLE, INVALID_HANDLE_VALUE, LocalFree};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, ERROR_NO_TOKEN, FALSE, HANDLE, INVALID_HANDLE_VALUE, LocalFree, TRUE,
+};
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows_sys::Win32::Security::{
-    CheckTokenMembership, CreateWellKnownSid, GetTokenInformation, LookupAccountNameW, PSID,
-    SECURITY_MAX_SID_SIZE, SID_NAME_USE, SidTypeUser, TOKEN_QUERY, TOKEN_USER, TokenUser,
-    WinBuiltinAdministratorsSid,
+    CreateWellKnownSid, EqualSid, GetTokenInformation, LookupAccountNameW, PSID,
+    SECURITY_MAX_SID_SIZE, SID_NAME_USE, SidTypeUser, TOKEN_GROUPS, TOKEN_QUERY, TOKEN_USER,
+    TokenGroups, TokenUser, WinBuiltinAdministratorsSid,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
@@ -32,8 +34,8 @@ use windows_sys::Win32::System::RemoteDesktop::{
     WTSLogoffSession, WTSQuerySessionInformationW, WTSSendMessageW, WTSSessionInfoEx, WTSUserName,
 };
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
-    TerminateProcess,
+    GetCurrentProcess, GetCurrentThread, OpenProcess, OpenProcessToken, OpenThreadToken,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, TerminateProcess,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONWARNING, MB_OK};
 
@@ -239,27 +241,78 @@ fn procurar_conta(conta: &str) -> Result<(String, SID_NAME_USE), String> {
 /// Quem chama é administrador **elevado**: o grupo Administradores está ativo no token
 /// efetivo (o da personificação, se houver). Com o UAC, uma conta de administrador fora do
 /// "Executar como administrador" tem o grupo só para negação e dá `false`.
+///
+/// Lê os grupos do token em vez de usar `CheckTokenMembership(NULL, ...)`: sob personificação,
+/// aquele abre o token com a identidade personificada e recebe "acesso negado".
 pub fn administrador_elevado() -> Result<bool, String> {
-    let mut sid = [0u8; SECURITY_MAX_SID_SIZE as usize];
+    // atributos de SID_AND_ATTRIBUTES (winnt.h)
+    const SE_GROUP_ENABLED: u32 = 0x4;
+    const SE_GROUP_USE_FOR_DENY_ONLY: u32 = 0x10;
+
+    let mut admins = [0u8; SECURITY_MAX_SID_SIZE as usize];
     let mut tamanho = SECURITY_MAX_SID_SIZE;
     // SAFETY: buffer do tamanho máximo de um SID.
     let ok = unsafe {
         CreateWellKnownSid(
             WinBuiltinAdministratorsSid,
             null_mut(),
-            sid.as_mut_ptr().cast(),
+            admins.as_mut_ptr().cast(),
             &mut tamanho,
         )
     };
     if ok == 0 {
         return Err(ultimo_erro("CreateWellKnownSid(Administradores)"));
     }
-    let mut membro = FALSE;
-    // SAFETY: token nulo = token efetivo da thread; SID válido acima.
-    if unsafe { CheckTokenMembership(null_mut(), sid.as_mut_ptr().cast(), &mut membro) } == 0 {
-        return Err(ultimo_erro("CheckTokenMembership"));
+
+    let mut token: HANDLE = null_mut();
+    // SAFETY: pseudo-handles da thread e do processo atuais; o token é fechado por `Handle`.
+    // `openasself` usa a identidade do processo para abrir o token da personificação.
+    let token = unsafe {
+        if OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &mut token) == FALSE {
+            let e = std::io::Error::last_os_error();
+            if e.raw_os_error() != Some(ERROR_NO_TOKEN as i32) {
+                return Err(format!("OpenThreadToken: {e}"));
+            }
+            // sem personificação: vale o token do processo
+            if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == FALSE {
+                return Err(ultimo_erro("OpenProcessToken"));
+            }
+        }
+        Handle(token)
+    };
+
+    let mut tamanho = 0u32;
+    // SAFETY: primeira chamada só mede o buffer.
+    unsafe { GetTokenInformation(token.0, TokenGroups, null_mut(), 0, &mut tamanho) };
+    if tamanho == 0 {
+        return Err(ultimo_erro("GetTokenInformation(TokenGroups)"));
     }
-    Ok(membro != FALSE)
+    let mut buf = vec![0u64; (tamanho as usize).div_ceil(8)];
+    // SAFETY: buffer alinhado com `tamanho` bytes.
+    if unsafe {
+        GetTokenInformation(
+            token.0,
+            TokenGroups,
+            buf.as_mut_ptr().cast(),
+            tamanho,
+            &mut tamanho,
+        )
+    } == FALSE
+    {
+        return Err(ultimo_erro("GetTokenInformation(TokenGroups)"));
+    }
+    // SAFETY: preenchido acima; `GroupCount` entradas seguem o cabeçalho dentro de `buf`.
+    let grupos = unsafe {
+        let g = &*(buf.as_ptr() as *const TOKEN_GROUPS);
+        std::slice::from_raw_parts(g.Groups.as_ptr(), g.GroupCount as usize)
+    };
+    Ok(grupos.iter().any(|g| {
+        // SAFETY: SIDs válidos (do token e o criado acima).
+        let e_admins = unsafe { EqualSid(g.Sid, admins.as_mut_ptr().cast()) } != FALSE;
+        e_admins
+            && g.Attributes & SE_GROUP_ENABLED != 0
+            && g.Attributes & SE_GROUP_USE_FOR_DENY_ONLY == 0
+    }))
 }
 
 /// SID de uma conta de **usuário** do Windows (recusa grupos, computadores etc.), para cadastrar

@@ -504,4 +504,5 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência local**: clippy `-D warnings` no Linux e cruzado para Windows, 128 testes no Linux (incluindo a gravação do `AUTHZ_FAIL` sem código criado) e 28 diagramas validados.
 - **Evidência no CI Windows**: o runner, administrador elevado, passa (controle positivo); a conta padrão real de `tests/servico_windows.rs` dá `false` (controle negativo).
 - **Limitação**: o teste negativo exercita a checagem sob personificação da conta padrão, não um processo `kioskd` inteiro aberto por ela.
+- **Erro corrigido no CI**: a primeira versão usava `CheckTokenMembership(NULL, ...)`, que sob personificação abre o token com a identidade da conta padrão e recebe "acesso negado". O teste negativo pegou isso como erro, sem passar por administrador. A versão final abre o token efetivo com a identidade do processo e lê os grupos (`TokenGroups`).
 
