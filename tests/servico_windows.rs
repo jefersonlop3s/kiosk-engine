@@ -463,7 +463,8 @@ fn servico_rodado_a_mao_explica_e_falha() {
 /// chamador vem do token da conexão, nunca da mensagem.
 fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::path::Path) {
     use kiosk_engine::auditoria::NOME_DO_PIPE;
-    use kiosk_engine::auditoria_windows::avisar_tentativa;
+    // a thread do aviso real não herda a personificação do teste: usa a variante da thread atual
+    use kiosk_engine::auditoria_windows::avisar_tentativa_nesta_thread as avisar_tentativa;
     use kiosk_engine::detalhes::Detalhe;
     use kiosk_engine::sistema_windows::sid_de_usuario;
 

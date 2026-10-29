@@ -205,6 +205,12 @@ fn trocar(linha: &str) -> Result<(), String> {
     }
 }
 
+/// Igual a [`avisar_tentativa`], mas **na thread atual** e sem prazo: quem chama escolhe a
+/// identidade (por exemplo, personificando uma conta), que uma thread nova não herdaria.
+pub fn avisar_tentativa_nesta_thread(comando: &str) -> Result<(), String> {
+    trocar(&format!("{}\n", montar_aviso(comando)))
+}
+
 /// O `kioskd` avisa o serviço de que `comando` foi tentado sem elevação. `Ok` só se o serviço
 /// confirmou que gravou o evento; qualquer outra coisa vira o motivo de **não** ter sido registrado.
 pub fn avisar_tentativa(comando: &str) -> Result<(), String> {
