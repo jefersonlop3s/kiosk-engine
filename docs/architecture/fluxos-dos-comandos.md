@@ -89,13 +89,20 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["kioskd codigo-pareamento<br/>na conta de administrador"] --> B["abre o banco e informa qual"]
+    A["kioskd codigo-pareamento"] --> W{"Windows: quem chama é administrador elevado?<br/>Administradores ativo no token"}
+    W -->|não| X["abre o banco, se a pasta permitir"]
+    X --> Y["evento AUTHZ_FAIL com ação CREATE_PAIRING_CODE"]
+    Y --> E1["erro: só administrador gera o código;<br/>nenhum código é criado"]
+    X -->|"banco inacessível"| E2["erro, avisando que a recusa não foi registrada"]
+    W -->|"sim, ou fora do Windows"| B["abre o banco e informa qual"]
     B --> C["gera 8 caracteres sem símbolos ambíguos"]
     C --> D["grava só o SHA-256 em pairing_code,<br/>com validade de 5 minutos"]
     D --> E["evento CREATE_PAIRING_CODE"]
     E --> F["imprime o código em claro, uma única vez"]
     F --> G["o código é digitado no kioskctl parear"]
 ```
+
+Só quem administra o PC do serviço gera código; por isso só ele pareia clientes (regra do dono, [E-008](../epics/E-008-cliente-grafico-dos-pais.md)). No Linux e no macOS, a exigência de `sudo` virá com o [E-009](../epics/E-009-servico-linux.md) e o [E-010](../epics/E-010-servico-macos.md).
 
 ### `kioskd dispositivos`
 

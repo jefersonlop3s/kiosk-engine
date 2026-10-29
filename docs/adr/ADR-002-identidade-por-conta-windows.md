@@ -42,3 +42,4 @@ Alternativas rejeitadas:
 
 - Épicos que consomem: [E-001](../epics/E-001-fundacao-crate-e-dados.md), [E-003](../epics/E-003-motor-de-regras-e-uso.md), [E-004](../epics/E-004-agente-windows-enforcement.md).
 - Complementa a Seção II da [arquitetura](../architecture/README.md).
+- Revisões previstas (decisão desta ADR intacta até lá): [E-009](../epics/E-009-servico-linux.md), [E-010](../epics/E-010-servico-macos.md) e [E-011](../epics/E-011-servico-android.md) abrem, cada um na sua retomada, uma ADR nova que estende o alvo para Linux, macOS ou Android.

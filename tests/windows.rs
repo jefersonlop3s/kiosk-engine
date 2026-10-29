@@ -264,3 +264,13 @@ fn sem_kiosk_db_o_padrao_no_windows_e_o_banco_da_maquina() {
         "{erro}"
     );
 }
+
+#[test]
+fn o_runner_do_ci_e_administrador_elevado() {
+    // controle positivo da checagem do `kioskd codigo-pareamento`; o negativo, com uma conta
+    // padrão real, está em tests/servico_windows.rs
+    assert_eq!(
+        kiosk_engine::sistema_windows::administrador_elevado(),
+        Ok(true)
+    );
+}

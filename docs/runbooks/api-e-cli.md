@@ -119,7 +119,7 @@ Numa janela do PowerShell como Administrador (confira que a linha `kioskd: banco
 .\kioskd.exe codigo-pareamento
 ```
 
-O comando imprime um código de **8 caracteres**, de uso único, válido por 5 minutos. Use exatamente esse código; qualquer outro é recusado com `HTTP 403`. No dispositivo dos pais, com o `kioskctl` do pacote:
+Só um administrador elevado gera o código: numa janela sem "Executar como administrador", o comando recusa e registra a tentativa no log forense. O comando imprime um código de **8 caracteres**, de uso único, válido por 5 minutos. Use exatamente esse código; qualquer outro é recusado com `HTTP 403`. No dispositivo dos pais, com o `kioskctl` do pacote:
 
 ```powershell
 .\kioskctl.exe parear --servidor 100.95.52.48:8443 --codigo ABCD2345 --nome "Celular da mãe"

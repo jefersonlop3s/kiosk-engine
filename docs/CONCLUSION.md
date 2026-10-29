@@ -485,3 +485,42 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência local**: `cargo clippy -D warnings` no Linux e cruzado para `x86_64-pc-windows-gnu`, 127 testes passando no Linux, 28 diagramas validados com o mermaid-cli.
 - **Evidência de aceite**: `tests/servico_windows.rs` no runner Windows do CI (`KIOSK_TESTE_SERVICO=1`), com controles negativos (escuta fora da ADR-005, conta padrão tentando parar e iniciar o serviço e ler os dados, `--apagar-dados` sem confirmação).
 - **Pendente**: reinício do PC real (GC-16).
+
+## 2026-10-29 — E-008 a E-011: cliente gráfico e serviço em outras plataformas
+
+- **Origem**: pedido do dono depois da publicação da 0.0.4.
+- **Resultado**:
+  - [E-008](epics/E-008-cliente-grafico-dos-pais.md) proposto: app gráfico dos pais para Windows, Linux e macOS na Tailscale, sobre o mesmo cliente do `kioskctl`. Registra a lacuna da API (não há listagem remota de perfis, apps e regras), que vira a F1;
+  - [E-009](epics/E-009-servico-linux.md), [E-010](epics/E-010-servico-macos.md) e [E-011](epics/E-011-servico-android.md) congelados, com condição de retomada objetiva: `kioskd` no Windows maduro e cliente gráfico maduro. Cada um exige uma ADR que revise a [ADR-002](adr/ADR-002-identidade-por-conta-windows.md) (GAP Estrutural) e terá CI/CD próprio.
+- **Requisitos do dono, mesma data**:
+  - o cliente só pareia a partir de uma conta de administrador no Windows que roda o serviço. Registrado no E-008, com a lacuna atual (a barreira hoje vem só da ACL da pasta, depois do `instalar`) e a correção na F1;
+  - no Linux e no macOS, `sudo` para gerar o código e para definir os **responsáveis** por cada conta monitorada (conceito novo). Registrado no E-009 e no E-010.
+- **Evidência**: `verificar_refs.py` e `verificar_adr.py` sem erros. Sem código.
+
+## 2026-10-29 — Só administrador gera código de pareamento (antecipado do E-008)
+
+- **Origem**: regra do dono (o cliente só pareia a partir de uma conta de administrador no PC do serviço) e pedido para antecipá-la, antes do resto do [E-008](epics/E-008-cliente-grafico-dos-pais.md).
+- **Resultado**: `sistema_windows::administrador_elevado` (grupo Administradores ativo no token efetivo) e `KioskDbManager::recusar_codigo_pareamento` (`AUTHZ_FAIL`, ação `CREATE_PAIRING_CODE`). O `kioskd codigo-pareamento` recusa quem não é administrador elevado e não cria código. Fluxograma do comando e runbook atualizados.
+- **Evidência local**: clippy `-D warnings` no Linux e cruzado para Windows, 128 testes no Linux (incluindo a gravação do `AUTHZ_FAIL` sem código criado) e 28 diagramas validados.
+- **Evidência no CI Windows**: o runner, administrador elevado, passa (controle positivo); a conta padrão real de `tests/servico_windows.rs` dá `false` (controle negativo).
+- **Limitação**: o teste negativo exercita a checagem sob personificação da conta padrão, não um processo `kioskd` inteiro aberto por ela.
+- **Erro corrigido no CI**: a primeira versão usava `CheckTokenMembership(NULL, ...)`, que sob personificação abre o token com a identidade da conta padrão e recebe "acesso negado". O teste negativo pegou isso como erro, sem passar por administrador. A versão final abre o token efetivo com a identidade do processo e lê os grupos (`TokenGroups`).
+
+## 2026-10-29 — README, maturidade por épico, responsáveis e insight do responsável temporário
+
+- **Origem**: pedidos e decisões do dono na mesma data.
+- **Resultado**:
+  - `README.md` na raiz (não existia): o que é o kiosk, como funcionam o serviço e o cliente, conceitos, plataformas e dois fluxogramas (arquitetura e "o que acontece quando o tempo acaba");
+  - [ROADMAP](ROADMAP.md) com a seção "Maturidade por épico": porcentagem com critério declarado (média das fases; concluída 100%, parcial 50%, não iniciada 0%);
+  - responsáveis = administradores, todos sobre todas as contas monitoradas, sem vínculo por criança; vale para Windows, Linux e macOS ([E-008](epics/E-008-cliente-grafico-dos-pais.md), [E-009](epics/E-009-servico-linux.md), [E-010](epics/E-010-servico-macos.md));
+  - [insight do responsável temporário](insights/2026-10-29-responsavel-temporario.md): delegação de até 5 dias a contas não administrativas, com revisão ao fim. O dono registrou que o raciocínio ainda não fecha, então fica sem épico.
+- **Evidência**: os dois diagramas do README renderizados no mermaid-cli e conferidos visualmente (um rótulo sobreposto foi corrigido); `verificar_refs.py` e `verificar_adr.py` sem erros.
+
+## 2026-10-29 — Serviço do Windows instalado no PC real do dono (0.0.4)
+
+- **Origem**: teste do dono com o pacote da 0.0.4, num PowerShell como administrador.
+- **Resultado**: o `kioskd instalar` protegeu `C:\ProgramData\kiosk`, copiou os executáveis para `C:\Program Files\kiosk`, registrou o serviço e o iniciou. O `kioskd estado` mostrou o serviço em execução, com início automático, conta LocalSystem, o binário instalado em modo `servico` e o `KIOSK_LISTEN` no ambiente do serviço (Tailscale e loopback).
+- **Ainda não visto no PC real**: o serviço subir sozinho depois de reiniciar o Windows e o agente agir como SYSTEM sobre a conta da criança (GC-16 segue aberto). O logoff (GC-20) também segue aberto.
+- **Observação**: definir `KIOSK_DB` e `KIOSK_LISTEN` na janela antes do `instalar` não é necessário; o endereço vai para o serviço pelo `--escutar`, e o banco usa o padrão.
+- Nenhum dado do log do dono (IP, conta, caminhos pessoais) foi copiado para o repositório.
+

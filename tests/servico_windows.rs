@@ -294,15 +294,18 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
 
     // conta padrão: consulta o serviço (controle positivo), mas não para, não inicia e não lê os dados
     let conta = ContaPadrao::criar();
-    let (consulta, parada, inicio, leitura, programa_legivel) = como(&conta, || {
+    let (consulta, parada, inicio, leitura, programa_legivel, elevado) = como(&conta, || {
         (
             abrir_servico(SERVICE_QUERY_STATUS),
             abrir_servico(SERVICE_STOP),
             abrir_servico(SERVICE_START),
             std::fs::read_dir(&dados).map(|_| ()),
             std::fs::metadata(programa.join("kioskd.exe")).is_ok(),
+            kiosk_engine::sistema_windows::administrador_elevado(),
         )
     });
+    // a conta padrão não é administrador: `kioskd codigo-pareamento` a recusaria
+    assert_eq!(elevado, Ok(false), "conta padrão vista como administrador");
     assert_eq!(
         consulta,
         Ok(()),

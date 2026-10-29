@@ -4,7 +4,7 @@
 //!   padrão — ADR-005) e, no Windows, o agente de enforcement (tick de 2 s) e a limpeza diária
 //!   do log (retenção de 90 dias). Fora do Windows só a API sobe.
 //! - `kioskd codigo-pareamento`: gera o código de pareamento (válido por 5 min) para digitar no
-//!   dispositivo dos pais. Rodar na conta de administrador do PC.
+//!   dispositivo dos pais. No Windows, só administrador elevado; a recusa vai para o log forense.
 //! - `kioskd dispositivos`: lista os dispositivos pareados.
 //! - `kioskd revogar <id>`: revoga um dispositivo.
 //! - `kioskd perfil criar --conta USUARIO --nome NOME [--limite-total SEGUNDOS]` (Windows; em
@@ -35,7 +35,7 @@ use uuid::Uuid;
 
 const USO: &str = "uso:
   kioskd servir [--sem-agente]
-  kioskd codigo-pareamento
+  kioskd codigo-pareamento   (Windows: PowerShell como administrador)
   kioskd dispositivos
   kioskd revogar <id-do-dispositivo>
   kioskd perfil criar --conta USUARIO --nome NOME [--limite-total SEGUNDOS]   (ou --sid S-1-... no lugar de --conta)
@@ -168,6 +168,35 @@ fn servico() -> Result<(), String> {
 
 #[cfg(not(windows))]
 const SO_WINDOWS: &str = "este comando só existe no Windows (serviço do Windows, ADR-008)";
+
+/// Só administrador elevado gera código de pareamento no PC do serviço (regra do dono, E-008):
+/// sem isto, a barreira era só a ACL da pasta do banco, que não existe antes do `instalar` nem
+/// com `KIOSK_DB` em outro lugar. A recusa vai para o log forense quando o banco abre.
+#[cfg(windows)]
+async fn exigir_administrador() -> Result<(), String> {
+    if kiosk_engine::sistema_windows::administrador_elevado()? {
+        return Ok(());
+    }
+    let motivo = "código de pareamento pedido sem administrador elevado";
+    let registro = match abrir_banco().await {
+        Ok(db) => db
+            .recusar_codigo_pareamento(&EventContext::local(), motivo)
+            .await
+            .map_err(|e| e.to_string()),
+        Err(e) => Err(e),
+    };
+    let base = "só um administrador gera o código de pareamento: abra o PowerShell com \"Executar como administrador\"";
+    Err(match registro {
+        Ok(()) => base.to_string(),
+        Err(e) => format!("{base} (a recusa não foi registrada no log forense: {e})"),
+    })
+}
+
+/// Fora do Windows não há serviço (ADR-002); a exigência de `sudo` vem com o E-009 e o E-010.
+#[cfg(not(windows))]
+async fn exigir_administrador() -> Result<(), String> {
+    Ok(())
+}
 
 /// Pede que digitem APAGAR antes de apagar os dados (ADR-008).
 fn confirmar_apagar_dados() -> Result<(), String> {
@@ -395,6 +424,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
         }
         ["estado"] => estado(),
         ["codigo-pareamento"] => {
+            exigir_administrador().await?;
             let db = abrir_banco().await?;
             let codigo = db
                 .criar_codigo_pareamento(&EventContext::local(), Utc::now())
