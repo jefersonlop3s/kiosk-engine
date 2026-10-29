@@ -37,7 +37,6 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | [E-009](epics/E-009-servico-linux.md) | congelado | Condição de retomada no épico |
 | [E-010](epics/E-010-servico-macos.md) | congelado | Condição de retomada no épico |
 | [E-011](epics/E-011-servico-android.md) | congelado | Condição de retomada no épico |
-| [E-012](epics/E-012-internacionalizacao.md) | em andamento | F1 e F2 validadas no PC real (0.0.5). F3 implementada: falta ver o aviso à criança no idioma da conta dela (conta em en-US ou es-ES) |
 
 ## Infraestrutura do harness
 

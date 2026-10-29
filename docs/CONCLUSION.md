@@ -641,3 +641,9 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Sondagem do pipe**: o erro 1368 no `kioskd.log` do PC real vinha de uma conexão que fechou sem enviar nada (o `Test-Path` do roteiro). `ler_linha` agora trata "nenhum byte" como encerramento sem erro; o teste Windows conecta e fecha e confere que o log não registra falha.
 - Fica para a 0.0.7, a pedido do dono, junto das correções que o teste em andamento achar.
 
+## 2026-10-29 — E-012 concluído
+
+- O dono aceitou encerrar o E-012: os avisos com os horários já foram vistos no PC real, e o idioma da conta da criança passa a ser **simulado** no CI Windows.
+- `sistema_windows::texto_do_aviso` (extraída do `avisar`) liga o idioma lido de `HKEY_USERS\<SID>` ao texto do aviso. `tests/windows.rs` cobre es-ES, en-US, pt-BR, a precedência do idioma de exibição e o idioma não traduzido (`fr-FR`), no registro real do runner.
+- Fica fora das fases: revisão da tradução es-ES por falante.
+

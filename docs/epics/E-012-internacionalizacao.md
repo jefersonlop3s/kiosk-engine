@@ -1,6 +1,6 @@
 # E-012 — Internacionalização (en-US, pt-BR, es-ES) e CLI em inglês
 
-Estado: em andamento desde 2026-10-29 ([ADR-010](../adr/ADR-010-idiomas-e-comandos-em-ingles.md) aceita com ajustes). Responsável: a definir. Repositório: kiosk.
+Estado: concluído em 2026-10-29 (início no mesmo dia) ([ADR-010](../adr/ADR-010-idiomas-e-comandos-em-ingles.md) aceita com ajustes). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -45,7 +45,7 @@ Estado: em andamento desde 2026-10-29 ([ADR-010](../adr/ADR-010-idiomas-e-comand
   - dias da semana aceitos em inglês, português e espanhol; palavra de confirmação por idioma (`DELETE`, `APAGAR`, `BORRAR`);
   - o `install` grava `KIOSK_LANG` no serviço.
 - **F1 e F2 validadas no PC real do dono** (0.0.5, 2026-10-29): comandos em inglês e em português com o mesmo resultado, mensagens vistas em pt-BR, en-US e es-ES, serviço com o idioma de quem o instalou, atualização do serviço pelo `install`.
-- **F3** (2026-10-29), implementada; falta ver num Windows real:
+- **F3** (2026-10-29), implementada e aceita pelo dono com simulação no lugar de nova checagem à mão (o dono já viu os avisos com os horários no PC real):
   - avisos à criança nos três idiomas (`textos`), no idioma da conta dela, lido do perfil carregado (`HKEY_USERS\<SID>`);
   - o detalhe do log forense do enforcement vira código JSON (`detalhes`), traduzido na hora por `kioskctl log`. Linhas antigas aparecem como estão;
   - desvios e o que ficou de fora estão na seção "Implementação e desvios" da [ADR-010](../adr/ADR-010-idiomas-e-comandos-em-ingles.md).
@@ -62,4 +62,4 @@ Estado: em andamento desde 2026-10-29 ([ADR-010](../adr/ADR-010-idiomas-e-comand
 
 ## Encerramento
 
-A preencher.
+2026-10-29. As três fases entregues. F1 e F2 foram vistas no PC real (0.0.5). A F3 não foi vista com a conta da criança em outro idioma: o dono aceitou a **simulação** no CI Windows. `texto_do_aviso` (a ligação entre o idioma da conta e o texto) é exercitada por `tests/windows.rs` contra o registro real do runner, com `es-ES`, `en-US`, `pt-BR`, o idioma de exibição valendo mais que o regional e `fr-FR` caindo no idioma do serviço; os três textos são comparados para provar que diferem. Não coberto: a caixa de mensagem em si (`WTSSendMessageW`) com outro idioma de interface, que só desenha o texto já escolhido; some quando a bandeja do [E-004](E-004-agente-windows-enforcement.md) F3 substituir a caixa. A tradução es-ES continua sem revisão de falante.
