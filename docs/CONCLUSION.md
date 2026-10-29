@@ -416,3 +416,14 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **O que isto valida** (E-004 F2, parcial): detecção por SID em sessão de outro usuário, encerramento real, motor com regra de limite 0, log forense e o ciclo de regra pela API a partir de um dispositivo pareado.
 - **Ainda sem validação**: aviso por `WTSSendMessageW`, bloqueio de sessão (`WTSDisconnectSession`), logoff após 2 desbloqueios, limites por tempo (com avisos de 5 e 1 min) e o `kioskd` como serviço do Windows.
 
+## 2026-10-29 — Regra: todo comando tem fluxograma Mermaid
+
+- **Origem**: pedido do dono, antes do merge da 0.0.3: todo comando precisa de fluxograma Mermaid na documentação, para facilitar a cognição e mostrar a integração e o fluxo de informação entre cliente e serviço.
+- **Resultado**:
+  - regra nova no [AGENTS.md](../AGENTS.md) ("Fluxogramas dos comandos");
+  - [fluxos dos comandos](architecture/fluxos-dos-comandos.md): visão geral, o pipeline comum das Camadas 0 a 5 e um fluxograma por comando, 15 do `kioskd` e 7 do `kioskctl`, com quem age, o que é gravado (tabela e evento), as recusas e o retorno; ligado à arquitetura e ao runbook;
+  - `tests/documentacao.rs` transforma a regra em gate: lê os comandos que os próprios executáveis imprimem no texto de uso e reprova se algum não tiver seção com bloco `mermaid`, ou se o documento citar comando inexistente.
+- **Evidência**: os 24 blocos renderizados com `@mermaid-js/mermaid-cli` 11.4.2 e o Chromium do container, sem erro; três mutações (apagar a seção de um comando, citar comando inexistente, trocar `mermaid` por `text`) reprovaram o teste com a mensagem certa e foram revertidas.
+- **Limitações**: o teste confere a existência do fluxograma, não a fidelidade ao código; a renderização não roda no CI (só localmente, antes do commit, como diz a regra).
+- **Commit**: branch `claude/hopeful-curie-egiw07`.
+

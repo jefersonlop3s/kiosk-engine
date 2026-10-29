@@ -9,6 +9,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 Ainda **pré-lançamento**. Corrige armadilhas encontradas no primeiro teste no Windows.
 
 ### Adicionado
+- Fluxograma Mermaid de cada comando de `kioskd` e `kioskctl` em `docs/architecture/fluxos-dos-comandos.md`, regra no `AGENTS.md` e teste que reprova comando sem fluxograma.
 - `kioskd regra criar|ativar|revogar|limite|listar`: regras administradas no próprio PC, sem parear dispositivo, com a mesma validação e a mesma auditoria da API (`--ativar` cria já ativa).
 
 ### Corrigido
