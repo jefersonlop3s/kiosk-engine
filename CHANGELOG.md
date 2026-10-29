@@ -5,8 +5,11 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ## [Não lançado]
 
 ### Adicionado
-- **Bandeja da criança** (ADR-004, E-004 F3 e F4): o serviço inicia o `kiosk-ui.exe` na sessão de cada criança. Ele mostra um ícone com o tempo restante e conecta ao serviço por um pipe (`kiosk-ui`), mandando batimento. Se a criança fechar a bandeja, o serviço a relança e registra `TAMPER_SUSPECTED` em `kioskctl log` (no máximo uma vez a cada 5 minutos por conta). Falha ao iniciar a bandeja também é registrada. O `install` e o `uninstall` encerram as bandejas em execução, para o Windows não travar o arquivo.
+- **Bandeja da criança** (ADR-004, E-004 F3 e F4): o serviço inicia o `kiosk-ui.exe` na sessão de cada criança. Ele mostra um ícone na bandeja (com a dica do tempo restante e um balão para os avisos de 5 e 1 minuto, no idioma da conta) e conecta ao serviço por um pipe (`kiosk-ui`), mandando batimento e reconectando sozinho se o serviço cair. Se a criança fechar a bandeja, o serviço a relança e registra `TAMPER_SUSPECTED` em `kioskctl log` (no máximo uma vez a cada 5 minutos por conta). Falha ao iniciar a bandeja também é registrada. O `install` e o `uninstall` encerram as bandejas em execução, para o Windows não travar o arquivo.
 - **Os avisos de 5 e 1 minuto ainda seguem pela caixa de mensagem do Windows**; passar por esta bandeja, com a caixa como reserva, vem na próxima etapa. O ícone mostra o tempo restante só depois dessa etapa (o agente ainda não manda o estado).
+
+### Corrigido
+- `kioskctl log` passa a aceitar a consulta **sem** `--profile`: lista todos os eventos do PC, e cada linha diz de quem é (`[8 letras do perfil]` ou `[PC]`). Antes só dava para ler o log de um perfil, e os eventos que não são de um perfil, como o `AGENT_STOPPED` (e a recusa de um administrador sem elevação), existiam no banco mas os pais não tinham como vê-los. Visto no teste da 0.0.7 no PC real. A API já aceitava a consulta sem perfil.
 
 ## [0.0.7] - 2026-10-29
 
