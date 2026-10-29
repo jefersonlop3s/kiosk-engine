@@ -4,6 +4,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Adicionado
+- `kioskd instalar` põe `C:\Program Files\kiosk` no PATH do sistema, sem duplicar e preservando as outras entradas, e avisa o Windows. Em janelas novas, `kioskd` e `kioskctl` funcionam de qualquer pasta. `kioskd desinstalar` tira a entrada; `kioskd estado` mostra se ela está lá.
+
 ### Segurança
 - `kioskd codigo-pareamento` no Windows exige administrador elevado. Sem isso, recusa, grava `AUTHZ_FAIL` no log forense e não cria código. Antes, sem o `kioskd instalar` ou com `KIOSK_DB` em outro lugar, uma conta padrão conseguia gerar código e parear um cliente.
 

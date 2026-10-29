@@ -271,7 +271,8 @@ flowchart TD
     F -->|não| H["segue"]
     G --> I["copia kioskd.exe e kioskctl.exe para Program Files\kiosk"]
     H --> I
-    I --> J["SCM: cria ou reconfigura o serviço<br/>LocalSystem, início automático, binário kioskd servico"]
+    I --> P["registro: Path do sistema ganha Program Files\kiosk, se faltar;<br/>aviso WM_SETTINGCHANGE para janelas novas"]
+    P --> J["SCM: cria ou reconfigura o serviço<br/>LocalSystem, início automático, binário kioskd servico"]
     J --> K["SCM: descrição, reinício 5 s após falha,<br/>permissões do serviço: conta padrão só consulta"]
     K --> L["registro: Environment do serviço com KIOSK_LISTEN"]
     L --> M["SCM: inicia e espera em execução por até 30 s"]
@@ -293,8 +294,9 @@ flowchart TD
     B -->|não| D{"serviço kiosk existe?"}
     D -->|sim| F["SCM: para, espera parar e remove o serviço"]
     D -->|não| G["avisa que não estava instalado"]
-    F --> H["remove kioskd.exe e kioskctl.exe de Program Files\kiosk"]
-    G --> H
+    F --> Q["registro: tira Program Files\kiosk do Path do sistema,<br/>mantendo as outras entradas"]
+    G --> Q
+    Q --> H["remove kioskd.exe e kioskctl.exe de Program Files\kiosk"]
     H --> I{"o kioskd em uso está nessa pasta?"}
     I -->|sim| J["agenda a remoção dele e da pasta para o próximo reinício"]
     I -->|não| K["remove a pasta"]
@@ -312,8 +314,8 @@ flowchart TD
     B --> C{"existe?"}
     C -->|não| R1["imprime: não instalado"]
     C -->|sim| D["SCM: estado e pid; configuração: início, conta e executável"]
-    D --> E["registro: Environment do serviço"]
-    E --> R2["imprime estado, pid, início, conta, executável,<br/>KIOSK_LISTEN, pasta de dados e log"]
+    D --> E["registro: Environment do serviço e Path do sistema"]
+    E --> R2["imprime estado, pid, início, conta, executável,<br/>KIOSK_LISTEN, se está no PATH, pasta de dados e log"]
 ```
 
 Só lê; não abre o banco nem grava evento.

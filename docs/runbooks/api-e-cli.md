@@ -90,6 +90,7 @@ Num só passo, o `instalar`:
 - deixa `C:\ProgramData\kiosk` (banco e log) acessível só a SYSTEM e Administradores;
 - registra o serviço `kiosk`: conta SYSTEM, início automático com o Windows e reinício 5 s depois de uma falha. Uma conta padrão, como a da criança, consegue consultar o serviço, mas não pará-lo;
 - grava o endereço de escuta no próprio serviço, sem precisar de `$env:KIOSK_LISTEN`;
+- põe `C:\Program Files\kiosk` no PATH do sistema. Em janelas **novas** do PowerShell basta digitar `kioskd` ou `kioskctl`, de qualquer pasta. A janela em que você rodou o `instalar` continua com o PATH antigo. Como só administradores escrevem nessa pasta, a entrada no PATH não abre brecha para a criança;
 - inicia o serviço.
 
 Rodar de novo atualiza a instalação, por exemplo com uma versão nova do pacote ou outro endereço. Para conferir:
@@ -101,7 +102,7 @@ Get-Content C:\ProgramData\kiosk\kioskd.log -Tail 20
 
 Para remover, use `.\kioskd.exe desinstalar`: para e apaga o serviço e os executáveis, e **mantém** o banco. Com `--apagar-dados`, apaga também `C:\ProgramData\kiosk`, mas só depois de você digitar `APAGAR`. O Windows pode pedir permissão de firewall para a porta: libere só para redes privadas (a Tailscale).
 
-Depois de instalado, use `C:\Program Files\kiosk\kioskd.exe` (ou o da pasta extraída) para os cadastros, sempre num PowerShell como Administrador.
+Depois de instalado, use `kioskd` direto (ele está no PATH) para os cadastros, sempre num PowerShell como Administrador. O `desinstalar` tira a pasta do PATH.
 
 ### 4.2 Num console, para testes
 

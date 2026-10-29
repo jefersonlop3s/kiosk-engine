@@ -524,3 +524,12 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Observação**: definir `KIOSK_DB` e `KIOSK_LISTEN` na janela antes do `instalar` não é necessário; o endereço vai para o serviço pelo `--escutar`, e o banco usa o padrão.
 - Nenhum dado do log do dono (IP, conta, caminhos pessoais) foi copiado para o repositório.
 
+## 2026-10-29 — Serviço volta sozinho após reiniciar o Windows; pasta do kiosk no PATH
+
+- **Origem**: teste de reinício do dono com a 0.0.4 e pedido para registrar o diretório de instalação no PATH do sistema (o `kioskd` não era encontrado fora da pasta extraída).
+- **Resultado**:
+  - depois de reiniciar, o `kioskd estado` mostrou o serviço em execução com um PID diferente do da instalação, início automático e conta LocalSystem. Com isso, a [E-007](epics/E-007-onboarding-e-instalador.md) F2 está concluída e o GC-16 se reduz a ver o agente, como SYSTEM, aplicar uma regra na conta da criança;
+  - `kioskd instalar` põe `%ProgramFiles%\kiosk` no `Path` da máquina (`HKLM\...\Session Manager\Environment`), sem duplicar, preservando as outras entradas e o tipo do valor, e avisa o Windows com `WM_SETTINGCHANGE`. `desinstalar` tira a entrada; `estado` mostra se ela está lá. A pasta só aceita escrita de SYSTEM e Administradores, então a entrada no PATH não permite que a criança plante um executável;
+  - fluxogramas de `instalar`, `desinstalar` e `estado` e o runbook atualizados; ROADMAP: E-004 em 70% e E-007 em 35%.
+- **Evidência**: log do dono (nenhum dado pessoal copiado); `tests/servico_windows.rs` no CI Windows confere, pelo `reg query`, que a pasta entra uma vez, que a reinstalação não duplica e que o PATH volta ao original depois do `desinstalar`.
+

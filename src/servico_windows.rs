@@ -36,10 +36,13 @@ use windows_sys::Win32::Security::{
 use windows_sys::Win32::Storage::FileSystem::{DELETE, MOVEFILE_DELAY_UNTIL_REBOOT, MoveFileExW};
 use windows_sys::Win32::System::Console::{STD_ERROR_HANDLE, SetStdHandle};
 use windows_sys::Win32::System::Registry::{
-    HKEY, HKEY_LOCAL_MACHINE, KEY_SET_VALUE, REG_MULTI_SZ, RRF_RT_REG_MULTI_SZ, RegCloseKey,
-    RegGetValueW, RegOpenKeyExW, RegSetValueExW,
+    HKEY, HKEY_LOCAL_MACHINE, KEY_SET_VALUE, REG_MULTI_SZ, RRF_NOEXPAND, RRF_RT_REG_EXPAND_SZ,
+    RRF_RT_REG_MULTI_SZ, RRF_RT_REG_SZ, RegCloseKey, RegGetValueW, RegOpenKeyExW, RegSetValueExW,
 };
 use windows_sys::Win32::System::Services::*;
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE,
+};
 use windows_sys::core::PWSTR;
 
 use crate::sistema_windows::{para_utf16, pwstr, ultimo_erro};
@@ -437,6 +440,159 @@ fn ler_ambiente() -> Vec<String> {
         .collect()
 }
 
+/// Chave do ambiente da máquina, onde fica o `Path` do sistema.
+const CHAVE_AMBIENTE_MAQUINA: &str =
+    r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
+
+/// `Path` do sistema como está no registro (sem expandir `%...%`) e o tipo do valor.
+fn ler_path_maquina() -> Result<(String, u32), String> {
+    let sub = para_utf16(CHAVE_AMBIENTE_MAQUINA);
+    let valor = para_utf16("Path");
+    let flags = RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND;
+    let (mut tipo, mut bytes) = (0u32, 0u32);
+    // SAFETY: primeira chamada só mede o tamanho.
+    let erro = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            sub.as_ptr(),
+            valor.as_ptr(),
+            flags,
+            &mut tipo,
+            null_mut(),
+            &mut bytes,
+        )
+    };
+    if erro != NO_ERROR {
+        return Err(format!(
+            "PATH do sistema: {}",
+            std::io::Error::from_raw_os_error(erro as i32)
+        ));
+    }
+    let mut buf = vec![0u16; (bytes as usize).div_ceil(2)];
+    // SAFETY: buffer com `bytes` bytes graváveis.
+    let erro = unsafe {
+        RegGetValueW(
+            HKEY_LOCAL_MACHINE,
+            sub.as_ptr(),
+            valor.as_ptr(),
+            flags,
+            &mut tipo,
+            buf.as_mut_ptr().cast(),
+            &mut bytes,
+        )
+    };
+    if erro != NO_ERROR {
+        return Err(format!(
+            "PATH do sistema: {}",
+            std::io::Error::from_raw_os_error(erro as i32)
+        ));
+    }
+    let fim = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+    Ok((String::from_utf16_lossy(&buf[..fim]), tipo))
+}
+
+fn gravar_path_maquina(texto: &str, tipo: u32) -> Result<(), String> {
+    let sub = para_utf16(CHAVE_AMBIENTE_MAQUINA);
+    let mut chave: HKEY = null_mut();
+    // SAFETY: subchave terminada em zero; a chave é fechada logo abaixo.
+    let erro = unsafe {
+        RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            sub.as_ptr(),
+            0,
+            KEY_SET_VALUE,
+            &mut chave,
+        )
+    };
+    if erro != NO_ERROR {
+        return Err(format!(
+            "PATH do sistema: {}",
+            std::io::Error::from_raw_os_error(erro as i32)
+        ));
+    }
+    let (valor, dados) = (para_utf16("Path"), para_utf16(texto));
+    // SAFETY: texto UTF-16 terminado em zero; tamanho em bytes, com o zero.
+    let erro = unsafe {
+        RegSetValueExW(
+            chave,
+            valor.as_ptr(),
+            0,
+            tipo,
+            dados.as_ptr().cast(),
+            (dados.len() * 2) as u32,
+        )
+    };
+    // SAFETY: chave aberta acima.
+    unsafe { RegCloseKey(chave) };
+    if erro != NO_ERROR {
+        return Err(format!(
+            "PATH do sistema: {}",
+            std::io::Error::from_raw_os_error(erro as i32)
+        ));
+    }
+    // avisa o Explorer e quem escuta: janelas abertas daqui em diante já veem o PATH novo
+    let ambiente = para_utf16("Environment");
+    let mut resultado = 0usize;
+    // SAFETY: mensagem de difusão com texto terminado em zero; espera limitada a 5 s.
+    unsafe {
+        SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            ambiente.as_ptr() as isize,
+            SMTO_ABORTIFHUNG,
+            5_000,
+            &mut resultado,
+        )
+    };
+    Ok(())
+}
+
+/// A entrada do PATH é a pasta (sem diferenciar maiúsculas nem a barra final).
+fn e_a_pasta(entrada: &str, pasta: &Path) -> bool {
+    let normal = |t: &str| t.trim().trim_end_matches('\\').to_lowercase();
+    normal(entrada) == normal(&pasta.to_string_lossy())
+}
+
+/// Quantas vezes `%ProgramFiles%\kiosk` aparece no PATH do sistema.
+pub fn vezes_no_path() -> Result<usize, String> {
+    let (path, _) = ler_path_maquina()?;
+    let pasta = pasta_programa();
+    Ok(path.split(';').filter(|e| e_a_pasta(e, &pasta)).count())
+}
+
+/// Põe a pasta no fim do PATH do sistema, se ainda não estiver; `true` se mudou.
+/// Seguro porque só SYSTEM e Administradores escrevem em `%ProgramFiles%`.
+fn incluir_no_path(pasta: &Path) -> Result<bool, String> {
+    let (path, tipo) = ler_path_maquina()?;
+    if path.split(';').any(|e| e_a_pasta(e, pasta)) {
+        return Ok(false);
+    }
+    let separador = if path.is_empty() || path.ends_with(';') {
+        ""
+    } else {
+        ";"
+    };
+    gravar_path_maquina(&format!("{path}{separador}{}", pasta.display()), tipo)?;
+    Ok(true)
+}
+
+/// Tira a pasta do PATH do sistema, mantendo as outras entradas como estão; `true` se mudou.
+fn remover_do_path(pasta: &Path) -> Result<bool, String> {
+    let (path, tipo) = ler_path_maquina()?;
+    let entradas: Vec<&str> = path.split(';').collect();
+    let restantes: Vec<&str> = entradas
+        .iter()
+        .copied()
+        .filter(|e| !e_a_pasta(e, pasta))
+        .collect();
+    if restantes.len() == entradas.len() {
+        return Ok(false);
+    }
+    gravar_path_maquina(&restantes.join(";"), tipo)?;
+    Ok(true)
+}
+
 fn configurar_extras(svc: &Sc) -> Result<(), String> {
     let mut texto = para_utf16(DESCRICAO);
     let descricao = SERVICE_DESCRIPTIONW {
@@ -505,6 +661,12 @@ pub fn instalar(escutar: &str) -> Result<u32, String> {
     }
     let destino = copiar_executaveis()?;
     eprintln!("kioskd: executáveis em {}", destino.display());
+    if incluir_no_path(&destino)? {
+        eprintln!(
+            "kioskd: {} incluída no PATH do sistema: em janelas novas do PowerShell basta digitar `kioskd`",
+            destino.display()
+        );
+    }
 
     let caminho = para_utf16(&format!(
         "\"{}\" servico",
@@ -623,6 +785,9 @@ pub fn desinstalar(apagar_dados: bool) -> Result<(), String> {
 
     let atual = std::env::current_exe().map_err(|e| format!("caminho do kioskd: {e}"))?;
     let destino = pasta_programa();
+    if remover_do_path(&destino)? {
+        eprintln!("kioskd: {} retirada do PATH do sistema", destino.display());
+    }
     let mut agendado = false;
     for exe in EXECUTAVEIS {
         agendado |= remover_ou_agendar(&destino.join(exe), &atual)?;
@@ -672,6 +837,8 @@ pub struct Estado {
     pub conta: String,
     pub executavel: String,
     pub ambiente: Vec<String>,
+    /// `%ProgramFiles%\kiosk` está no PATH do sistema.
+    pub no_path: bool,
 }
 
 /// `None` se o serviço não está instalado.
@@ -705,6 +872,7 @@ pub fn estado() -> Result<Option<Estado>, String> {
         conta,
         executavel,
         ambiente: ler_ambiente(),
+        no_path: vezes_no_path()? > 0,
     }))
 }
 

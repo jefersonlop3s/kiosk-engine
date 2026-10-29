@@ -40,6 +40,7 @@ Estado: em andamento desde 2026-10-29 (ADR-007 a ADR-009 aceitas; começa pela e
 ## Progresso
 
 - **F2** (2026-10-29): `kioskd instalar|desinstalar|estado|servico` implementados (`src/servico_windows.rs`) e validados no CI Windows por `tests/servico_windows.rs`. O teste instala, confere o SCM e o registro, chama a API servida pelo serviço, derruba o processo e vê o reinício, prova que uma conta padrão não para nem inicia o serviço e não lê a pasta de dados, reinstala e desinstala com e sem `--apagar-dados`. Falta o reinício do PC real (GC-16 no [PENDING](../PENDING.md)).
+- **F2 concluída** (2026-10-29): no PC do dono, o serviço instalado voltou sozinho depois de reiniciar o Windows (PID novo, em execução, início automático). A conta padrão sem poder parar o serviço está provada no CI, com uma conta padrão real. O `instalar` também põe `%ProgramFiles%\kiosk` no PATH do sistema, a pedido do dono, para que `kioskd` funcione em qualquer janela nova.
 - A F2 veio antes da F1 porque o assistente vai chamar o `instalar` no fim.
 
 ## Aceites

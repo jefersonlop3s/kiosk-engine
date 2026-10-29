@@ -140,6 +140,36 @@ fn sddl_de(caminho: &std::path::Path) -> String {
     sddl
 }
 
+/// Entradas não vazias do PATH do sistema, lidas do registro pelo `reg query` (fonte
+/// independente do código que as grava).
+fn path_do_sistema() -> Vec<String> {
+    let o = Command::new("reg")
+        .args([
+            "query",
+            r"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+            "/v",
+            "Path",
+        ])
+        .output()
+        .unwrap();
+    let t = String::from_utf8_lossy(&o.stdout).into_owned();
+    let linha = t
+        .lines()
+        .find(|l| l.trim_start().starts_with("Path"))
+        .unwrap_or_else(|| panic!("reg query sem Path: {t}"));
+    let valor = linha
+        .split_once("REG_EXPAND_SZ")
+        .or_else(|| linha.split_once("REG_SZ"))
+        .unwrap()
+        .1
+        .trim();
+    valor
+        .split(';')
+        .filter(|e| !e.trim().is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 fn w(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -241,6 +271,8 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     }
     let (programa, dados) = (pasta("ProgramFiles"), pasta("ProgramData"));
     let _ = kioskd(&["desinstalar"]);
+    let path_antes = path_do_sistema();
+    assert_eq!(kiosk_engine::servico_windows::vezes_no_path(), Ok(0));
 
     // controles negativos antes de tocar em nada: escuta fora da ADR-005 e sem porta
     for ruim in ["0.0.0.0:8443", "192.168.0.10:8443", "127.0.0.1"] {
@@ -260,6 +292,14 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
         "{estado}"
     );
     assert!(estado.contains(r"\kiosk\kioskd.exe"), "{estado}");
+    // a pasta instalada entra no PATH do sistema uma vez, e as outras entradas ficam
+    assert!(estado.contains("PATH do sistema: sim"), "{estado}");
+    assert_eq!(kiosk_engine::servico_windows::vezes_no_path(), Ok(1));
+    let path_instalado = path_do_sistema();
+    assert!(
+        path_antes.iter().all(|e| path_instalado.contains(e)),
+        "o instalar perdeu entradas do PATH"
+    );
     assert!(programa.join("kioskd.exe").exists() && programa.join("kioskctl.exe").exists());
     let sc = Command::new("sc")
         .args(["qfailure", "kiosk"])
@@ -347,6 +387,11 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     // reinstalar atualiza sem duplicar
     ok(&["instalar", "--escutar", &format!("127.0.0.1:{PORTA}")]);
     assert!(pid_em_execucao().is_some());
+    assert_eq!(
+        kiosk_engine::servico_windows::vezes_no_path(),
+        Ok(1),
+        "reinstalar duplicou a entrada do PATH"
+    );
 
     // desinstalar sem --apagar-dados mantém os dados
     let saida = ok(&["desinstalar"]);
@@ -358,6 +403,11 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
         .is_some()
     );
     assert!(!programa.exists(), "sobrou {}", programa.display());
+    assert_eq!(
+        path_do_sistema(),
+        path_antes,
+        "o PATH do sistema não voltou ao que era"
+    );
     assert!(dados.join("kiosk.db").exists(), "apagou os dados sem pedir");
     assert!(TcpStream::connect(("127.0.0.1", PORTA)).is_err());
 

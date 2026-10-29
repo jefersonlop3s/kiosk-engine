@@ -367,6 +367,12 @@ fn estado() -> Result<(), String> {
     for v in &e.ambiente {
         println!("ambiente: {v}");
     }
+    let no_path = if e.no_path {
+        "sim"
+    } else {
+        "não (rode `kioskd instalar` de novo)"
+    };
+    println!("PATH do sistema: {no_path}");
     println!("dados: {}", sv::pasta_dados().display());
     println!("log: {}", sv::arquivo_log().display());
     Ok(())
