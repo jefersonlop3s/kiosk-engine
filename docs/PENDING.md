@@ -6,33 +6,35 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 | ID / documento | Estado | Próximo passo | Responsável |
 |---|---|---|---|
+| Hash encadeado no `Security_Log` | Adiado pelo dono em 2026-10-28; retomar só com ADR. O trigger cobre UPDATE/DELETE via SQL, não edição direta do arquivo | dono |
 | AGENTS global em `~/.claude/` | Criado pela sessão `3a84a5f7` fora do repositório; sem efeito | Apagar (a regra já está no AGENTS.md do projeto) | dono |
 
 ## GAPs de Código
 
-Origem: [revisão do estado inicial](insights/2026-10-27-revisao-estado-inicial.md). Todos são resolvidos em [E-001](epics/E-001-fundacao-crate-e-dados.md).
+Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agente-windows-enforcement.md) (núcleo SO-independente), revisão do próprio entregue em 2026-10-28.
 
 | ID | Mecanismo | Medido? | Próximo passo |
 |---|---|---|---|
-| GC-01 | `src/Cargo.toml`: `uuid = "=1.9.2"` não resolve no crates.io; manifesto dentro de `src/`; `[[bin]]` aponta para módulo sem `main`; `sqlx` sem feature `sqlite` | Sim: `cargo check --manifest-path src/Cargo.toml` → `failed to select a version for the requirement uuid = "=1.9.2"` | E-001 F1 |
-| GC-02 | `src/db_manager.rs`: raw strings abertas com `r#"` e fechadas com `"`; DDL nunca executada; `Url` não importado; `SqlitePool::connect_url` e `sqlx::Transaction<'_>` sem tipo de banco | Por leitura (não compila por GC-01) | E-001 F1–F3 |
-| GC-03 | `create_active_rule` abre transação e não chama `commit()`: o drop faz rollback, então nada persiste | Por leitura | E-001 F3, com teste negativo |
-| GC-04 | Nomes divergentes: `active_rule` × `active_rules`, `id` × `app_id`/`rule_id`, `status` × `current_state`; `process_name` ausente no DDL | Por leitura | E-001 F2 |
-| GC-05 | `src/database_schema.rs`: `#[derive]` sobre campos (erro de compilação); `daily_limit_seconds` usa `0` como "sem limite", contra a arquitetura (nulo); `effective_until_timestamp` obrigatório; falta `time_window_start` | Por leitura | E-001 F2–F3 |
-| GC-06 | `SecurityEvent` definido em `database_schema.rs` e de novo em `security_logger_impl.rs` com campos privados | Por leitura | E-001 F3 |
-| GC-07 | Trabalho em andamento do dono em `src/db_manager.rs`, `src/security_logger_impl.rs` e `src/Cargo.toml`, commitado como está em 2026-10-27 (não compila: GC-01 a GC-06) | `cargo check` | Absorver em E-001 F1 |
+| GC-08 | Avisos de 5 e 1 min são constante no código (`AVISOS_SEGUNDOS`); a ADR-001 os quer configuráveis por regra e `active_rules` não tem coluna para isso | Por leitura | Migração + campo em `ActiveRule` quando o E-004 F2 definir a UX do aviso |
+| GC-13 | Pareamento bloqueia por 5 min depois de 10 códigos errados (`MAX_FALHAS_PAREAMENTO`); quem está na rede pode errar de propósito e atrasar o pareamento de um dispositivo novo (não afeta dispositivos já pareados) | Por leitura | Aceitável no MVP; revisar se virar problema real (limite por IP depende do servidor, E-005 F1) |
+| GC-15 | O modo LAN da ADR-005 (HTTPS com certificado fixado) não existe; a API recusa qualquer endereço fora de loopback e Tailscale | Por decisão (fail-closed) | Implementar TLS se o dono quiser LAN; senão manter só Tailscale |
+| GC-16 | Implementado: `kioskd instalar`, `desinstalar` e `estado` e o modo serviço (ADR-008, etapa 1), validados no CI Windows (instalação, reinício após queda, conta padrão sem poder parar o serviço nem ler os dados, desinstalação). Falta validar no PC do dono: o serviço sobe sozinho após reiniciar o Windows e o agente age como SYSTEM | Por execução no PC real | E-004 F1/F4, E-007 F2 |
+| GC-17 | Os avisos à criança usam `WTSSendMessageW` (caixa de mensagem na sessão) como solução provisória; a ADR-004 prevê a UI de bandeja com tempo restante | Por decisão (provisório) | E-004 F3 |
+| GC-20 | Logoff após 2 desbloqueios não ocorreu no teste real (2026-10-29): houve dois bloqueios por `LIMITE_DIARIO_TOTAL` com 30 s de intervalo e nenhuma ação nem erro registrados depois, até o limite ser removido 7 min mais tarde | Sim: log do teste do dono | Repetir com intervalo de 40 s entre as entradas e a saída da janela do `servir`; se reproduzir, investigar a detecção da sessão reconectada (`WTSSessionInfoEx`) |
+| GC-19 | O pré-push do harness (`.harness/validation.py`) compara o SHA de cada ref enviada com o `HEAD`; uma tag anotada envia o SHA do objeto da tag, não o do commit, e é sempre recusada. Contorno atual: tags leves, ou a tag criada pelo workflow de release | Sim: `16501a3` (tag) × `76d8b8f` (commit) | Corrigir no sovereign-harness (`git rev-parse <sha>^{commit}`) e reinstalar |
 
 ## Épicos abertos
 
 | Épico | Estado | Próximo passo |
 |---|---|---|
-| [E-001](epics/E-001-fundacao-crate-e-dados.md) | proposto | F1: manifesto na raiz e `cargo check` verde |
-| [E-002](epics/E-002-log-forense.md) a [E-005](epics/E-005-api-comando-e-pareamento.md) | proposto | Ver [ROADMAP](ROADMAP.md) |
+| [E-001](epics/E-001-fundacao-crate-e-dados.md) | em andamento | F1–F4 concluídas e CI verde em Ubuntu e Windows |
+| [E-004](epics/E-004-agente-windows-enforcement.md) | em andamento | Validados em PC real com conta de criança (2026-10-29): encerramento de app, avisos de 5 e 1 min, encerramento ao esgotar o limite do app e bloqueio de sessão; falta o logoff (GC-20), o serviço do Windows (GC-16) e a UI de bandeja (GC-17) |
+| [E-005](epics/E-005-api-comando-e-pareamento.md) | em andamento | F1 a F3 concluídas (servidor, assinatura, regras, `modify_limit`, consultas de uso e log, CLI dos pais); sobram o modo LAN (GC-15) e ligar o agente ao serviço (GC-16) |
 | [E-006](epics/E-006-app-mobile-administracao.md) | congelado | Condição de retomada no épico |
+| [E-007](epics/E-007-onboarding-e-instalador.md) | em andamento | F2 (serviço do Windows) implementada e validada no CI; falta o reinício no PC real (GC-16). Depois: F1, o assistente `kioskd configurar` |
 
 ## Infraestrutura do harness
 
 | Item | Próximo passo |
 |---|---|
-| `.harness.toml` e gates locais | Configurar quando houver build (E-001 F4) |
-| CI no GitHub (`cargo check/test`) e proteção da `main` | Junto de E-001 F4; antes disso não há build para checar |
+| `core.hooksPath` é configuração local do clone | Em cada clone novo: `git config core.hooksPath .githooks` |

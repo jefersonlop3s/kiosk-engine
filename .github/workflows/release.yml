@@ -1,0 +1,99 @@
+name: release
+
+# Publica o release da versão do Cargo.toml (tag `vX.Y.Z`).
+# - Em push de tag `v*`: confere tag = versão, compila, empacota e publica.
+# - Manual (workflow_dispatch): ensaio por padrão; com `publicar: true` cria a tag
+#   `v<versão>` no commit escolhido e publica. Recusa se a tag já existir.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Criar a tag v<versão do Cargo.toml> neste commit e publicar o release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            alvo: windows-x86_64
+          - os: ubuntu-latest
+            alvo: linux-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Versão
+        id: v
+        shell: bash
+        run: |
+          versao=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          echo "tag=v${versao}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            test "v${versao}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != Cargo.toml ${versao}"; exit 1; }
+          fi
+      - run: cargo test --locked
+      - run: cargo build --release --locked --bins
+      - name: Empacotar
+        shell: bash
+        run: |
+          nome="kiosk-engine-${{ steps.v.outputs.tag }}-${{ matrix.alvo }}"
+          mkdir -p "dist/${nome}"
+          ext=""; [ "${{ runner.os }}" = "Windows" ] && ext=".exe"
+          cp "target/release/kioskd${ext}" "target/release/kioskctl${ext}" "dist/${nome}/"
+          cp LICENSE CHANGELOG.md docs/runbooks/api-e-cli.md "dist/${nome}/"
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "${nome}.zip" "${nome}" > /dev/null
+          else
+            tar czf "${nome}.tar.gz" "${nome}"
+          fi
+          rm -rf "${nome}"
+          ls -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pacote-${{ matrix.alvo }}
+          path: dist/*
+
+  publicar:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publicar)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Tag, somas SHA-256 e notas da versão
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          versao=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          tag="v${versao}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/${tag}" > /dev/null; then
+              echo "a tag ${tag} já existe: não sobrescrevo um release publicado"; exit 1
+            fi
+          fi
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
+          awk -v v="## [${versao}]" 'index($0, v) == 1 {p=1; next} /^## \[/ {p=0} p' CHANGELOG.md > notas.md
+          test -s notas.md || { echo "CHANGELOG sem a seção ${versao}"; exit 1; }
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.v.outputs.tag }}
+          body_path: notas.md
+          prerelease: true
+          files: dist/*

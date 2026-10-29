@@ -47,6 +47,13 @@
 - Toda entrega fecha em PENDING **e** CONCLUSION no mesmo commit; mudanças entram no [CHANGELOG](CHANGELOG.md).
 - Antes de commitar docs: `python3 ~/.claude/plugins/marketplaces/sovereign-harness/scripts/verificar_refs.py --docs docs --raiz .` e `verificar_adr.py --adr-dir docs/adr`.
 
+## Fluxogramas dos comandos
+
+1. **Todo e qualquer comando** de CLI (`kioskd`, `kioskctl` e os que vierem) tem um fluxograma **Mermaid** em [docs/architecture/fluxos-dos-comandos.md](docs/architecture/fluxos-dos-comandos.md), numa seção com o título `` ### `<executável> <comando>` ``.
+2. O fluxograma mostra a integração e o fluxo de informação entre cliente e serviço: quem age, que dado passa de uma etapa para a próxima, o que é gravado (tabela e evento do log forense), as recusas e o que volta para quem chamou.
+3. Comando novo ou alterado entra no mesmo commit que o seu fluxograma novo ou atualizado. O teste `tests/documentacao.rs` lê os comandos impressos pelos próprios executáveis e reprova o build se algum ficar sem fluxograma (ou se o documento citar comando que não existe).
+4. Os diagramas precisam renderizar: valide com o `mermaid-cli` antes de commitar.
+
 <!-- rtk-instructions v2 -->
 # Command output
 

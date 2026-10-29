@@ -1,13 +1,28 @@
-use sqlx::{SqlitePool, FromRow};
-use crate::database_schema::*; // Importa os structs do schema definido anteriormente.
+//! Gravação do log forense. A inserção recebe a conexão da transação do chamador:
+//! o evento e a mudança de estado que ele descreve confirmam ou desfazem juntos.
 
-/// Estrutura que representa um evento de segurança crítico para registro forense imutável (Abordagem B).
-pub struct SecurityEvent { 
-     event_id: Uuid,       // PK único para este log - garante unicidade e rastreabilidade.
-    timestamp: DateTime<Utc>,  // Momento EXATO do evento/tentativa (não o da escrita no banco!).
-        client_ip: String,      // Origem do comando recebido (ex: "10.24.x.y"). Rastreia a fonte maliciosa ou admin legítimo.
-    action_attempted: ActionType,  // O que foi TENTADO fazer? ADD_RULE, MODIFY_LIMIT, REVOKE etc.
-        status: TransactionStatus,   // Resultado final da transação (SUCCESS/FAILURE).
-     rejection_reason_detail: String, // CRÍTICO! Texto livre detalhado com o motivo EXATO do bloqueio/falha forense.
+use sqlx::SqliteConnection;
 
+pub use crate::database_schema::SecurityEvent;
+use crate::database_schema::log_ts;
+
+pub async fn insert_event(
+    conn: &mut SqliteConnection,
+    e: &SecurityEvent,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO security_log (log_id, timestamp, client_ip, action_attempted, event_type, \
+         transaction_status, rejection_reason_detail, profile_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(e.event_id.to_string())
+    .bind(log_ts(e.timestamp))
+    .bind(&e.client_ip)
+    .bind(e.action_attempted.as_str())
+    .bind(e.event_type.as_str())
+    .bind(e.transaction_status.as_str())
+    .bind(&e.rejection_reason_detail)
+    .bind(e.profile_id.map(|p| p.to_string()))
+    .execute(conn)
+    .await?;
+    Ok(())
 }

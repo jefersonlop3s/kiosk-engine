@@ -12,6 +12,7 @@ Fonte documental do projeto kiosk (controle parental doméstico). Instruções p
 | [gaps](gaps/README.md) | Obstáculos estruturais ou contratuais medidos |
 | [adr](adr/ADR-INDEX.md) | Decisões, alternativas e consequências; aceite é do dono |
 | [insights](insights/README.md) | Investigações, revisões e hipóteses ainda sem compromisso |
+| [runbooks](runbooks/api-e-cli.md) | Procedimentos de operação (serviço, pareamento e CLI) |
 | [templates](templates/README.md) | Modelos para novos documentos |
 
 ## Relações e manutenção

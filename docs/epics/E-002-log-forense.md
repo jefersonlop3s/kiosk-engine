@@ -1,6 +1,6 @@
 # E-002 — Log forense (`Security_Log`)
 
-Estado: proposto. Responsável: a definir. Repositório: kiosk.
+Estado: concluído em 2026-10-28 (hash encadeado adiado pelo dono). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -12,13 +12,13 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
   - Eventos de enforcement ([ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md)): `WARNING_SHOWN`, `APP_TERMINATED`, `SESSION_LOCKED`, `AGENT_STOPPED`, `TAMPER_SUSPECTED`.
   - Garantia de que eventos são só inseridos (append-only); consulta por período e por perfil.
 - **Exclui**: envio remoto dos logs (depende de [E-005](E-005-api-comando-e-pareamento.md)).
-- **Pressuposto**: os dados são de crianças. Coletar o mínimo (nome do processo, horário, ação), sem conteúdo de tela, teclas ou URLs, e manter tudo local. A retenção precisa ser definida antes de F3.
+- **Pressuposto**: os dados são de crianças. Coletar o mínimo (nome do processo, horário, ação), sem conteúdo de tela, teclas ou URLs, e manter tudo local. Retenção decidida pelo dono em 2026-10-28: 90 dias (3 meses).
 
 ## Origem e decisões
 
 - [Arquitetura](../architecture/README.md), Seções I.1, I.3 e III.
 - [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Aceito): novos tipos de evento.
-- **Hipótese em aberto**: imutabilidade por hash encadeado (cada evento carrega o hash do anterior). Exige ADR quando F2 for executada; hoje não há decisão.
+- **Adiado pelo dono (2026-10-28)**: imutabilidade por hash encadeado (cada evento carrega o hash do anterior). Exige ADR quando F2 for executada; hoje não há decisão.
 
 ## Fases e dependências
 
@@ -35,4 +35,4 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 
 ## Encerramento
 
-A preencher.
+Entregue em 2026-10-28; evidências e commits na entrada de mesmo título no [CONCLUSION](../CONCLUSION.md). Fora do épico: hash encadeado (adiado, exige ADR).

@@ -1,0 +1,71 @@
+# .harness.toml — configuração do harness de agentes (guard + contexto de sessão).
+# O guard procura este arquivo no diretório atual e nos ancestrais (ou usa
+# HARNESS_CONFIG). Sem ele, valem os padrões abaixo.
+
+[harness]
+# Variável do escape nominal. Use o mesmo nome dos seus hooks de git, para uma
+# só convenção: `NOME=<regra> comando`. `all` não vale no guard.
+escape_env = "HARNESS_SKIP"
+
+# Regras desligadas neste projeto (ids de `harness_guard.py regras`).
+desligadas = []
+
+# Regras que só avisam (fase de medição antes de bloquear).
+apenas_avisar = []
+
+# Branches onde `git commit` direto é bloqueado (conclusão de merge é liberada).
+ramos_protegidos = ["main", "master"]
+
+# Script do merge gate, relativo à raiz do repositório. Se existir no repo,
+# `gh pr merge` direto é bloqueado. Vazio desliga a regra.
+merge_gate = "scripts/merge_gate.sh"
+
+# Registro JSONL de bloqueios/escapes (só hash do comando). Vazio = padrão
+# em $XDG_STATE_HOME/sovereign-harness/decisoes.jsonl.
+registro = ""
+
+[quadro]
+# Caminho ABSOLUTO do quadro de trabalho no diretório principal. Vazio desliga
+# a regra quadro-copia e o resumo do quadro no início de sessão.
+canonico = ""
+# Caminho relativo do quadro dentro de qualquer checkout (para reconhecer cópias).
+relativo = ".agents/agents_work.md"
+# Comando que imprime o quadro vivo (da branch principal, não do disco).
+ler = ""
+
+[segredos]
+# Nomes de arquivo .env* que podem ser lidos (só exemplos, sem valor real).
+permitidos = [".env.example", ".env.sample", ".env.template"]
+
+[project]
+# repository | monorepo | meta-repository. Não descobre membros por prefixo.
+topology = "repository"
+members = []
+
+[validation]
+configured = true
+
+[[validation.gates]]
+id = "docs-refs"
+argv = ["python3", ".harness/verificar_refs.py", "--docs", "docs", "--raiz", "."]
+cwd = "."
+
+[[validation.gates]]
+id = "docs-adr"
+argv = ["python3", ".harness/verificar_adr.py", "--adr-dir", "docs/adr"]
+cwd = "."
+
+[[validation.gates]]
+id = "fmt"
+argv = ["cargo", "fmt", "--check"]
+cwd = "."
+
+[[validation.gates]]
+id = "clippy"
+argv = ["cargo", "clippy", "--all-targets", "--locked", "--", "-D", "warnings"]
+cwd = "."
+
+[[validation.gates]]
+id = "tests"
+argv = ["cargo", "test", "--locked"]
+cwd = "."

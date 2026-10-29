@@ -1,6 +1,6 @@
 # E-004 — Agente Windows de enforcement
 
-Estado: proposto. Responsável: a definir. Repositório: kiosk.
+Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam SCM, bandeja e teste em sessão interativa). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -21,11 +21,9 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 
 - [ADR-001](../adr/ADR-001-enforcement-ativo-e-visivel.md) (Aceito): enforcement ativo e visível.
 - [ADR-002](../adr/ADR-002-identidade-por-conta-windows.md) (Aceito): perfil por SID, somente Windows.
-- **ADR a abrir ao iniciar F1**:
-  - detecção de processos por polling (Toolhelp/`EnumProcesses`) ou por eventos (ETW/WMI);
-  - comunicação serviço ↔ UI (named pipe).
-
-  São decisões estruturais e ainda não foram tomadas.
+- **ADRs propostas (2026-10-28), aguardando aceite do dono**:
+  - [ADR-003](../adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md): detecção por polling de 2 s e definição de tempo de uso (app enquanto o processo existe; total enquanto a sessão está ativa);
+  - [ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md): serviço ↔ UI por named pipe com DACL, o serviço inicia a UI e o batimento detecta adulteração.
 - [Insight sobre o relatório de hardening](../insights/2026-10-27-relatorio-hardening-windows.md): os poucos itens aproveitáveis entram em F4.
 
 ## Fases e dependências
@@ -37,6 +35,22 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 | F2 | Ações: encerrar processo e bloquear sessão, guiadas por `decidir` | F1, [E-003](E-003-motor-de-regras-e-uso.md) F1 | Vídeo/log em Windows real; app permitido intocado |
 | F3 | UI de bandeja: tempo restante, avisos de 5 e 1 min, motivo do bloqueio | F2 | Captura de tela em Windows real |
 | F4 | Antiadulteração: conta da criança não para o serviço nem mata a UI (ACL do serviço, recuperação automática, heartbeat UI ↔ serviço gerando `TAMPER_SUSPECTED`/`AGENT_STOPPED`) | F2 | Teste negativo: `sc stop` e `taskkill` como usuário padrão falham ou são registrados |
+
+## Entregue sem depender de Windows nem das ADRs (2026-10-28)
+
+- `agente::Agente` com a interface `Sistema` (listar processos, encerrar, bloquear sessão, avisar): contabilidade por tick, avisos nos marcos de 5 e 1 min sem repetir, encerramento com tolerância e desistência após 3 falhas (`TAMPER_SUSPECTED`), bloqueio de sessão com intervalo de rebloqueio e eventos de log em cada ação.
+- Leituras do banco para o motor: perfil por SID, app por nome do executável (sem caixa), janela do dia da semana e regras do app (`decidir_para`, `decidir_app`).
+- Tempo de sessão ativa (`session_usage`, [ADR-003](../adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md)): o total do perfil deixa de ser a soma dos apps; só conta quando a sessão estava ativa no tick anterior e no atual.
+- Política de sessão decidida pelo dono: lock e, após 2 desbloqueios com a restrição valendo, logoff (`Sistema::encerrar_sessao`).
+- Protocolo serviço ↔ UI ([ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md)) independente de transporte: mensagens JSON por linha versionadas, decodificação defensiva da entrada da UI, limite de taxa e monitor de batimento (3 batimentos perdidos = alerta único). O named pipe com DACL e a UI de bandeja exigem Windows.
+- Testes com `Sistema` falso contra SQLite real. O adaptador Win32, o pipe da UI e o total por sessão ficam para depois do aceite das ADRs.
+
+## Adaptador Win32 (2026-10-28)
+
+- `sistema_windows::SistemaWindows` implementa `Sistema`: processos por `CreateToolhelp32Snapshot` com o SID do dono (`TokenUser`); sessões logadas e desbloqueadas por `WTSEnumerateSessionsW` + `WTSSessionInfoEx`; `TerminateProcess`; bloqueio por `WTSDisconnectSession`; logoff por `WTSLogoffSession`; avisos por `WTSSendMessageW` (provisório até a bandeja, GC-17).
+- `kioskd servir` roda o agente a cada 2 s e a limpeza diária do log; `--sem-agente` desliga o agente.
+- Textos pt-BR dos avisos em `textos` (testáveis fora do Windows).
+- F0 resolvida por dois caminhos: verificação cruzada local (`--target x86_64-pc-windows-gnu`, com mingw) e o runner `windows-latest` do CI, que roda `tests/windows.rs` em Windows real.
 
 ## Aceites
 

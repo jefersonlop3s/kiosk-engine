@@ -1,6 +1,6 @@
 # E-005 — API de comando e pareamento
 
-Estado: proposto. Responsável: a definir. Repositório: kiosk.
+Estado: concluído em 2026-10-28 no que não depende de Windows (modo LAN com HTTPS e a ligação do agente ao serviço seguem abertos: GC-15 e GC-16). Responsável: a definir. Repositório: kiosk.
 
 ## Resultado e escopo
 
@@ -12,11 +12,9 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 ## Origem e decisões
 
 - [Arquitetura](../architecture/README.md), Seção III (Camadas 0–5) e `POST /api/windows/{action}`.
-- **Hipóteses a confirmar com o dono**:
-  - `client_ip: 100.x.x.x` na arquitetura sugere acesso pela faixa CGNAT do Tailscale. A topologia de rede (só LAN ou VPN mesh) não foi decidida.
-  - O esquema de assinatura (algoritmo, anti-replay) não foi decidido.
-
-  Ambas são estruturais e exigem ADR antes de F1.
+- **ADRs propostas (2026-10-28), aguardando aceite do dono**:
+  - [ADR-005](../adr/ADR-005-rede-da-api-de-comando.md): rede privada Tailscale por padrão, LAN opcional com HTTPS, nunca exposta à internet;
+  - [ADR-006](../adr/ADR-006-assinatura-de-requisicoes-e-pareamento.md): Ed25519 por dispositivo, anti-replay por `timestamp` e `nonce`, pareamento presencial.
 
 ## Fases e dependências
 
@@ -25,6 +23,16 @@ Estado: proposto. Responsável: a definir. Repositório: kiosk.
 | F1 | Servidor HTTP no serviço, Camadas 0 e 3 (recepção e validação) | [E-001](E-001-fundacao-crate-e-dados.md), [E-002](E-002-log-forense.md) F1, ADR de rede | Testes HTTP reais contra o serviço |
 | F2 | Pareamento e Camadas 1 e 2 (autenticação e autorização) | F1, ADR de assinatura | Teste negativo: requisição sem assinatura, com assinatura inválida ou repetida (replay) gera `AUTH_FAIL` |
 | F3 | Camadas 4 e 5 + CLI dos pais | F2, [E-003](E-003-motor-de-regras-e-uso.md) | Ciclo completo criar → ativar → revogar via CLI |
+
+## Entregue (2026-10-28)
+
+- F2, núcleo sem servidor HTTP: `assinatura` (string canônica `KIOSK-V1`, Ed25519 estrito, nonce, código de pareamento) e `pareamento` (Camada 1 `autenticar`, Camada 2 `autorizar`, pareamento presencial por código de uso único, revogação). Migração 0006: `paired_device`, `seen_nonce`, `pairing_code`.
+- Recusas respondem com `Rejeicao` genérica; o motivo exato vai para `AUTH_FAIL`/`AUTHZ_FAIL`/`VALIDATION_FAIL`.
+- F1 e núcleo da F3: `api` (axum) com `POST /api/windows/{ação}` atravessando as Camadas 0 a 5; `comandos` valida os parâmetros (esquema fechado, limites, horários `HH:MM`, referências existentes); ações `add_rule` (nasce `PENDING`), `activate_rule` e `revoke_rule`, cada uma com o evento de sucesso na mesma transação. Respostas: `202 {"status":"accepted"}` (com `id` ao criar), `403 {"status":"rejected"}` idêntico para qualquer recusa e `500` genérico; corpo máximo de 16 KiB.
+- Política de rede da ADR-005 aplicada em código: `vincular` só abre loopback e Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) e recusa curinga e LAN antes de abrir qualquer porta.
+- `POST /api/pair` (o código de uso único é a credencial), `cliente` (HTTP/1.1 simples, credenciais com a chave privada em arquivo `0600`), o serviço `kioskd` (`servir`, `codigo-pareamento`, `dispositivos`, `revogar`) e o CLI `kioskctl` (`parear`, `regra criar|ativar|revogar`). Uso: [runbook](../runbooks/api-e-cli.md).
+- `modify_limit` (regra não revogada; auditado como `MODIFY_LIMIT` com o perfil), `usage` (tempo de sessão e por app de um dia) e `log` (período de até 31 dias, até 500 eventos, filtro por perfil). Na consulta de log, o detalhe exato só sai para eventos de enforcement e de operação; o das falhas de API (`AUTH_FAIL`, `AUTHZ_FAIL`, `VALIDATION_FAIL`, `INTERNAL_ERROR`) fica só no banco, em coerência com o aceite abaixo. As consultas não geram evento.
+- Faltam: modo LAN com HTTPS e a ligação do agente ao serviço (GC-15 e GC-16 no [PENDING](../PENDING.md)).
 
 ## Aceites
 
