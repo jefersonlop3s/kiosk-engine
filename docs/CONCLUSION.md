@@ -631,6 +631,6 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - `kioskd` confere a elevação de todo comando administrativo antes de abrir o banco; a API entrega o detalhe da tentativa aos pais, sem o SID;
   - desvios registrados na ADR (conferência do servidor pelo PID do serviço, direitos do pipe, nível de personificação).
 - **Evidência local**: 164 testes no Linux, entre eles 13 de `tests/auditoria.rs` (entrada hostil, limite de taxa, perfil da criança, administrador sem elevação, inundação) e o log da API sem o SID; clippy no Linux e cruzado para Windows; 28 diagramas validados.
-- **Evidência no CI Windows** (a confirmar na rodada do PR): conta padrão real conecta ao pipe, o serviço grava o evento com o SID do **token**, a mensagem forjada com outro SID é recusada, o evento leva o perfil quando a conta é uma criança cadastrada, a inundação para em 5 por minuto, e o `kioskd` rodando como a conta padrão recusa e diz se registrou.
+- **Evidência no CI Windows**: conta padrão real conecta ao pipe, o serviço grava o evento com o SID do **token**, a mensagem forjada com outro SID é recusada, o evento leva o perfil quando a conta é uma criança cadastrada, a inundação para em 5 por minuto. O `kioskd.exe` inteiro rodando como a conta padrão **não** é exercitado no CI (`Start-Process -Credential` trava nos runners); fica atrás de `KIOSK_TESTE_PROCESSO_COMO_CONTA=1` para rodar num PC real.
 - **Falta**: ver no PC do dono, numa conta comum, a tentativa aparecer em `kioskctl log --profile` (GC-21 segue aberto até lá).
 

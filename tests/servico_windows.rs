@@ -613,7 +613,12 @@ fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::pat
     );
 
     // 5. o `kioskd` inteiro, rodando como a conta padrão: recusa antes de abrir qualquer coisa e
-    //    diz se registrou
+    //    diz se registrou. `Start-Process -Credential` fica pendurado nos runners do GitHub (sem
+    //    saída em 3 minutos), então este passo só roda a pedido: KIOSK_TESTE_PROCESSO_COMO_CONTA=1
+    //    num PC real. No CI, o caminho do `kioskd` é coberto pela chamada do aviso nos passos 2-4.
+    if std::env::var_os("KIOSK_TESTE_PROCESSO_COMO_CONTA").is_none() {
+        return;
+    }
     let antes_da_cli = eventos().len();
     let exe = pasta("ProgramFiles").join("kioskd.exe");
     let (codigo, _, saida_do_kioskd, ps) =
