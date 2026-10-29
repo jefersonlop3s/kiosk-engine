@@ -28,6 +28,10 @@ $env:KIOSK_LISTEN = "100.95.52.48:8443,127.0.0.1:8443"   # IP do `tailscale ip -
 - **Banco:** no Windows o padrão é `C:\ProgramData\kiosk\kiosk.db`, igual em qualquer janela e pasta; a pasta é criada se faltar. Todo comando do `kioskd` mostra na primeira linha qual banco está usando (`kioskd: banco ...`): confira que é sempre o mesmo. Só defina `$env:KIOSK_DB` se quiser outro lugar e, nesse caso, defina-o **em toda janela** (as variáveis `$env:` valem só para a janela em que foram definidas). O arquivo tem dados de crianças: o `kioskd install` (seção 4) deixa a pasta acessível só a SYSTEM e Administradores; a partir daí, os comandos do `kioskd` só funcionam num PowerShell **aberto como Administrador**.
 - `KIOSK_LISTEN`: `ip:porta[,ip:porta...]`, obrigatória para `servir`. Só são aceitos loopback (`127.0.0.1`, `::1`) e a rede Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`); `0.0.0.0` e endereços de LAN são recusados. O `127.0.0.1` permite parear um `kioskctl` no próprio PC.
 
+### Permissões e rastro
+
+Depois do `kioskd install`, os comandos do `kioskd` que mexem nos dados só funcionam num PowerShell **aberto como Administrador**. Numa janela comum, ou na conta da criança, o comando recusa antes de abrir qualquer coisa e avisa o serviço, que grava a tentativa no log forense. Os pais a veem em `kioskctl log --profile ID`, por exemplo: `` `pairing-code` exige administrador elevado; tentativa de uma conta comum``. Um administrador que esqueceu de elevar também aparece, como "conta de administrador sem elevação". Cada conta registra no máximo 5 tentativas por minuto; as demais são contadas no evento seguinte. Se o serviço não estiver no ar, a recusa diz que a tentativa **não** foi registrada.
+
 ### Idioma
 
 As mensagens saem em **en-US, pt-BR ou es-ES**, no idioma de quem as lê ([ADR-010](../adr/ADR-010-idiomas-e-comandos-em-ingles.md)):

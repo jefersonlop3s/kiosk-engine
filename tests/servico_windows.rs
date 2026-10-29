@@ -379,6 +379,8 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
     );
     // o administrador (quem roda o teste) pode
     assert_eq!(abrir_servico(SERVICE_STOP), Ok(()));
+
+    tentativas_sem_privilegio_chegam_ao_log(&conta, &dados);
     drop(conta);
 
     // derrubar o processo: o Windows reinicia o serviço sozinho
@@ -455,4 +457,192 @@ fn servico_rodado_a_mao_explica_e_falha() {
     let o = kioskd(&["servico"]);
     assert!(!o.status.success());
     assert!(texto(&o).contains("kioskd install"), "{}", texto(&o));
+}
+
+/// ADR-011: a conta padrão não abre o banco, mas o serviço (SYSTEM) grava a tentativa dela, e o
+/// chamador vem do token da conexão, nunca da mensagem.
+fn tentativas_sem_privilegio_chegam_ao_log(conta: &ContaPadrao, dados: &std::path::Path) {
+    use kiosk_engine::auditoria::NOME_DO_PIPE;
+    use kiosk_engine::auditoria_windows::avisar_tentativa;
+    use kiosk_engine::detalhes::Detalhe;
+    use kiosk_engine::sistema_windows::sid_de_usuario;
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let db_url = format!(
+        "sqlite://{}",
+        dados
+            .join("kiosk.db")
+            .display()
+            .to_string()
+            .replace('\\', "/")
+    );
+    // eventos de enforcement e de falha que a auditoria grava: (tipo, ação, perfil, detalhe)
+    let eventos = || -> Vec<(String, String, Option<String>, String)> {
+        rt.block_on(async {
+            let db = kiosk_engine::db_manager::KioskDbManager::new(&db_url).await.unwrap();
+            sqlx::query_as(
+                "SELECT event_type, action_attempted, profile_id, rejection_reason_detail \
+                 FROM security_log WHERE event_type IN ('AUTHZ_FAIL', 'VALIDATION_FAIL') ORDER BY rowid",
+            )
+            .fetch_all(db.pool())
+            .await
+            .unwrap()
+        })
+    };
+    let sid = sid_de_usuario(&conta.nome).expect("SID da conta de teste");
+    let antes = eventos().len();
+
+    // o serviço abre o pipe logo depois de subir
+    assert!(
+        esperar(Duration::from_secs(20), || std::path::Path::new(
+            NOME_DO_PIPE
+        )
+        .exists()
+        .then_some(()))
+        .is_some(),
+        "o serviço não abriu o pipe de auditoria"
+    );
+
+    // 1. mensagem forjada: tenta se passar por outra conta; é recusada e o serviço responde ok:false
+    let forjada = como(conta, || -> std::io::Result<String> {
+        let mut f = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(NOME_DO_PIPE)?;
+        f.write_all(
+            b"{\"v\":1,\"tipo\":\"tentativa_sem_privilegio\",\"comando\":\"pairing-code\",\"sid\":\"S-1-5-18\"}\n",
+        )?;
+        let mut r = String::new();
+        let mut b = [0u8; 1];
+        while f.read(&mut b)? == 1 && b[0] != b'\n' {
+            r.push(b[0] as char);
+        }
+        Ok(r)
+    })
+    .expect("a conta padrão não conseguiu conectar ao pipe");
+    assert!(
+        !kiosk_engine::auditoria::resposta_ok(&forjada),
+        "aceitou mensagem forjada: {forjada}"
+    );
+
+    // 2. aviso válido: o serviço grava, e o SID é o do TOKEN (a conta de teste), sem perfil
+    let r = como(conta, || avisar_tentativa("pairing-code"));
+    assert_eq!(r, Ok(()), "o serviço não confirmou a gravação");
+    let e = eventos();
+    let ultimo = e.last().unwrap();
+    assert_eq!(
+        (ultimo.0.as_str(), ultimo.1.as_str(), ultimo.2.as_deref()),
+        ("AUTHZ_FAIL", "CREATE_PAIRING_CODE", None)
+    );
+    match Detalhe::de_texto(&ultimo.3).expect("detalhe em código") {
+        Detalhe::AdminRequired {
+            command,
+            admin_account,
+            caller_sid,
+            ..
+        } => {
+            assert_eq!(command, "pairing-code");
+            assert!(!admin_account, "conta padrão marcada como administrador");
+            assert_eq!(
+                caller_sid.as_deref(),
+                Some(sid.as_str()),
+                "o SID tem de ser o do chamador"
+            );
+        }
+        outro => panic!("{outro:?}"),
+    }
+    assert!(
+        !e[antes..].iter().any(|x| x.3.contains("S-1-5-18")),
+        "o SID forjado entrou no log"
+    );
+    assert!(
+        e[antes..].iter().any(|x| x.0 == "VALIDATION_FAIL"),
+        "a mensagem forjada não virou VALIDATION_FAIL"
+    );
+
+    // 3. com perfil cadastrado, o evento leva o perfil e deixa o SID de fora
+    let perfil = kioskd(&["profile", "create", "--sid", &sid, "--name", "Teste"]);
+    assert!(perfil.status.success(), "{}", texto(&perfil));
+    let id_do_perfil = texto(&perfil)
+        .split_whitespace()
+        .find(|p| uuid::Uuid::parse_str(p).is_ok())
+        .expect("id do perfil")
+        .to_owned();
+    assert_eq!(como(conta, || avisar_tentativa("rule create")), Ok(()));
+    let e = eventos();
+    let ultimo = e.last().unwrap();
+    assert_eq!(
+        (ultimo.1.as_str(), ultimo.2.as_deref()),
+        ("ADD_RULE", Some(id_do_perfil.as_str()))
+    );
+    assert!(
+        !ultimo.3.contains(&sid),
+        "o SID não precisa estar no detalhe: {}",
+        ultimo.3
+    );
+
+    // 4. inundação: já foram 3 avisos deste minuto (o forjado conta); só mais 2 viram evento
+    let antes_da_inundacao = eventos().len();
+    for _ in 0..10 {
+        assert_eq!(
+            como(conta, || avisar_tentativa("devices")),
+            Ok(()),
+            "descartado também confirma"
+        );
+    }
+    assert_eq!(
+        eventos().len() - antes_da_inundacao,
+        2,
+        "o limite de 5 avisos por minuto não valeu"
+    );
+
+    // 5. o `kioskd` inteiro, rodando como a conta padrão: recusa antes de abrir qualquer coisa e
+    //    diz se registrou (a saída vai para arquivos que a conta padrão pode escrever)
+    let saida = std::path::PathBuf::from(r"C:\Users\Public\kiosk-teste-saida.txt");
+    let erro = std::path::PathBuf::from(r"C:\Users\Public\kiosk-teste-erro.txt");
+    let _ = (std::fs::remove_file(&saida), std::fs::remove_file(&erro));
+    let exe = pasta("ProgramFiles").join("kioskd.exe");
+    let script = format!(
+        "$s = ConvertTo-SecureString '{}' -AsPlainText -Force; \
+         $c = New-Object System.Management.Automation.PSCredential('.\\{}', $s); \
+         $p = Start-Process -FilePath '{}' -ArgumentList 'rule','list' -Credential $c \
+           -WorkingDirectory 'C:\\Windows\\System32' -RedirectStandardOutput '{}' -RedirectStandardError '{}' -Wait -PassThru; \
+         exit $p.ExitCode",
+        conta.senha,
+        conta.nome,
+        exe.display(),
+        saida.display(),
+        erro.display()
+    );
+    let antes_da_cli = eventos().len();
+    let o = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .unwrap();
+    let saida_do_kioskd = std::fs::read_to_string(&erro).unwrap_or_default();
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "o kioskd da conta padrão devia recusar (exit 1): ps={} erro={saida_do_kioskd}",
+        texto(&o)
+    );
+    assert!(saida_do_kioskd.contains("`rule list`"), "{saida_do_kioskd}");
+    assert!(
+        !saida_do_kioskd.contains("NOT recorded")
+            && !saida_do_kioskd.contains("NÃO foi")
+            && !saida_do_kioskd.contains("NO quedó"),
+        "o serviço estava no ar, devia ter registrado: {saida_do_kioskd}"
+    );
+    assert!(
+        !saida_do_kioskd.contains("database"),
+        "abriu o banco antes de recusar: {saida_do_kioskd}"
+    );
+    let e = eventos();
+    // a cota do minuto pode ter acabado (5 avisos): se o evento não entrou, a cota explica; senão confere
+    if e.len() > antes_da_cli {
+        let ultimo = e.last().unwrap();
+        assert_eq!(ultimo.2.as_deref(), Some(id_do_perfil.as_str()));
+        assert!(ultimo.3.contains("rule list"), "{}", ultimo.3);
+    }
+    let _ = (std::fs::remove_file(&saida), std::fs::remove_file(&erro));
 }

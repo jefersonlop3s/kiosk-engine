@@ -623,3 +623,14 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Origem**: aceite explícito do dono ("ADR-011 aceita"), depois de confirmar as duas decisões abertas.
 - **Resultado**: [ADR-011](adr/ADR-011-rastro-de-tentativas-sem-privilegio.md) passa a **Aceito**. O GC-21 segue aberto até a implementação (named pipe `kiosk-audit`, personificação do cliente para ler o SID, evento `AUTHZ_FAIL` com o perfil da criança, limite de taxa por conta, conferência de elevação em todo comando que abre o banco) e a validação no CI Windows.
 
+## 2026-10-29 — v0.0.6 publicada; ADR-011 implementada (GC-21)
+
+- **v0.0.6** ([release](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.6), pré-lançamento, de `de25d0b`): opção desconhecida deixa de ser ignorada, aviso de limite já ultrapassado, duração em `3min 00s`. O SHA-256 do `.zip` do Windows está no `SHA256SUMS.txt` do release.
+- **ADR-011 implementada** (ainda sem versão publicada):
+  - `auditoria` (protocolo de uma linha JSON de esquema fechado, limite de taxa por conta, evento) e `auditoria_windows` (servidor do pipe no serviço, com DACL e personificação para ler o token, e o cliente no `kioskd`);
+  - `kioskd` confere a elevação de todo comando administrativo antes de abrir o banco; a API entrega o detalhe da tentativa aos pais, sem o SID;
+  - desvios registrados na ADR (conferência do servidor pelo PID do serviço, direitos do pipe, nível de personificação).
+- **Evidência local**: 164 testes no Linux, entre eles 13 de `tests/auditoria.rs` (entrada hostil, limite de taxa, perfil da criança, administrador sem elevação, inundação) e o log da API sem o SID; clippy no Linux e cruzado para Windows; 28 diagramas validados.
+- **Evidência no CI Windows** (a confirmar na rodada do PR): conta padrão real conecta ao pipe, o serviço grava o evento com o SID do **token**, a mensagem forjada com outro SID é recusada, o evento leva o perfil quando a conta é uma criança cadastrada, a inundação para em 5 por minuto, e o `kioskd` rodando como a conta padrão recusa e diz se registrou.
+- **Falta**: ver no PC do dono, numa conta comum, a tentativa aparecer em `kioskctl log --profile` (GC-21 segue aberto até lá).
+

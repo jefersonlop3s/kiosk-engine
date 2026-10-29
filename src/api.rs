@@ -400,14 +400,22 @@ async fn consulta_uso(db: &KioskDbManager, profile_id: Uuid, dia: chrono::NaiveD
 
 /// O detalhe exato só sai para eventos de enforcement e de operação; o das falhas das camadas
 /// da API (`AUTH_FAIL`, `AUTHZ_FAIL`, `VALIDATION_FAIL`, `INTERNAL_ERROR`) fica só no banco.
-fn detalhe_publico(tipo: EventType) -> bool {
-    !matches!(
+/// Exceção (ADR-011): a tentativa de comando administrativo sem privilégio, que sai sem o SID.
+fn detalhe_para_os_pais(tipo: EventType, detalhe: String) -> Option<String> {
+    let publico = !matches!(
         tipo,
         EventType::AuthFail
             | EventType::AuthzFail
             | EventType::ValidationFail
             | EventType::InternalError
-    )
+    );
+    if publico {
+        return Some(detalhe);
+    }
+    if tipo == EventType::AuthzFail {
+        return crate::detalhes::para_os_pais(&detalhe);
+    }
+    None
 }
 
 async fn consulta_log(db: &KioskDbManager, c: &crate::comandos::ConsultaLog) -> Response {
@@ -426,7 +434,7 @@ async fn consulta_log(db: &KioskDbManager, c: &crate::comandos::ConsultaLog) -> 
                         "status": e.transaction_status.as_str(),
                         "client_ip": e.client_ip,
                         "profile_id": e.profile_id,
-                        "detail": detalhe_publico(e.event_type).then_some(e.rejection_reason_detail),
+                        "detail": detalhe_para_os_pais(e.event_type, e.rejection_reason_detail),
                     })
                 })
                 .collect();

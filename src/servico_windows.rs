@@ -213,11 +213,23 @@ pub fn nome_estado(estado: u32) -> String {
     .to_string()
 }
 
+/// PID do processo do serviço em execução (`None` se não está instalado ou está parado). Qualquer
+/// conta consulta (a DACL do serviço deixa), então serve ao cliente do pipe `kiosk-audit` para
+/// conferir que o servidor do pipe é o serviço e não um processo que ocupou o nome.
+pub fn pid_do_servico() -> Result<Option<u32>, String> {
+    let scm = abrir_scm(SC_MANAGER_CONNECT)?;
+    let Some(svc) = abrir_servico(&scm, SERVICE_QUERY_STATUS)? else {
+        return Ok(None);
+    };
+    let st = status(&svc)?;
+    Ok((st.dwCurrentState == SERVICE_RUNNING && st.dwProcessId != 0).then_some(st.dwProcessId))
+}
+
 /// Descritor de segurança a partir de SDDL, liberado ao sair do escopo.
-struct Descritor(PSECURITY_DESCRIPTOR);
+pub(crate) struct Descritor(pub(crate) PSECURITY_DESCRIPTOR);
 
 impl Descritor {
-    fn de_sddl(sddl: &str) -> Result<Self, String> {
+    pub(crate) fn de_sddl(sddl: &str) -> Result<Self, String> {
         let texto = para_utf16(sddl);
         let mut sd: PSECURITY_DESCRIPTOR = null_mut();
         // SAFETY: SDDL terminada em zero; o descritor é liberado no Drop com LocalFree.
