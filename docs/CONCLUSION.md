@@ -618,3 +618,8 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **ADR-011**: o dono confirmou as duas decisões abertas (registrar também o administrador sem elevação; `sc stop` fora do escopo). O aceite da ADR como um todo está pendente.
 - Nenhum dado do log do dono (IDs, SID, conta) foi copiado.
 
+## 2026-10-29 — ADR-011 aceita
+
+- **Origem**: aceite explícito do dono ("ADR-011 aceita"), depois de confirmar as duas decisões abertas.
+- **Resultado**: [ADR-011](adr/ADR-011-rastro-de-tentativas-sem-privilegio.md) passa a **Aceito**. O GC-21 segue aberto até a implementação (named pipe `kiosk-audit`, personificação do cliente para ler o SID, evento `AUTHZ_FAIL` com o perfil da criança, limite de taxa por conta, conferência de elevação em todo comando que abre o banco) e a validação no CI Windows.
+

@@ -15,6 +15,6 @@ Status: Proposto → Aceito | Rejeitado | Descontinuado | Substituído. **O acei
 | [ADR-008](ADR-008-formato-do-instalador.md) | Formato do instalador | Aceito | 2026-10-29 | kiosk |
 | [ADR-009](ADR-009-origem-da-lista-de-programas.md) | Origem da lista de programas do assistente | Aceito | 2026-10-29 | kiosk |
 | [ADR-010](ADR-010-idiomas-e-comandos-em-ingles.md) | Idiomas (en-US, pt-BR, es-ES) e comandos de CLI em inglês | Aceito | 2026-10-29 | kiosk |
-| [ADR-011](ADR-011-rastro-de-tentativas-sem-privilegio.md) | Rastro das tentativas de comando administrativo sem privilégio | Proposto | 2026-10-29 | kiosk |
+| [ADR-011](ADR-011-rastro-de-tentativas-sem-privilegio.md) | Rastro das tentativas de comando administrativo sem privilégio | Aceito | 2026-10-29 | kiosk |
 
 **Próximo número livre**: ADR-012.

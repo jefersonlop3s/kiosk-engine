@@ -1,6 +1,6 @@
 # ADR-011 — Rastro das tentativas de comando administrativo sem privilégio
 
-Status: Proposto. Data: 2026-10-29. Autoridade de aceite: dono do projeto (Jeferson Lopes).
+Status: Aceito em 2026-10-29 pelo dono (Jeferson Lopes). Data: 2026-10-29. Autoridade de aceite: dono do projeto (Jeferson Lopes).
 Repositórios/contratos afetados: kiosk; `kioskd` (comandos que abrem o banco), serviço do Windows, leitura do log pela API; GC-21 do [PENDING](../PENDING.md); [E-004](../epics/E-004-agente-windows-enforcement.md) F4.
 
 ## Contexto
@@ -16,11 +16,10 @@ Dois fatos que o teste mostrou e esta ADR também resolve:
 
 ## Confirmações do dono (2026-10-29)
 
-O dono confirmou as duas decisões que a proposta deixou abertas, e elas valem como estão escritas abaixo: **(1)** o administrador que esqueceu de abrir o PowerShell elevado também é registrado, marcado como `admin_account: true`; **(2)** o que a conta da criança tenta contra o serviço pelo gerenciador de serviços (por exemplo `sc stop`) fica fora desta ADR. O aceite da ADR como um todo ainda não foi dado.
+O dono confirmou as duas decisões que a proposta deixou abertas, e elas valem como estão escritas abaixo: **(1)** o administrador que esqueceu de abrir o PowerShell elevado também é registrado, marcado como `admin_account: true`; **(2)** o que a conta da criança tenta contra o serviço pelo gerenciador de serviços (por exemplo `sc stop`) fica fora desta ADR. A ADR foi aceita como um todo no mesmo dia.
 
 ## Decisão
 
-Proposta:
 
 1. **O comando avisa o serviço, e o serviço grava.** Quando um comando que exige administrador roda sem elevação, o `kioskd` recusa como hoje e, antes, manda um aviso curto ao serviço por um **named pipe local** `\\.\pipe\kiosk-audit`. O serviço, que é SYSTEM, grava o evento no banco, que fica no mesmo lugar e sob a mesma proteção do resto do log.
 2. **O serviço descobre quem chamou; o cliente não informa.** Para cada conexão, o serviço usa `ImpersonateNamedPipeClient` + `OpenThreadToken`, lê o SID do chamador e volta à própria identidade (`RevertToSelf`). Nada no conteúdo da mensagem diz quem é o chamador, então ele não pode ser forjado. (A [ADR-004](ADR-004-comunicacao-servico-ui-por-named-pipe.md) usa `GetNamedPipeClientProcessId` + SID do processo; aqui a personificação é preferida porque não depende de o PID ainda ser o mesmo.)

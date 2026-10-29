@@ -4,6 +4,10 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.6] - 2026-10-29
+
+Ainda **pré-lançamento**. Corrige o que o teste da 0.0.5 no PC real mostrou: opção digitada errada deixa de ser ignorada em silêncio, e o `kioskd` avisa quando uma regra já nasce com o limite menor ou igual ao uso de hoje. A ADR-011 (rastro das tentativas de comando sem privilégio) foi aceita e entra numa próxima versão. Serviço e `kioskctl` da 0.0.5 continuam compatíveis.
+
 ### Corrigido
 - `kioskd` e `kioskctl` ignoravam em silêncio opção desconhecida, opção sem valor e argumento sobrando: um `--activete` digitado errado criava uma regra pendente sem avisar. Agora recusam, com sugestão quando há uma opção parecida (`você quis dizer --activate?`), antes de abrir o banco ou gravar. `--help` e `-h` mostram o uso.
 - A duração nas listagens do `kioskd` (`0h03`) passa a `3min 00s`, o mesmo formato do `kioskctl`.

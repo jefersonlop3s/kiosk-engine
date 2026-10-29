@@ -24,7 +24,7 @@ Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam
 - **ADRs propostas (2026-10-28), aguardando aceite do dono**:
   - [ADR-003](../adr/ADR-003-deteccao-de-processos-e-tempo-de-uso.md): detecção por polling de 2 s e definição de tempo de uso (app enquanto o processo existe; total enquanto a sessão está ativa);
   - [ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md): serviço ↔ UI por named pipe com DACL, o serviço inicia a UI e o batimento detecta adulteração.
-- **ADR proposta (2026-10-29), aguardando aceite do dono**: [ADR-011](../adr/ADR-011-rastro-de-tentativas-sem-privilegio.md), rastro das tentativas de comando administrativo sem privilégio (GC-21), por named pipe local que o serviço escuta e grava no banco. Entra na F4.
+- **ADR aceita (2026-10-29)**: [ADR-011](../adr/ADR-011-rastro-de-tentativas-sem-privilegio.md), rastro das tentativas de comando administrativo sem privilégio (GC-21), por named pipe local que o serviço escuta e grava no banco. Entra na F4.
 - [Insight sobre o relatório de hardening](../insights/2026-10-27-relatorio-hardening-windows.md): os poucos itens aproveitáveis entram em F4.
 
 ## Fases e dependências
