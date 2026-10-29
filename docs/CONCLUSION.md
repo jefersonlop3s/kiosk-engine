@@ -581,3 +581,17 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Falta**: ver no PC real o aviso à criança no idioma da conta dela.
 - **Quebra**: o log gravado pela 0.0.4 tem texto em português; o `kioskctl log` o mostra como está.
 
+## 2026-10-29 — v0.0.5 publicada e validada no PC real do dono
+
+- **Origem**: publicação da 0.0.5 ([release](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.5), pré-lançamento, gerada de `01c8556`) e teste do dono no próprio PC.
+- **Resultado**:
+  - **Pacote**: o SHA-256 do `.zip` do Windows bateu com o do `SHA256SUMS.txt`.
+  - **Atualização**: `kioskd install` sobre a 0.0.4 parou o serviço, trocou os executáveis em `Program Files\kiosk`, pôs a pasta no PATH do sistema, registrou o serviço como `service` e o reiniciou, sem outro passo.
+  - **PATH**: em janela nova do PowerShell, `kioskd` funciona de qualquer pasta.
+  - **Comandos**: `kioskd status` e `kioskd estado` dão o mesmo resultado, com `KIOSK_LANG=pt-BR` (o idioma de quem instalou) no ambiente do serviço.
+  - **Idiomas**: a saída muda na hora com `KIOSK_LANG` e foi vista em pt-BR, en-US e es-ES.
+  - **Segurança do pareamento**: sem elevação, `kioskd pairing-code` recusa; elevado, gera o código, nos dois idiomas.
+- **Achado**: a recusa sem elevação **não foi registrada no log forense**, porque a conta comum não abre o banco protegido. Registrado como GC-21 no [PENDING](PENDING.md).
+- **Ainda por ver no PC real**: o aviso à criança no idioma da conta dela ([E-012](epics/E-012-internacionalizacao.md) F3) e o agente aplicando uma regra na conta da criança como SYSTEM (GC-16).
+- Nenhum dado do log do dono (IP, conta, caminhos pessoais) foi copiado para o repositório.
+

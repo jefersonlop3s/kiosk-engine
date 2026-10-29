@@ -4,6 +4,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Documentação
+- Registro do teste da 0.0.5 no PC real do dono e do GC-21: a recusa de `kioskd pairing-code` por conta sem privilégio não fica no log forense, porque o banco só abre para administradores.
+
 ## [0.0.5] - 2026-10-29
 
 Ainda **pré-lançamento**. Idiomas (en-US, pt-BR, es-ES), comandos em inglês com o português equivalente, pasta do kiosk no PATH e exigência de administrador para gerar o código de pareamento. **Atualize o `kioskd` e o `kioskctl` juntos**: o corpo do pareamento mudou e um `kioskctl` 0.0.4 não pareia com um serviço 0.0.5. Dispositivos já pareados continuam funcionando. O log gravado pela 0.0.4 mantém o texto em português.
