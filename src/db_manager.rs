@@ -5,9 +5,9 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
+use crate::database_schema::warning_seconds_to_str;
 use crate::database_schema::*;
 use crate::motor::{AppCtx, Consumo, Decisao, Instante, PerfilCtx, decidir};
-use crate::database_schema::warning_seconds_to_str;
 use crate::security_logger_impl::insert_event;
 use crate::uso::{MAX_INTERVALO_SEGUNDOS, dividir_por_dia_local};
 

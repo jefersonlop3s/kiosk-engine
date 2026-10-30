@@ -1,8 +1,8 @@
 //! Gravação do log forense. A inserção recebe a conexão da transação do chamador:
 //! o evento e a mudança de estado que ele descreve confirmam ou desfazem juntos.
 
-use sqlx::SqliteConnection;
 use sha2::{Digest, Sha256};
+use sqlx::SqliteConnection;
 
 pub use crate::database_schema::SecurityEvent;
 use crate::database_schema::log_ts;
@@ -13,7 +13,9 @@ use crate::database_schema::log_ts;
 fn hash_chain(prev_log_id: Option<&str>, prev_hash: Option<&str>) -> Option<String> {
     match (prev_log_id, prev_hash) {
         (Some(id), Some(h)) => {
-            let bytes: Vec<u8> = std::iter::chain(id.as_bytes(), h.as_bytes()).copied().collect();
+            let bytes: Vec<u8> = std::iter::chain(id.as_bytes(), h.as_bytes())
+                .copied()
+                .collect();
             Some(format!("{:x}", Sha256::digest(&bytes)))
         }
         _ => None,
@@ -22,11 +24,10 @@ fn hash_chain(prev_log_id: Option<&str>, prev_hash: Option<&str>) -> Option<Stri
 
 /// SHA-256(prev_log_id || prev_hash) do último registro, para encadear.
 async fn prev_hash_do_ultimo(conn: &mut SqliteConnection) -> Result<Option<String>, sqlx::Error> {
-    let ultimo: Option<(String, Option<String>)> = sqlx::query_as(
-        "SELECT log_id, prev_hash FROM security_log ORDER BY rowid DESC LIMIT 1",
-    )
-    .fetch_optional(conn)
-    .await?;
+    let ultimo: Option<(String, Option<String>)> =
+        sqlx::query_as("SELECT log_id, prev_hash FROM security_log ORDER BY rowid DESC LIMIT 1")
+            .fetch_optional(conn)
+            .await?;
     match ultimo {
         Some((id, h)) => Ok(hash_chain(Some(&id), h.as_deref())),
         None => Ok(None),
