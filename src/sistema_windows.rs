@@ -668,6 +668,15 @@ impl Sistema for SistemaWindows {
         }
         Ok(())
     }
+    fn contas_locais(&mut self) -> Result<Vec<crate::agente::ContaLocal>, String> {
+        // TODO: Implementar usando NetUserEnumW
+        Ok(vec![])
+    }
+
+    fn atalhos_do_menu(&mut self) -> Result<Vec<crate::agente::ProgramaSugerido>, String> {
+        // TODO: Implementar usando IShellLink
+        Ok(vec![])
+    }
 
     fn avisar(&mut self, aviso: &Aviso) -> Result<(), String> {
         let id = sessao_do_sid(&aviso.sid)?;

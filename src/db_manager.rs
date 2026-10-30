@@ -12,6 +12,7 @@ use crate::security_logger_impl::insert_event;
 use crate::uso::{MAX_INTERVALO_SEGUNDOS, dividir_por_dia_local};
 
 /// Pool de conexão para transações atômicas no SQLite local.
+#[derive(Clone)]
 pub struct KioskDbManager {
     pool: SqlitePool,
 }

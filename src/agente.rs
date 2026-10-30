@@ -30,6 +30,18 @@ pub const MAX_TENTATIVAS_ENCERRAR: u32 = 3;
 const TICKS_DE_GRACA_APOS_ENCERRAR: u8 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContaLocal {
+    pub sid: String,
+    pub nome: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProgramaSugerido {
+    pub nome_amigavel: String,
+    pub executavel: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessoVisto {
     pub pid: u32,
     pub process_name: String,
@@ -57,6 +69,10 @@ pub trait Sistema {
     fn sessoes_ativas(&mut self) -> Result<Vec<String>, String>;
     /// Encerra a sessão (logoff) quando o bloqueio simples não basta.
     fn encerrar_sessao(&mut self, sid: &str) -> Result<(), String>;
+    /// Lista contas locais do Windows (excluindo Admin e Convidado).
+    fn contas_locais(&mut self) -> Result<Vec<ContaLocal>, String>;
+    /// Lista programas baseada em atalhos e processos rodando.
+    fn atalhos_do_menu(&mut self) -> Result<Vec<ProgramaSugerido>, String>;
     /// `true` se este sistema tem bandeja (UI) para o agente supervisionar (E-004 F3 e F4). Os de
     /// teste, sem UI, ficam como estão.
     fn tem_ui(&self) -> bool {

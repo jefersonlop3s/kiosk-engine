@@ -1,3 +1,4 @@
+pub mod assistente;
 pub mod agente;
 pub mod api;
 pub mod assinatura;
