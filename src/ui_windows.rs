@@ -81,9 +81,17 @@ impl GerenteUi {
     /// Entrega `msg` à UI da conta. `false` se não há UI conectada ou a fila dela está cheia:
     /// quem chama decide o que fazer (por exemplo, cair na caixa de mensagem do Windows).
     pub fn enviar(&self, sid: &str, msg: ParaUi) -> bool {
-        self.travar()
-            .get(sid)
-            .is_some_and(|e| e.fila.try_send(msg).is_ok())
+        let e_aviso = matches!(msg, ParaUi::Aviso { .. });
+        let mut entradas = self.travar();
+        let Some(e) = entradas.get_mut(sid) else {
+            return false;
+        };
+        let entregue = e.fila.try_send(msg).is_ok();
+        if entregue && e_aviso {
+            // a confirmação de um aviso antigo não vale para o novo (GC-17, reserva do serviço)
+            e.aviso_exibido = None;
+        }
+        entregue
     }
 
     /// Quando a UI da conta mandou o último batimento.

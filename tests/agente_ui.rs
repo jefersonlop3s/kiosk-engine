@@ -4,6 +4,7 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 use kiosk_engine::agente::*;
 use kiosk_engine::database_schema::*;
 use kiosk_engine::db_manager::{EventContext, KioskDbManager};
+use kiosk_engine::motor::Motivo;
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -18,6 +19,10 @@ struct ComUi {
     batimento: Option<DateTime<Utc>>,
     iniciadas: Vec<String>,
     falha_ao_iniciar: bool,
+    /// O que o agente empurrou para a dica da bandeja.
+    estados: Vec<(String, Option<u64>)>,
+    /// Avisos que a bandeja "não confirmou", com o resultado da reserva; entregues no próximo tick.
+    reservas: Vec<(Aviso, Result<(), String>)>,
 }
 
 impl Sistema for ComUi {
@@ -52,6 +57,12 @@ impl Sistema for ComUi {
         self.iniciadas.push(sid.to_owned());
         Ok(())
     }
+    fn estado(&mut self, sid: &str, restante: Option<u64>, _: Option<Motivo>) {
+        self.estados.push((sid.to_owned(), restante));
+    }
+    fn avisos_sem_confirmacao(&mut self, _: DateTime<Utc>) -> Vec<(Aviso, Result<(), String>)> {
+        std::mem::take(&mut self.reservas)
+    }
 }
 
 struct Mundo {
@@ -65,6 +76,10 @@ fn seg(n: i64) -> DateTime<Utc> {
 }
 
 async fn mundo() -> Mundo {
+    mundo_com(None).await
+}
+
+async fn mundo_com(limite_total: Option<u64>) -> Mundo {
     let dir = tempfile::tempdir().unwrap();
     let db = KioskDbManager::new(&format!("sqlite://{}", dir.path().join("k.db").display()))
         .await
@@ -73,7 +88,7 @@ async fn mundo() -> Mundo {
         profile_id: Uuid::new_v4(),
         windows_sid: CRIANCA.into(),
         display_name: "Filho".into(),
-        daily_total_limit_seconds: None,
+        daily_total_limit_seconds: limite_total,
     };
     db.create_profile(&EventContext::local(), &perfil)
         .await
@@ -299,4 +314,57 @@ async fn os_textos_do_alerta_saem_nos_tres_idiomas() {
     assert!(legivel(&falha, Idioma::PtBr).contains("não foi possível iniciar a bandeja"));
     assert!(legivel(&falha, Idioma::EnUs).contains("could not start the tray"));
     assert!(legivel(&falha, Idioma::EsEs).contains("no se pudo iniciar la bandeja"));
+}
+
+#[tokio::test]
+async fn o_tempo_restante_vai_para_a_bandeja_so_quando_muda_de_balde() {
+    let m = mundo_com(Some(700)).await;
+    let mut a = agente(
+        &m,
+        ComUi {
+            sessoes: vec![CRIANCA.into()],
+            ..Default::default()
+        },
+    );
+    a.tick(seg(0)).await;
+    a.tick(seg(300)).await;
+    assert!(
+        a.sistema_mut().estados.is_empty(),
+        "fora da janela de aviso não há número"
+    );
+    a.tick(seg(600)).await; // restam 100 s
+    a.tick(seg(602)).await; // 98 s: mesmo balde de 15 s
+    assert_eq!(a.sistema_mut().estados, [(CRIANCA.to_owned(), Some(100))]);
+    a.tick(seg(620)).await; // 80 s: balde novo
+    assert_eq!(a.sistema_mut().estados.len(), 2);
+}
+
+#[tokio::test]
+async fn aviso_que_a_bandeja_nao_confirmou_vira_falha_ligada_ao_perfil() {
+    let m = mundo().await;
+    let aviso = Aviso {
+        sid: CRIANCA.into(),
+        app: Some("jogo.exe".into()),
+        restante_segundos: 300,
+        motivo: Motivo::LimiteDiarioApp,
+    };
+    let mut a = agente(
+        &m,
+        ComUi {
+            sessoes: vec![CRIANCA.into()],
+            reservas: vec![
+                (aviso.clone(), Ok(())),
+                (aviso, Err("WTSSendMessageW: sem sessão".into())),
+            ],
+            ..Default::default()
+        },
+    );
+    let r = a.tick(seg(0)).await;
+    assert_eq!(r.erros.len(), 2, "{:?}", r.erros);
+    let e = m.eventos("INTERNAL_ERROR").await;
+    assert_eq!(e.len(), 2, "{e:?}");
+    assert!(e.iter().all(|(p, d)| {
+        p.as_deref() == Some(m.perfil.to_string().as_str()) && d.contains("UI_NOT_CONFIRMED")
+    }));
+    assert!(e[1].1.contains("também falhou"), "{}", e[1].1);
 }
