@@ -37,7 +37,7 @@
 1. Uma branch por trabalho: `claude/<slug>` (ou `<agente>/<slug>`). Nunca commitar em `main`.
 2. Nunca `git add -A`/`.`; adicione por caminho e confira `git diff --cached --stat`.
 3. Commits atômicos, mensagem em português com o quê e o porquê.
-4. Todo trabalho chega à `main` por **Pull Request** no GitHub. O merge é do dono, depois da validação aplicável; o agente não faz merge sem pedido explícito.
+4. Todo trabalho chega à `main` por **Pull Request** no GitHub. O merge é do dono, depois da validação aplicável; o agente não faz merge sem pedido explícito. O merge se faz por `scripts/merge_gate.sh <PR>`, que valida o resultado do merge com os gates do `pre-push` e exige todos os checks do CI verdes (Ubuntu e Windows); o guard recusa `gh pr merge` direto.
 5. Repositório público: nada de dados reais de crianças, credenciais ou logs de máquina no Git.
 
 ## Documentação viva

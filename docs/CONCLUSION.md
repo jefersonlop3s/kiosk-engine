@@ -716,3 +716,11 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Código**: `ActionType` `QUERY_PROFILES`, `QUERY_APPS` e `QUERY_RULES`; `Comando::Profiles`, `Apps` e `Rules` na Camada 3 (esquema fechado); as consultas na API (somente leitura, sem evento, sem o SID); `kioskctl profile list`, `app list` e `rule list`, com as formas em `cli::FORMAS_KIOSKCTL` e o uso nos três idiomas. A conferência de nome do app em `rule list` usa a própria listagem de apps.
 - **Docs**: três fluxogramas, runbook, E-008, PENDING e ROADMAP (E-008 em 25%).
 - **Evidência**: `fmt --check`, `clippy -D warnings` e `cargo test` verdes no Linux; as saídas remotas de apps e regras são iguais às do `kioskd` local. Os fluxogramas **não** foram renderizados com o `mermaid-cli` (não está instalado aqui): validar antes do merge.
+
+## 2026-10-30 — Merge gate do harness (GAP: declarado e ausente)
+
+- **Origem**: `.harness.toml` declarava `merge_gate = "scripts/merge_gate.sh"`, mas o script não existia. A regra `merge-direto` do guard só vale quando o arquivo existe, então as PRs #25 e #28 foram mergeadas com `gh pr merge` direto, sem a validação do resultado do merge.
+- **Base**: o template do `sovereign-harness` (`templates/git/merge_gate.sh`), do qual os 13 scripts do `sovereign-pair` são cópias especializadas (Node, gitleaks, trivy). O do kiosk usa `HARNESS_SKIP` (o mesmo nome do `.harness.toml`) e a checagem remota estrita (`.harness/github_checks.py`: nenhum check, check pendente, vermelho ou erro do `gh` recusam). Diferença deliberada: fetch da main por referência explícita, sem tags (correção do `sp-ui-shell`).
+- **Validação do script existente no `sovereign-pair`**: `shellcheck` sem avisos e o teste hermético do vínculo merge↔base (5 cenários: base estável, base movida, head movido, corrida na janela do merge, merge limpo) passou, tanto no template quanto na cópia do `sp-service`. O mesmo teste passou com o script do kiosk.
+- **Prova do fechamento**: com o script presente, o guard devolve `bloquear` para `gh pr merge` (regra `merge-direto`) e libera `scripts/merge_gate.sh`; sem o script (a `main` anterior), libera.
+- **Não verificado**: o gate ainda não rodou contra uma PR real do kiosk com o CI Windows.
