@@ -5,6 +5,7 @@
 //! - `kioskctl rule create --profile ID --app ID [--limit SEGUNDOS] [--window HH:MM-HH:MM] [--until RFC3339]`
 //! - `kioskctl rule activate <id>` e `kioskctl rule revoke <id>`
 //! - `kioskctl rule limit <id> --seconds N`
+//! - `kioskctl profile list`, `kioskctl app list` e `kioskctl rule list [--profile ID]`
 //! - `kioskctl usage --profile ID [--date AAAA-MM-DD]`
 //! - `kioskctl log --profile ID [--days N] [--limit N]`
 //!
@@ -137,6 +138,34 @@ async fn enviar(
     }
 }
 
+/// Consulta de listagem: a resposta é JSON, e o que não for lido vira erro, nunca lista vazia.
+async fn listar(
+    cred: &Credenciais,
+    acao: &str,
+    corpo: serde_json::Value,
+    chave: &str,
+) -> Result<Vec<serde_json::Value>, String> {
+    let r = enviar(cred, acao, &corpo.to_string()).await?;
+    let v: serde_json::Value =
+        serde_json::from_str(&r.corpo).map_err(|_| Msg::RespostaDeListaIlegivel.to_string())?;
+    v[chave]
+        .as_array()
+        .cloned()
+        .ok_or_else(|| Msg::RespostaDeListaIlegivel.to_string())
+}
+
+fn texto<'a>(v: &'a serde_json::Value, campo: &str) -> &'a str {
+    v[campo].as_str().unwrap_or("?")
+}
+
+fn janela_do_json(v: &serde_json::Value) -> Option<String> {
+    Some(format!(
+        "{}-{}",
+        v["window_start"].as_str()?,
+        v["window_end"].as_str()?
+    ))
+}
+
 async fn executar(args: &[String]) -> Result<(), String> {
     let partes: Vec<&str> = args.iter().map(String::as_str).collect();
     match partes.as_slice() {
@@ -236,6 +265,94 @@ async fn executar(args: &[String]) -> Result<(), String> {
                     limite: duracao(segundos)
                 }
             );
+            Ok(())
+        }
+        ["profile", "list"] => {
+            let cred = Credenciais::carregar(&caminho_credenciais()?)?;
+            let perfis = listar(&cred, "profiles", serde_json::json!({}), "profiles").await?;
+            if perfis.is_empty() {
+                eprintln!("kioskctl: {}", Msg::NenhumPerfil);
+            }
+            let idioma = idioma();
+            for p in perfis {
+                let limite = p["daily_total_limit_seconds"]
+                    .as_u64()
+                    .map_or(Msg::SemLimite.to_string(), duracao);
+                let janelas: Vec<String> = p["windows"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|j| {
+                        let dia = u8::try_from(j["weekday"].as_u64()?).ok()?;
+                        Some(format!("{} {}", idioma.dia_curto(dia), janela_do_json(j)?))
+                    })
+                    .collect();
+                let janelas = if janelas.is_empty() {
+                    Msg::SemJanela.to_string()
+                } else {
+                    janelas.join(", ")
+                };
+                println!(
+                    "{}\t{}\t{}\t{janelas}",
+                    texto(&p, "profile_id"),
+                    texto(&p, "display_name"),
+                    Msg::RotuloLimiteDiario { limite }
+                );
+            }
+            Ok(())
+        }
+        ["app", "list"] => {
+            let cred = Credenciais::carregar(&caminho_credenciais()?)?;
+            let apps = listar(&cred, "apps", serde_json::json!({}), "apps").await?;
+            if apps.is_empty() {
+                eprintln!("kioskctl: {}", Msg::NenhumApp);
+            }
+            for a in apps {
+                println!(
+                    "{}\t{}\t{}",
+                    texto(&a, "app_id"),
+                    texto(&a, "process_name"),
+                    texto(&a, "status")
+                );
+            }
+            Ok(())
+        }
+        ["rule", "list", ..] => {
+            let mut corpo = serde_json::json!({});
+            if let Some(p) = opcao(args, "--profile") {
+                corpo["profile_id"] = p.into();
+            }
+            let cred = Credenciais::carregar(&caminho_credenciais()?)?;
+            let regras = listar(&cred, "rules", corpo, "rules").await?;
+            if regras.is_empty() {
+                eprintln!("kioskctl: {}", Msg::NenhumaRegra);
+            }
+            // o nome do app vem da listagem de apps, como no `kioskd rule list`
+            let apps: std::collections::HashMap<String, String> =
+                listar(&cred, "apps", serde_json::json!({}), "apps")
+                    .await?
+                    .iter()
+                    .map(|a| {
+                        (
+                            texto(a, "app_id").to_owned(),
+                            texto(a, "process_name").to_owned(),
+                        )
+                    })
+                    .collect();
+            for r in regras {
+                let app = apps.get(texto(&r, "app_id")).map_or("?", String::as_str);
+                let limite = r["daily_limit_seconds"]
+                    .as_u64()
+                    .map_or(Msg::SemLimite.to_string(), duracao);
+                let janela = janela_do_json(&r).unwrap_or_else(|| Msg::SemJanela.to_string());
+                println!(
+                    "{}\t{}\t{app}\t{}\t{}\t{janela}",
+                    texto(&r, "rule_id"),
+                    texto(&r, "profile_id"),
+                    texto(&r, "state"),
+                    Msg::RotuloLimite { limite }
+                );
+            }
             Ok(())
         }
         ["usage", ..] => {

@@ -937,3 +937,84 @@ fn comandos_do_servico_do_windows_falham_fora_do_windows() {
         );
     }
 }
+
+/// E-008 F1: os pais listam perfis, apps e regras pelo `kioskctl`, sem digitar IDs; as linhas
+/// são as mesmas do `kioskd` local (que lê o banco), menos o SID da conta do Windows.
+#[tokio::test]
+async fn listagens_remotas_pelo_cli_batem_com_as_locais_e_nao_mostram_o_sid() {
+    let m = mundo().await;
+    let porta = porta_livre();
+    let _srv = subir_servico(&m.db_url, porta);
+    let servidor = format!("127.0.0.1:{porta}");
+    let cred = m.dir.path().join("credenciais.json");
+    let codigo = texto(&kioskd(&m.db_url, None, &["codigo-pareamento"]).stdout)
+        .trim()
+        .to_owned();
+    assert!(
+        kioskctl(
+            &cred,
+            &["parear", "--servidor", &servidor, "--codigo", &codigo]
+        )
+        .status
+        .success()
+    );
+    let perfil = m.perfil.to_string();
+
+    // sem nenhuma regra: avisa e não imprime nada
+    let vazio = kioskctl(&cred, &["regra", "listar"]);
+    assert!(vazio.status.success(), "{}", texto(&vazio.stderr));
+    assert!(texto(&vazio.stdout).is_empty());
+    assert!(!texto(&vazio.stderr).is_empty());
+
+    let criar = kioskctl(
+        &cred,
+        &[
+            "regra",
+            "criar",
+            "--perfil",
+            &perfil,
+            "--app",
+            &m.app.to_string(),
+            "--limite",
+            "3600",
+            "--janela",
+            "08:00-20:00",
+        ],
+    );
+    assert!(criar.status.success(), "{}", texto(&criar.stderr));
+
+    let remoto = kioskctl(&cred, &["perfil", "listar"]);
+    assert!(remoto.status.success(), "{}", texto(&remoto.stderr));
+    let saida = texto(&remoto.stdout);
+    assert!(
+        saida.contains(&perfil) && saida.contains("Filho"),
+        "{saida}"
+    );
+    assert!(!saida.contains("S-1-5"), "o SID não sai pela API: {saida}");
+
+    let (app_remoto, app_local) = (
+        kioskctl(&cred, &["app", "listar"]),
+        kioskd(&m.db_url, None, &["app", "listar"]),
+    );
+    assert!(app_remoto.status.success(), "{}", texto(&app_remoto.stderr));
+    assert_eq!(texto(&app_remoto.stdout), texto(&app_local.stdout));
+
+    let (regra_remota, regra_local) = (
+        kioskctl(&cred, &["regra", "listar", "--perfil", &perfil]),
+        kioskd(&m.db_url, None, &["regra", "listar", "--perfil", &perfil]),
+    );
+    assert!(
+        regra_remota.status.success(),
+        "{}",
+        texto(&regra_remota.stderr)
+    );
+    assert_eq!(texto(&regra_remota.stdout), texto(&regra_local.stdout));
+    assert!(texto(&regra_remota.stdout).contains("jogo.exe"));
+
+    // perfil que não existe: recusado, sem fingir lista vazia
+    let ruim = kioskctl(
+        &cred,
+        &["regra", "listar", "--perfil", &Uuid::new_v4().to_string()],
+    );
+    assert!(!ruim.status.success());
+}

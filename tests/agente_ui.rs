@@ -317,7 +317,7 @@ async fn os_textos_do_alerta_saem_nos_tres_idiomas() {
 }
 
 #[tokio::test]
-async fn o_tempo_restante_vai_para_a_bandeja_so_quando_muda_de_balde() {
+async fn o_tempo_restante_da_sessao_vai_para_a_bandeja_so_quando_muda_de_balde() {
     let m = mundo_com(Some(700)).await;
     let mut a = agente(
         &m,
@@ -326,17 +326,28 @@ async fn o_tempo_restante_vai_para_a_bandeja_so_quando_muda_de_balde() {
             ..Default::default()
         },
     );
-    a.tick(seg(0)).await;
-    a.tick(seg(300)).await;
-    assert!(
-        a.sistema_mut().estados.is_empty(),
-        "fora da janela de aviso não há número"
+    for t in [0, 300, 600, 602, 620] {
+        a.tick(seg(t)).await;
+    }
+    // acima de 5 min muda a cada minuto; abaixo, a cada 15 s (602 s cai no balde de 600 s)
+    let restantes: Vec<_> = a.sistema_mut().estados.iter().map(|(_, r)| *r).collect();
+    assert_eq!(restantes, [Some(700), Some(400), Some(100), Some(80)]);
+}
+
+#[tokio::test]
+async fn sem_limite_de_sessao_a_dica_fica_quieta() {
+    let m = mundo().await;
+    let mut a = agente(
+        &m,
+        ComUi {
+            sessoes: vec![CRIANCA.into()],
+            ..Default::default()
+        },
     );
-    a.tick(seg(600)).await; // restam 100 s
-    a.tick(seg(602)).await; // 98 s: mesmo balde de 15 s
-    assert_eq!(a.sistema_mut().estados, [(CRIANCA.to_owned(), Some(100))]);
-    a.tick(seg(620)).await; // 80 s: balde novo
-    assert_eq!(a.sistema_mut().estados.len(), 2);
+    for t in [0, 60, 120] {
+        a.tick(seg(t)).await;
+    }
+    assert!(a.sistema_mut().estados.is_empty());
 }
 
 #[tokio::test]

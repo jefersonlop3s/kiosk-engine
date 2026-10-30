@@ -78,10 +78,10 @@ Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam
 
 ## Bandeja, etapa 4: avisos e estado pela bandeja (2026-10-30)
 
-- O aviso de 5 e 1 min segue pela bandeja conectada; sem confirmação em 6 s (`avisos_pendentes`), bandeja ausente ou fila cheia, sai pela caixa de mensagem, e a reserva por falta de confirmação vira `INTERNAL_ERROR` ligado ao perfil. O estado do tempo restante da sessão vai para a dica do ícone nos últimos minutos (Sistema::estado). Detalhes na seção da etapa 4 da [ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md).
+- O aviso de 5 e 1 min segue pela bandeja conectada; sem confirmação em 6 s (`avisos_pendentes`), bandeja ausente ou fila cheia, sai pela caixa de mensagem, e a reserva por falta de confirmação vira `INTERNAL_ERROR` ligado ao perfil. O estado do tempo restante da sessão (limite total e janela geral, `motor::restante_da_sessao`, GC-22) vai para a dica do ícone a cada minuto, e a cada 15 s nos últimos 5 minutos (`Sistema::estado`). Detalhes na seção da etapa 4 da [ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md).
 - Corrigido junto: `kiosk-ui.rs` chamava `confirmacao` com um argumento depois do GC-08 e não compilaria no Windows.
 - Testes: `tests/avisos_pendentes.rs`, `tests/agente_ui.rs` (estado e reserva). A parte `cfg(windows)` (`SistemaWindows`, `GerenteUi::enviar`) só compila no CI Windows: não foi verificada localmente (sem `mingw`).
-- Falta: ver no PC real os avisos pela bandeja e a reserva (matar a bandeja e esperar o aviso); o tempo restante fora dos últimos minutos (GC-22).
+- Falta: ver no PC real os avisos pela bandeja, o tempo restante na dica e a reserva (matar a bandeja e esperar o aviso).
 
 ## Aceites
 
