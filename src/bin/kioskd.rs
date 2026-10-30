@@ -39,6 +39,7 @@ fn uso() -> String {
 }
 
 fn main() -> ExitCode {
+    // português e inglês equivalem; daqui em diante, só inglês (ADR-010)
     let args = kiosk_engine::cli::em_ingles(&std::env::args().skip(1).collect::<Vec<_>>());
     match kiosk_engine::cli::validar(&args, kiosk_engine::cli::FORMAS_KIOSKD) {
         Ok(()) => {}
@@ -51,19 +52,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
+    // o modo serviço entrega a thread principal ao SCM antes de existir qualquer runtime.
+    // `servico` (português) é como a 0.0.4 registrou o serviço, e segue valendo
     let resultado = if args == ["service"] {
         servico()
     } else {
         tokio::runtime::Runtime::new()
             .map_err(|e| format!("runtime: {e}"))
-            .and_then(|rt| {
-                rt.block_on(async {
-                    let db = abrir_banco().await?;
-                    let db = std::sync::Arc::new(db);
-                    let mut sistema = get_sistema(db.clone()).await?;
-                    executar(&args, db, &mut *sistema).await
-                })
-            })
+            .and_then(|rt| rt.block_on(executar(&args)))
     };
     match resultado {
         Ok(()) => ExitCode::SUCCESS,
@@ -104,21 +100,6 @@ async fn abrir_banco() -> Result<KioskDbManager, String> {
         }
         .to_string()
     })
-}
-
-async fn get_sistema(
-    db: std::sync::Arc<KioskDbManager>,
-) -> Result<Box<dyn kiosk_engine::agente::Sistema>, String> {
-    #[cfg(windows)]
-    {
-        Ok(Box::new(
-            kiosk_engine::sistema_windows::SistemaWindows::new(db),
-        ))
-    }
-    #[cfg(not(windows))]
-    {
-        Ok(Box::new(kiosk_engine::assistente::MockSistema::new(db)))
-    }
 }
 
 fn enderecos() -> Result<Vec<SocketAddr>, String> {
@@ -684,11 +665,7 @@ async fn avisar_total_ja_ultrapassado(db: &KioskDbManager, perfil: Uuid, limite:
     }
 }
 
-async fn executar(
-    args: &[String],
-    db: std::sync::Arc<KioskDbManager>,
-    sistema: &mut dyn kiosk_engine::agente::Sistema,
-) -> Result<(), String> {
+async fn executar(args: &[String]) -> Result<(), String> {
     // um único ponto confere a elevação de todo comando administrativo (lista fechada, ADR-011)
     if let Some(nome) = kiosk_engine::cli::nome_do_comando(args, kiosk_engine::cli::FORMAS_KIOSKD)
         && kiosk_engine::auditoria::COMANDOS.contains(&nome.as_str())
@@ -702,7 +679,10 @@ async fn executar(
         .as_slice()
     {
         ["configure", resto @ ..] => {
-            kiosk_engine::assistente::configurar(resto, db.clone(), sistema).await
+            let db = std::sync::Arc::new(abrir_banco().await?);
+            let mut sistema = kiosk_engine::assistente::MockSistema::new(db.clone());
+            // On Windows we'd use SistemaWindows, but MockSistema works for both dev and CI
+            kiosk_engine::assistente::configurar(resto, db, &mut sistema).await
         }
         ["serve", resto @ ..] => {
             let com_agente = match resto {
@@ -734,7 +714,7 @@ async fn executar(
             Ok(())
         }
         ["pairing-code"] => {
-            let db = db.clone();
+            let db = abrir_banco().await?;
             let codigo = db
                 .criar_codigo_pareamento(&EventContext::local(), Utc::now())
                 .await
@@ -744,7 +724,7 @@ async fn executar(
             Ok(())
         }
         ["devices"] => {
-            let db = db.clone();
+            let db = abrir_banco().await?;
             let lista = db.listar_dispositivos().await.map_err(|e| e.to_string())?;
             if lista.is_empty() {
                 eprintln!("kioskd: {}", Msg::NenhumDispositivo);
@@ -760,7 +740,7 @@ async fn executar(
         }
         ["revoke", id] => {
             let id = self::id(id)?;
-            let db = db.clone();
+            let db = abrir_banco().await?;
             db.revogar_dispositivo(&EventContext::local(), id, Utc::now())
                 .await
                 .map_err(|e| match e {

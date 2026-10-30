@@ -11,6 +11,7 @@ A API fala só inglês; isto vale apenas para quem digita os comandos.
 | Português | Inglês |
 |---|---|
 | `servir` | `serve` |
+| `configurar` | `configure` |
 | `codigo-pareamento` | `pairing-code` |
 | `dispositivos` | `devices` |
 | `revogar` | `revoke` |
@@ -59,6 +60,7 @@ A API fala só inglês; isto vale apenas para quem digita os comandos.
 | Português | Inglês |
 |---|---|
 | `kioskd servir` | `kioskd serve` |
+| `configurar` | `configure` |
 | `kioskd codigo-pareamento` | `kioskd pairing-code` |
 | `kioskd perfil criar --conta Ana --nome Ana --limite-total 7200` | `kioskd profile create --account Ana --name Ana --total-limit 7200` |
 | `kioskd regra criar --perfil ID --app ID --limite 3600 --ativar` | `kioskd rule create --profile ID --app ID --limit 3600 --activate` |
