@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::database_schema::*;
 use crate::motor::{AppCtx, Consumo, Decisao, Instante, PerfilCtx, decidir};
+use crate::database_schema::warning_seconds_to_str;
 use crate::security_logger_impl::insert_event;
 use crate::uso::{MAX_INTERVALO_SEGUNDOS, dividir_por_dia_local};
 
@@ -164,8 +165,9 @@ impl KioskDbManager {
         let r = async {
             sqlx::query(
                 "INSERT INTO active_rules (rule_id, profile_id, app_id, creation_timestamp, current_state, \
-                 daily_limit_seconds, time_window_start, time_window_end, effective_until_timestamp) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 daily_limit_seconds, time_window_start, time_window_end, effective_until_timestamp, \
+                 warning_seconds) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(rule.rule_id.to_string())
             .bind(rule.profile_id.to_string())
@@ -176,6 +178,7 @@ impl KioskDbManager {
             .bind(rule.time_window.map(|w| w.start.format(HHMM).to_string()))
             .bind(rule.time_window.map(|w| w.end.format(HHMM).to_string()))
             .bind(rule.effective_until_timestamp.map(|t| t.to_rfc3339()))
+            .bind(warning_seconds_to_str(rule.warning_seconds.as_ref()))
             .execute(&mut *tx)
             .await
             .map(|_| ())
@@ -188,7 +191,7 @@ impl KioskDbManager {
     pub async fn get_active_rule(&self, rule_id: Uuid) -> Result<Option<ActiveRule>, sqlx::Error> {
         let row: Option<RuleRow> = sqlx::query_as(
             "SELECT rule_id, profile_id, app_id, creation_timestamp, current_state, daily_limit_seconds, \
-             time_window_start, time_window_end, effective_until_timestamp \
+             time_window_start, time_window_end, effective_until_timestamp, warning_seconds \
              FROM active_rules WHERE rule_id = ?",
         )
         .bind(rule_id.to_string())
@@ -488,7 +491,7 @@ impl KioskDbManager {
     ) -> Result<Vec<ActiveRule>, sqlx::Error> {
         let rows: Vec<RuleRow> = sqlx::query_as(
             "SELECT rule_id, profile_id, app_id, creation_timestamp, current_state, daily_limit_seconds, \
-             time_window_start, time_window_end, effective_until_timestamp \
+             time_window_start, time_window_end, effective_until_timestamp, warning_seconds \
              FROM active_rules WHERE profile_id = ? AND app_id = ? ORDER BY creation_timestamp, rowid",
         )
         .bind(profile_id.to_string())
@@ -780,7 +783,7 @@ impl KioskDbManager {
     ) -> Result<Vec<ActiveRule>, sqlx::Error> {
         let rows: Vec<RuleRow> = sqlx::query_as(
             "SELECT rule_id, profile_id, app_id, creation_timestamp, current_state, daily_limit_seconds, \
-             time_window_start, time_window_end, effective_until_timestamp \
+             time_window_start, time_window_end, effective_until_timestamp, warning_seconds \
              FROM active_rules WHERE (? IS NULL OR profile_id = ?) ORDER BY creation_timestamp, rowid",
         )
         .bind(profile_id.map(|p| p.to_string()))

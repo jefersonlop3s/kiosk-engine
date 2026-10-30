@@ -344,6 +344,7 @@ async fn comando(
                 daily_limit_seconds: r.daily_limit_seconds,
                 time_window: r.time_window,
                 effective_until_timestamp: r.effective_until,
+                warning_seconds: None,
             };
             db.create_active_rule(&ctx, &regra)
                 .await

@@ -43,6 +43,7 @@ fn regra(profile_id: Uuid, app_id: Uuid) -> ActiveRule {
             end: NaiveTime::from_hms_opt(20, 30, 0).unwrap(),
         }),
         effective_until_timestamp: None,
+        warning_seconds: None,
     }
 }
 

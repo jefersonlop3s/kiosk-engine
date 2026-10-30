@@ -16,6 +16,8 @@ use crate::database_schema::{ActiveRule, ProcessStatus, RuleState, TimeWindow};
 
 /// Marcos de aviso da ADR-001 (5 min e 1 min). O motor devolve `Avisar` a partir do primeiro
 /// marco; quem exibe (E-004) decide quando mostrar cada um.
+/// Limiares de aviso padrão da ADR-001 (5 min e 1 min). Cada regra pode
+/// sobrescrever com `warning_seconds` (GC-08).
 pub const AVISOS_SEGUNDOS: [u64; 2] = [300, 60];
 
 /// Hora local de parede e instante absoluto do mesmo momento. Quem monta garante que coincidem.
@@ -105,6 +107,8 @@ pub enum Decisao {
     Avisar {
         restante_segundos: u64,
         motivo: Motivo,
+        /// Limiares que geraram este aviso (GC-08).
+        thresholds: [u64; 2],
     },
     EncerrarApp {
         motivo: Motivo,
@@ -122,29 +126,30 @@ enum Nivel {
 
 enum Avaliacao {
     Folga,
-    Aviso(u64),
+    /// (restante_segundos, [threshold_primario, threshold_secundario])
+    Aviso(u64, [u64; 2]),
     Violado,
 }
 
-fn avaliar_limite(limite: u64, usado: u64) -> Avaliacao {
+fn avaliar_limite(limite: u64, usado: u64, thresholds: &[u64; 2]) -> Avaliacao {
     if usado >= limite {
         return Avaliacao::Violado;
     }
     let restante = limite - usado;
-    if restante <= AVISOS_SEGUNDOS[0] {
-        Avaliacao::Aviso(restante)
+    if restante <= thresholds[0] {
+        Avaliacao::Aviso(restante, *thresholds)
     } else {
         Avaliacao::Folga
     }
 }
 
-fn avaliar_janela(janela: &TimeWindow, agora: NaiveTime) -> Avaliacao {
+fn avaliar_janela(janela: &TimeWindow, agora: NaiveTime, thresholds: &[u64; 2]) -> Avaliacao {
     if agora < janela.start || agora >= janela.end {
         return Avaliacao::Violado;
     }
     let restante = (janela.end - agora).num_seconds().max(0) as u64;
-    if restante <= AVISOS_SEGUNDOS[0] {
-        Avaliacao::Aviso(restante)
+    if restante <= thresholds[0] {
+        Avaliacao::Aviso(restante, *thresholds)
     } else {
         Avaliacao::Folga
     }
@@ -153,9 +158,10 @@ fn avaliar_janela(janela: &TimeWindow, agora: NaiveTime) -> Avaliacao {
 fn para_decisao(a: Avaliacao, nivel: Nivel, motivo: Motivo) -> Decisao {
     match (a, nivel) {
         (Avaliacao::Folga, _) => Decisao::Permitir,
-        (Avaliacao::Aviso(restante_segundos), _) => Decisao::Avisar {
+        (Avaliacao::Aviso(restante_segundos, thresholds), _) => Decisao::Avisar {
             restante_segundos,
             motivo,
+            thresholds,
         },
         (Avaliacao::Violado, Nivel::Sessao) => Decisao::BloquearSessao { motivo },
         (Avaliacao::Violado, Nivel::App) => Decisao::EncerrarApp { motivo },
@@ -203,18 +209,24 @@ fn vigente(r: &ActiveRule, perfil: &PerfilCtx, app: &AppCtx, agora: Instante) ->
             .is_none_or(|fim| fim > agora.utc)
 }
 
+/// Limiares a usar para uma regra; se a regra não tem `warning_seconds`
+/// próprio, usa o padrão do motor (GC-08).
+fn thresholds_da_regra(r: &ActiveRule) -> &[u64; 2] {
+    r.warning_seconds.as_ref().unwrap_or(&AVISOS_SEGUNDOS)
+}
+
 pub fn decidir(perfil: &PerfilCtx, app: &AppCtx, agora: Instante, consumo: Consumo) -> Decisao {
     let mut decisao = Decisao::Permitir;
 
     if let Some(limite) = perfil.limite_total_segundos {
-        let a = avaliar_limite(limite, consumo.total_segundos);
+        let a = avaliar_limite(limite, consumo.total_segundos, &AVISOS_SEGUNDOS);
         decisao = pior(
             decisao,
             para_decisao(a, Nivel::Sessao, Motivo::LimiteDiarioTotal),
         );
     }
     if let Some(janela) = &perfil.janela_geral {
-        let a = avaliar_janela(janela, agora.local.time());
+        let a = avaliar_janela(janela, agora.local.time(), &AVISOS_SEGUNDOS);
         decisao = pior(
             decisao,
             para_decisao(a, Nivel::Sessao, Motivo::ForaDaJanelaGeral),
@@ -225,17 +237,18 @@ pub fn decidir(perfil: &PerfilCtx, app: &AppCtx, agora: Instante, consumo: Consu
         return decisao;
     }
     for regra in app.regras.iter().filter(|r| vigente(r, perfil, app, agora)) {
+        let thr = thresholds_da_regra(regra);
         if let Some(limite) = regra.daily_limit_seconds {
             let motivo = if limite == 0 {
                 Motivo::AppBloqueado
             } else {
                 Motivo::LimiteDiarioApp
             };
-            let a = avaliar_limite(limite, consumo.app_segundos);
+            let a = avaliar_limite(limite, consumo.app_segundos, thr);
             decisao = pior(decisao, para_decisao(a, Nivel::App, motivo));
         }
         if let Some(janela) = &regra.time_window {
-            let a = avaliar_janela(janela, agora.local.time());
+            let a = avaliar_janela(janela, agora.local.time(), thr);
             decisao = pior(
                 decisao,
                 para_decisao(a, Nivel::App, Motivo::ForaDaJanelaApp),

@@ -62,14 +62,15 @@ fn entrada_hostil_da_ui_e_recusada() {
 }
 
 #[test]
-fn versao_diferente_e_marco_fora_dos_avisos_sao_recusados() {
+fn versao_diferente_e_marco_zero_sao_recusados() {
     assert_eq!(
         decodificar_da_ui(br#"{"v":2,"tipo":"batimento"}"#),
         Err(ErroIpc::VersaoIncompativel(2))
     );
+    // GC-08: só marco 0 é inválido; qualquer positivo (ex.: 9999) é aceito
     assert_eq!(
-        decodificar_da_ui(br#"{"v":1,"tipo":"aviso_exibido","marco":9999}"#),
-        Err(ErroIpc::MarcoInvalido(9999))
+        decodificar_da_ui(br#"{"v":1,"tipo":"aviso_exibido","marco":0}"#),
+        Err(ErroIpc::MarcoInvalido(0))
     );
 }
 

@@ -971,6 +971,7 @@ async fn executar(args: &[String]) -> Result<(), String> {
                 daily_limit_seconds: nova.daily_limit_seconds,
                 time_window: nova.time_window,
                 effective_until_timestamp: nova.effective_until,
+                warning_seconds: None,
             };
             let ctx = EventContext::local();
             db.create_active_rule(&ctx, &regra)

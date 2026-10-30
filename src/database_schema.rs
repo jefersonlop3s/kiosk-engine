@@ -80,6 +80,10 @@ pub struct ActiveRule {
     pub time_window: Option<TimeWindow>,
     /// `None` = sem data de desativação lógica.
     pub effective_until_timestamp: Option<DateTime<Utc>>,
+    /// Limiares de aviso da ADR-001 (GC-08): `[primeiro, segundo]` em segundos,
+    /// por exemplo `[300, 60]` para 5 min e 1 min. `None` = usa o padrão do motor.
+    /// Lido da coluna `warning_seconds` (TEXT "300,60" ou NULL).
+    pub warning_seconds: Option<[u64; 2]>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -120,6 +124,32 @@ pub(crate) struct RuleRow {
     time_window_start: Option<String>,
     time_window_end: Option<String>,
     effective_until_timestamp: Option<String>,
+    warning_seconds: Option<String>,
+}
+
+/// GC-08: parseia `"300,60"` → `[300, 60]`, `"300"` → `[300, 60]`,
+/// `"600,120"` → `[600, 120]`. O segundo limiar é opcional; quando ausente,
+/// vale 60 (1 minuto).
+pub fn parse_warning_seconds(s: &str) -> Result<[u64; 2], Error> {
+    let partes: Vec<&str> = s.split(',').collect();
+    if partes.len() < 1 || partes.len() > 2 {
+        return Err(bad_value("warning_seconds", s));
+    }
+    let p0 = decode(u64::try_from(decode(partes[0].trim().parse::<i64>())?))?;
+    let p1 = if partes.len() == 2 {
+        decode(u64::try_from(decode(partes[1].trim().parse::<i64>())?))?
+    } else {
+        60u64
+    };
+    Ok([p0, p1])
+}
+
+/// GC-08: serializa `[300, 60]` → `"300,60"`, `None` → `None`.
+pub fn warning_seconds_to_str(w: Option<&[u64; 2]>) -> Option<String> {
+    w.map(|t| {
+        let [a, b] = *t;
+        format!("{a},{b}")
+    })
 }
 
 impl TryFrom<RuleRow> for ActiveRule {
@@ -154,6 +184,10 @@ impl TryFrom<RuleRow> for ActiveRule {
             effective_until_timestamp: r
                 .effective_until_timestamp
                 .map(|t| decode(DateTime::parse_from_rfc3339(&t)).map(|d| d.with_timezone(&Utc)))
+                .transpose()?,
+            warning_seconds: r
+                .warning_seconds
+                .map(|s| parse_warning_seconds(&s))
                 .transpose()?,
         })
     }

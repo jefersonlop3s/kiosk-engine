@@ -54,6 +54,7 @@ impl Cenario {
             daily_limit_seconds: limite,
             time_window: janela,
             effective_until_timestamp: None,
+            warning_seconds: None,
         }
     }
 
@@ -104,6 +105,7 @@ fn janela_do_app_nas_bordas() {
             Decisao::Avisar {
                 restante_segundos: 300,
                 motivo: Motivo::ForaDaJanelaApp,
+                thresholds: AVISOS_SEGUNDOS,
             },
         ),
         (
@@ -111,6 +113,7 @@ fn janela_do_app_nas_bordas() {
             Decisao::Avisar {
                 restante_segundos: 1,
                 motivo: Motivo::ForaDaJanelaApp,
+                thresholds: AVISOS_SEGUNDOS,
             },
         ),
         (as_(20, 0, 0), FIM),
@@ -140,7 +143,8 @@ fn janela_geral_bloqueia_a_sessao_fora_do_horario() {
         c.monitorado(&[], as_(20, 59, 0), 0),
         Decisao::Avisar {
             restante_segundos: 60,
-            motivo: Motivo::ForaDaJanelaGeral
+            motivo: Motivo::ForaDaJanelaGeral,
+            thresholds: AVISOS_SEGUNDOS,
         }
     );
 }
@@ -152,6 +156,7 @@ fn limite_diario_do_app_nas_bordas() {
     let aviso = |r| Decisao::Avisar {
         restante_segundos: r,
         motivo: Motivo::LimiteDiarioApp,
+        thresholds: AVISOS_SEGUNDOS,
     };
     assert_eq!(
         c.monitorado(&regras, as_(12, 0, 0), 3299),
@@ -217,7 +222,8 @@ fn limite_total_do_perfil_bloqueia_a_sessao_mesmo_para_app_isento() {
         c.decidir(ProcessStatus::Monitored, &[], as_(12, 0, 0), consumo(6900)),
         Decisao::Avisar {
             restante_segundos: 300,
-            motivo: Motivo::LimiteDiarioTotal
+            motivo: Motivo::LimiteDiarioTotal,
+            thresholds: AVISOS_SEGUNDOS,
         }
     );
 }
@@ -365,7 +371,8 @@ fn entre_avisos_vale_o_de_menor_tempo_restante() {
         d,
         Decisao::Avisar {
             restante_segundos: 100,
-            motivo: Motivo::LimiteDiarioApp
+            motivo: Motivo::LimiteDiarioApp,
+            thresholds: AVISOS_SEGUNDOS,
         }
     );
 }

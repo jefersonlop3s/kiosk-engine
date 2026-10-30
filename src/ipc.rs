@@ -105,7 +105,9 @@ pub fn decodificar_da_ui(linha: &[u8]) -> Result<DaUi, ErroIpc> {
     let valor = desembrulhar(linha)?;
     let msg: DaUi = serde_json::from_value(valor).map_err(|e| ErroIpc::Json(e.to_string()))?;
     if let DaUi::AvisoExibido { marco } = msg
-        && !crate::motor::AVISOS_SEGUNDOS.contains(&marco)
+        // GC-08: os limiares são por regra, então qualquer marco positivo é
+        // aceito; zero não faz sentido.
+        && marco == 0
     {
         return Err(ErroIpc::MarcoInvalido(marco));
     }

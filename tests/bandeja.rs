@@ -89,17 +89,17 @@ fn motivo_desconhecido_nao_vira_texto_inventado() {
 
 #[test]
 fn o_marco_do_aviso_e_300_acima_de_um_minuto_e_60_dali_para_baixo() {
-    assert_eq!(marco_do_aviso(300), 300);
-    assert_eq!(marco_do_aviso(299), 300);
-    assert_eq!(marco_do_aviso(61), 300);
-    assert_eq!(marco_do_aviso(60), 60);
-    assert_eq!(marco_do_aviso(59), 60);
-    assert_eq!(marco_do_aviso(0), 60);
+    assert_eq!(marco_do_aviso(300, None), 300);
+    assert_eq!(marco_do_aviso(299, None), 300);
+    assert_eq!(marco_do_aviso(61, None), 300);
+    assert_eq!(marco_do_aviso(60, None), 60);
+    assert_eq!(marco_do_aviso(59, None), 60);
+    assert_eq!(marco_do_aviso(0, None), 60);
     // a confirmação é uma mensagem que o serviço aceita
     for restante in [300, 120, 60, 1] {
-        let linha = codificar_da_ui(&confirmacao(restante));
+        let linha = codificar_da_ui(&confirmacao(restante, None));
         assert!(linha.ends_with(b"\n"));
-        assert_eq!(decodificar_da_ui(&linha), Ok(confirmacao(restante)));
+        assert_eq!(decodificar_da_ui(&linha), Ok(confirmacao(restante, None)));
     }
 }
 

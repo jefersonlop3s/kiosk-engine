@@ -123,6 +123,7 @@ impl Mundo {
             daily_limit_seconds: limite,
             time_window: None,
             effective_until_timestamp: None,
+            warning_seconds: None,
         };
         self.db
             .create_active_rule(&EventContext::local(), &r)
