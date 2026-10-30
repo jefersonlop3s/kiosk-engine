@@ -99,7 +99,7 @@ mod windows {
                 if let Some((titulo, corpo)) =
                     texto_do_aviso(restante_segundos, &motivo, app.as_deref(), idioma)
                 {
-                    tela.aviso(titulo, corpo, confirmacao(restante_segundos));
+                    tela.aviso(titulo, corpo, confirmacao(restante_segundos, None));
                 }
             }
         }

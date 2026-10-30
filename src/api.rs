@@ -114,9 +114,7 @@ pub fn endereco_permitido(ip: IpAddr) -> Result<(), MotivoEndereco> {
     let lan = match ip {
         IpAddr::V4(v4) => {
             let o = v4.octets();
-            o[0] == 10
-                || (o[0] == 172 && (16..=31).contains(&o[1]))
-                || (o[0] == 192 && o[1] == 168)
+            o[0] == 10 || (o[0] == 172 && (16..=31).contains(&o[1])) || (o[0] == 192 && o[1] == 168)
         }
         IpAddr::V6(_) => false, // redes locais IPv6 raras em casa; ignoradas
     };

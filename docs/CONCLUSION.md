@@ -696,3 +696,10 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência**: `cargo check` e `cargo test` verdes (todas as suites).
 - **Commit**: este registro (branch `cline/gc13-gc15-hash`).
 
+
+## 2026-10-30 — E-004 F3 etapa 4: avisos e estado pela bandeja (GC-17)
+
+- **Origem**: pedido do dono para concluir o E-004.
+- **Código**: `avisos_pendentes` (fila de avisos sem confirmação, pura), `Sistema::estado` e `Sistema::avisos_sem_confirmacao`, `SistemaWindows::avisar` pela bandeja com a caixa de mensagem como reserva, `GerenteUi::enviar` apagando a confirmação antiga a cada aviso, e o agente registrando a reserva (`UI_NOT_CONFIRMED`) e empurrando o estado. Corrigida a chamada de `confirmacao` em `kiosk-ui.rs`, que não compilava no Windows desde o GC-08.
+- **Evidência**: `cargo test` verde (Linux). O código `cfg(windows)` não foi compilado nesta máquina (sem `mingw`): depende do CI Windows. **GC-17 segue aberto** até ver no PC real; aberto o GC-22 (restante do dia fora dos últimos minutos).
+- **Commit**: este registro (branch `claude/project-active-sessions-analysis-5ba1e1`).
