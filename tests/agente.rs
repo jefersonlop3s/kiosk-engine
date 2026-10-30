@@ -64,6 +64,12 @@ impl Sistema for Fake {
         self.avisos.push(aviso.clone());
         Ok(())
     }
+    fn contas_locais(&mut self) -> Result<Vec<ContaLocal>, String> {
+        Ok(vec![])
+    }
+    fn atalhos_do_menu(&mut self) -> Result<Vec<ProgramaSugerido>, String> {
+        Ok(vec![])
+    }
 }
 
 struct Mundo {

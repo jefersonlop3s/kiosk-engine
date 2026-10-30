@@ -56,12 +56,14 @@ fn main() -> ExitCode {
     } else {
         tokio::runtime::Runtime::new()
             .map_err(|e| format!("runtime: {e}"))
-            .and_then(|rt| rt.block_on(async {
-                let db = abrir_banco().await?;
-                let db = std::sync::Arc::new(db);
-                let mut sistema = get_sistema(db.clone()).await?;
-                executar(&args, db, &mut *sistema).await
-            }))
+            .and_then(|rt| {
+                rt.block_on(async {
+                    let db = abrir_banco().await?;
+                    let db = std::sync::Arc::new(db);
+                    let mut sistema = get_sistema(db.clone()).await?;
+                    executar(&args, db, &mut *sistema).await
+                })
+            })
     };
     match resultado {
         Ok(()) => ExitCode::SUCCESS,
@@ -104,11 +106,17 @@ async fn abrir_banco() -> Result<KioskDbManager, String> {
     })
 }
 
-async fn get_sistema(db: std::sync::Arc<KioskDbManager>) -> Result<Box<dyn kiosk_engine::agente::Sistema>, String> {
-    #[cfg(windows)] {
-        Ok(Box::new(kiosk_engine::sistema_windows::SistemaWindows::new(db)))
+async fn get_sistema(
+    db: std::sync::Arc<KioskDbManager>,
+) -> Result<Box<dyn kiosk_engine::agente::Sistema>, String> {
+    #[cfg(windows)]
+    {
+        Ok(Box::new(
+            kiosk_engine::sistema_windows::SistemaWindows::new(db),
+        ))
     }
-    #[cfg(not(windows))] {
+    #[cfg(not(windows))]
+    {
         Ok(Box::new(kiosk_engine::assistente::MockSistema::new(db)))
     }
 }
@@ -676,7 +684,11 @@ async fn avisar_total_ja_ultrapassado(db: &KioskDbManager, perfil: Uuid, limite:
     }
 }
 
-async fn executar(args: &[String], db: std::sync::Arc<KioskDbManager>, sistema: &mut dyn kiosk_engine::agente::Sistema) -> Result<(), String> {
+async fn executar(
+    args: &[String],
+    db: std::sync::Arc<KioskDbManager>,
+    sistema: &mut dyn kiosk_engine::agente::Sistema,
+) -> Result<(), String> {
     // um único ponto confere a elevação de todo comando administrativo (lista fechada, ADR-011)
     if let Some(nome) = kiosk_engine::cli::nome_do_comando(args, kiosk_engine::cli::FORMAS_KIOSKD)
         && kiosk_engine::auditoria::COMANDOS.contains(&nome.as_str())

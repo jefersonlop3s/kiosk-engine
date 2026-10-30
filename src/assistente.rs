@@ -1,7 +1,7 @@
+use crate::agente::{Aviso, ContaLocal, ProcessoVisto, ProgramaSugerido, Sistema};
+use crate::db_manager::KioskDbManager;
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
-use crate::agente::{Sistema, ProcessoVisto, Aviso, ContaLocal, ProgramaSugerido};
-use crate::db_manager::KioskDbManager;
 
 /// Sistema de simulação para testes e desenvolvimento em plataformas não-Windows.
 pub struct MockSistema {
@@ -15,13 +15,28 @@ impl MockSistema {
         Self {
             db,
             contas: vec![
-                ContaLocal { sid: "S-1-5-21-111".to_string(), nome: "Criança 1".to_string() },
-                ContaLocal { sid: "S-1-5-21-222".to_string(), nome: "Criança 2".to_string() },
+                ContaLocal {
+                    sid: "S-1-5-21-111".to_string(),
+                    nome: "Criança 1".to_string(),
+                },
+                ContaLocal {
+                    sid: "S-1-5-21-222".to_string(),
+                    nome: "Criança 2".to_string(),
+                },
             ],
             programas: vec![
-                ProgramaSugerido { nome_amigavel: "Roblox".to_string(), executavel: "RobloxPlayerBeta.exe".to_string() },
-                ProgramaSugerido { nome_amigavel: "Minecraft".to_string(), executavel: "Minecraft.exe".to_string() },
-                ProgramaSugerido { nome_amigavel: "Chrome".to_string(), executavel: "chrome.exe".to_string() },
+                ProgramaSugerido {
+                    nome_amigavel: "Roblox".to_string(),
+                    executavel: "RobloxPlayerBeta.exe".to_string(),
+                },
+                ProgramaSugerido {
+                    nome_amigavel: "Minecraft".to_string(),
+                    executavel: "Minecraft.exe".to_string(),
+                },
+                ProgramaSugerido {
+                    nome_amigavel: "Chrome".to_string(),
+                    executavel: "chrome.exe".to_string(),
+                },
             ],
         }
     }
@@ -58,10 +73,10 @@ impl Sistema for MockSistema {
 }
 
 /// Executa o assistente de configuração.
-/// 
+///
 /// # Arguments
 /// * `args` - Os argumentos passados para o comando `configure`.
-///            Pode incluir `--respostas <arquivo.toml>` para modo não interativo.
+///   Pode incluir `--respostas <arquivo.toml>` para modo não interativo.
 pub async fn configurar(
     args: &[&str],
     _db: Arc<KioskDbManager>,
@@ -81,11 +96,9 @@ pub async fn configurar(
         return Err("Nenhuma conta local encontrada para configurar.".to_string());
     }
 
-    let idx_conta = ask_one_choice(
-        "Selecione a conta da criança:",
-        &contas,
-        |c| format!("{} ({})", c.nome, c.sid),
-    )?;
+    let idx_conta = ask_one_choice("Selecione a conta da criança:", &contas, |c| {
+        format!("{} ({})", c.nome, c.sid)
+    })?;
     let conta_selecionada = &contas[idx_conta];
     println!("kioskd: Conta selecionada: {}", conta_selecionada.nome);
 
@@ -95,20 +108,23 @@ pub async fn configurar(
         return Err("Nenhum programa encontrado para configurar.".to_string());
     }
 
-    let idx_prog = ask_one_choice(
-        "Selecione um programa para controlar:",
-        &programas,
-        |p| format!("{} ({})", p.nome_amigavel, p.executavel),
-    )?;
+    let idx_prog = ask_one_choice("Selecione um programa para controlar:", &programas, |p| {
+        format!("{} ({})", p.nome_amigavel, p.executavel)
+    })?;
     let prog_selecionado = &programas[idx_prog];
-    println!("kioskd: Programa selecionado: {}", prog_selecionado.nome_amigavel);
+    println!(
+        "kioskd: Programa selecionado: {}",
+        prog_selecionado.nome_amigavel
+    );
 
     // 3. Resumo
     println!("\n--- Resumo da Configuração ---");
     println!("Perfil: {}", conta_selecionada.nome);
     println!("Programa: {}", prog_selecionado.nome_amigavel);
     println!("------------------------------");
-    println!("kioskd: (A gravação real no banco e instalação do serviço serão implementadas na próxima fase)");
+    println!(
+        "kioskd: (A gravação real no banco e instalação do serviço serão implementadas na próxima fase)"
+    );
 
     Ok(())
 }
@@ -138,10 +154,11 @@ where
             return Err("Operação cancelada pelo usuário.".to_string());
         }
 
-        if let Ok(num) = input.parse::<usize>() {
-            if num > 0 && num <= options.len() {
-                return Ok(num - 1);
-            }
+        if let Ok(num) = input.parse::<usize>()
+            && num > 0
+            && num <= options.len()
+        {
+            return Ok(num - 1);
         }
 
         println!("Opção inválida. Tente novamente.");

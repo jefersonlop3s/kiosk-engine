@@ -1,7 +1,7 @@
-pub mod assistente;
 pub mod agente;
 pub mod api;
 pub mod assinatura;
+pub mod assistente;
 pub mod auditoria;
 #[cfg(windows)]
 pub mod auditoria_windows;
