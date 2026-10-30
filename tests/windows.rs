@@ -127,6 +127,7 @@ async fn o_agente_encerra_o_app_bloqueado_e_nao_toca_no_app_isento() {
             daily_limit_seconds: Some(0), // bloquearia os dois, se o isento não fosse isento
             time_window: None,
             effective_until_timestamp: None,
+            warning_seconds: None,
         };
         db.create_active_rule(&ctx, &regra).await.unwrap();
     }

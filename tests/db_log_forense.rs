@@ -56,6 +56,7 @@ fn regra(profile_id: Uuid, app_id: Uuid) -> ActiveRule {
         daily_limit_seconds: None,
         time_window: None,
         effective_until_timestamp: None,
+        warning_seconds: None,
     }
 }
 

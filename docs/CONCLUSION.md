@@ -678,3 +678,12 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - Entregas e estado ao encerrar, aprendizados técnicos e de processo, e o roteiro de retomada estão no [insight da sessão](insights/2026-10-30-aprendizados-da-sessao-de-0.0.4-a-0.0.7.md).
 - O conflito do [CHANGELOG](../CHANGELOG.md) do #22 foi resolvido comparando o resultado com os dois lados do merge: nada se perdeu (o "Corrigido" do `kioskctl log` e a bandeja estão os dois).
 
+## 2026-10-30 — Correção dos GAPs GC-08 e GC-19
+
+- **Origem**: pedido do dono para corrigir todos os GAPs.
+- **GC-08** (código): avisos configuráveis por regra (ADR-001). Adicionada coluna `warning_seconds` (TEXT) à `active_rules`, campo `ActiveRule.warning_seconds: Option<[u64; 2]>`, motor usa limiares da regra (com fallback para `AVISOS_SEGUNDOS`), `Decisao::Avisar` carrega `thresholds`, IPC aceita qualquer marco positivo. Migração `0008_warning_seconds.sql`. **Fechado**.
+- **GC-19** (código/harness): `validation.py` resolve SHA de tags anotadas com `git rev-parse <sha>^{commit}` antes de comparar com HEAD. **Fechado**.
+- **Não acionáveis** (sem Windows real ou dependem de decisão do dono): GC-13, GC-15, GC-16, GC-17, GC-20, GC-21.
+- **Evidência**: `cargo check` e `cargo test` verdes (26 suites, 0 falhas).
+- **Commit**: este registro (branch `cline/correcao-gaps-gc08-gc19`).
+

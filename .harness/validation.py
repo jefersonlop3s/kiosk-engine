@@ -132,6 +132,9 @@ def main():
             if not pushed:
                 print("deleção de refs: nenhum conteúdo enviado")
                 return 0
+            # GC-19: resolve objetos de tag anotada para o SHA do commit;
+            # git rev-parse num commit comum é idempotente.
+            pushed = [git(root, "rev-parse", f"{sha}^{{commit}}") for sha in pushed]
         gates = configuration(root)
         return execute(root, gates, pushed)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:

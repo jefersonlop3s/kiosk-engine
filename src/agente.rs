@@ -13,7 +13,7 @@ use crate::db_manager::{EventContext, KioskDbManager};
 use crate::detalhes::Detalhe;
 use crate::i18n::idioma;
 use crate::ipc::{MonitorBatimento, MudancaUi};
-use crate::motor::{AVISOS_SEGUNDOS, Decisao, Instante, Motivo};
+use crate::motor::{Decisao, Instante, Motivo};
 
 /// Intervalo mínimo entre dois bloqueios de sessão do mesmo SID.
 pub const REBLOQUEIO_SEGUNDOS: i64 = 30;
@@ -611,8 +611,9 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             Decisao::Avisar {
                 restante_segundos,
                 motivo,
+                thresholds,
             } => {
-                self.avisar(rel, ativos, perfil, None, sid, restante_segundos, motivo)
+                self.avisar(rel, ativos, perfil, None, sid, restante_segundos, motivo, thresholds)
                     .await
             }
             _ => {}
@@ -635,9 +636,10 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             Decisao::Avisar {
                 restante_segundos,
                 motivo,
+                thresholds,
             } => {
                 let nome = Some((app_id, g.app.process_name.as_str()));
-                self.avisar(rel, ativos, perfil, nome, sid, restante_segundos, motivo)
+                self.avisar(rel, ativos, perfil, nome, sid, restante_segundos, motivo, thresholds)
                     .await
             }
             _ => {}
@@ -654,13 +656,14 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
         sid: &str,
         restante: u64,
         motivo: Motivo,
+        thresholds: [u64; 2],
     ) {
         let app_id = app.map(|(id, _)| id);
         ativos.insert((perfil, app_id, motivo));
-        let marco = if restante <= AVISOS_SEGUNDOS[1] {
-            AVISOS_SEGUNDOS[1]
+        let marco = if restante <= thresholds[1] {
+            thresholds[1]
         } else {
-            AVISOS_SEGUNDOS[0]
+            thresholds[0]
         };
         if self.avisados.contains(&(perfil, app_id, motivo, marco)) {
             return;

@@ -42,18 +42,21 @@ pub fn texto_do_aviso(
     Some(textos::aviso(&aviso, idioma))
 }
 
-/// O marco de aviso (300 ou 60 segundos) a que um aviso com `restante_segundos` pertence.
-pub fn marco_do_aviso(restante_segundos: u64) -> u64 {
-    if restante_segundos > AVISOS_SEGUNDOS[1] {
-        AVISOS_SEGUNDOS[0]
+/// O marco de aviso a que um `restante_segundos` pertence, dados os limiares
+/// (GC-08). Quando `thresholds` é `None`, usa o padrão do motor (300, 60).
+pub fn marco_do_aviso(restante_segundos: u64, thresholds: Option<&[u64; 2]>) -> u64 {
+    let thr = thresholds.unwrap_or(&AVISOS_SEGUNDOS);
+    if restante_segundos > thr[1] {
+        thr[0]
     } else {
-        AVISOS_SEGUNDOS[1]
+        thr[1]
     }
 }
 
 /// A confirmação que a UI manda ao serviço depois de mostrar o aviso.
-pub fn confirmacao(restante_segundos: u64) -> DaUi {
+/// `thresholds` = limiares da regra, ou `None` para o padrão (GC-08).
+pub fn confirmacao(restante_segundos: u64, thresholds: Option<&[u64; 2]>) -> DaUi {
     DaUi::AvisoExibido {
-        marco: marco_do_aviso(restante_segundos),
+        marco: marco_do_aviso(restante_segundos, thresholds),
     }
 }

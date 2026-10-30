@@ -5,6 +5,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ## [Não lançado]
 
 ### Adicionado
+- **GC-08: Avisos configuráveis por regra** (ADR-001): nova coluna `warning_seconds` em `active_rules` (TEXT, "300,60" ou NULL para o padrão). O motor usa os limiares da regra quando presentes; `Decisao::Avisar` carrega os `thresholds` para o agente e a bandeja. O IPC aceita qualquer marco positivo (antes só 300 e 60). `ActiveRule.warning_seconds` populado em todas as queries e inserções. (branch `cline/correcao-gaps-gc08-gc19`)
+
+- **GC-19: Harness pré-push com tags anotadas**: o `validation.py` agora resolve cada SHA enviado com `git rev-parse <sha>^{commit}`, que é idempotente para commits e resolve objetos de tag anotada para o commit destino. (branch `cline/correcao-gaps-gc08-gc19`)
 - **Bandeja da criança** (ADR-004, E-004 F3 e F4): o serviço inicia o `kiosk-ui.exe` na sessão de cada criança. Ele mostra um ícone na bandeja (com a dica do tempo restante e um balão para os avisos de 5 e 1 minuto, no idioma da conta) e conecta ao serviço por um pipe (`kiosk-ui`), mandando batimento e reconectando sozinho se o serviço cair. Se a criança fechar a bandeja, o serviço a relança e registra `TAMPER_SUSPECTED` em `kioskctl log` (no máximo uma vez a cada 5 minutos por conta). Falha ao iniciar a bandeja também é registrada. O `install` e o `uninstall` encerram as bandejas em execução, para o Windows não travar o arquivo.
 - **Os avisos de 5 e 1 minuto ainda seguem pela caixa de mensagem do Windows**; passar por esta bandeja, com a caixa como reserva, vem na próxima etapa. O ícone mostra o tempo restante só depois dessa etapa (o agente ainda não manda o estado).
 
