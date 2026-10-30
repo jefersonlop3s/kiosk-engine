@@ -16,5 +16,6 @@ Status: Proposto → Aceito | Rejeitado | Descontinuado | Substituído. **O acei
 | [ADR-009](ADR-009-origem-da-lista-de-programas.md) | Origem da lista de programas do assistente | Aceito | 2026-10-29 | kiosk |
 | [ADR-010](ADR-010-idiomas-e-comandos-em-ingles.md) | Idiomas (en-US, pt-BR, es-ES) e comandos de CLI em inglês | Aceito | 2026-10-29 | kiosk |
 | [ADR-011](ADR-011-rastro-de-tentativas-sem-privilegio.md) | Rastro das tentativas de comando administrativo sem privilégio | Aceito | 2026-10-29 | kiosk |
+| [ADR-012](ADR-012-hash-encadeado-security-log.md) | Imutabilidade do log forense por hash encadeado | Proposto | 2026-10-30 | kiosk |
 
-**Próximo número livre**: ADR-012.
+**Próximo número livre**: ADR-013.

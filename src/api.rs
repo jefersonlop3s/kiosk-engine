@@ -87,6 +87,8 @@ impl std::error::Error for ErroServidor {}
 
 /// Política de rede da ADR-005: só loopback e a rede privada Tailscale (CGNAT `100.64.0.0/10` e
 /// `fd7a:115c:a1e0::/48`). Curinga e LAN são recusados; a LAN exige HTTPS, ainda não implementado.
+/// Para ativar o modo LAN (GC-15), defina `KIOSK_LAN=1` — permite endereços de rede privada
+/// (10.x.x.x, 192.168.x.x etc.) mas **sem TLS** até a implementação futura.
 pub fn endereco_permitido(ip: IpAddr) -> Result<(), MotivoEndereco> {
     if ip.is_unspecified() {
         return Err(MotivoEndereco::Curinga);
@@ -105,10 +107,23 @@ pub fn endereco_permitido(ip: IpAddr) -> Result<(), MotivoEndereco> {
         }
     };
     if tailscale {
-        Ok(())
-    } else {
-        Err(MotivoEndereco::ForaDaRede)
+        return Ok(());
     }
+    // GC-15: modo LAN explícito por ambiente, sem TLS (pendente).
+    // Redes privadas RFC 1918: 10/8, 172.16/12, 192.168/16.
+    let lan = match ip {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            o[0] == 10
+                || (o[0] == 172 && (16..=31).contains(&o[1]))
+                || (o[0] == 192 && o[1] == 168)
+        }
+        IpAddr::V6(_) => false, // redes locais IPv6 raras em casa; ignoradas
+    };
+    if lan && std::env::var("KIOSK_LAN").as_deref() == Ok("1") {
+        return Ok(());
+    }
+    Err(MotivoEndereco::ForaDaRede)
 }
 
 pub fn validar_enderecos(enderecos: &[SocketAddr]) -> Result<(), ErroServidor> {

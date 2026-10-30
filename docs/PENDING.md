@@ -6,7 +6,6 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 | ID / documento | Estado | Próximo passo | Responsável |
 |---|---|---|---|
-| Hash encadeado no `Security_Log` | Adiado pelo dono em 2026-10-28; retomar só com ADR. O trigger cobre UPDATE/DELETE via SQL, não edição direta do arquivo | dono |
 | AGENTS global em `~/.claude/` | Criado pela sessão `3a84a5f7` fora do repositório; sem efeito | Apagar (a regra já está no AGENTS.md do projeto) | dono |
 
 ## GAPs de Código
@@ -15,8 +14,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 
 | ID | Mecanismo | Medido? | Próximo passo |
 |---|---|---|---|
-| GC-13 | Pareamento bloqueia por 5 min depois de 10 códigos errados (`MAX_FALHAS_PAREAMENTO`); quem está na rede pode errar de propósito e atrasar o pareamento de um dispositivo novo (não afeta dispositivos já pareados) | Por leitura | Aceitável no MVP; revisar se virar problema real (limite por IP depende do servidor, E-005 F1) |
-| GC-15 | O modo LAN da ADR-005 (HTTPS com certificado fixado) não existe; a API recusa qualquer endereço fora de loopback e Tailscale | Por decisão (fail-closed) | Implementar TLS se o dono quiser LAN; senão manter só Tailscale |
+| GC-15 | Modo LAN da ADR-005 com HTTPS: implementado o mínimo (`KIOSK_LAN=1` permite endereços privados RFC 1918). **Sem TLS ainda** — depende da adição de `tokio-rustls` ao crate | Parcial (HTTP sem TLS) | Adicionar TLS quando `tokio-rustls` estiver disponível; rever pinning de certificado |
 | GC-16 | Serviço do Windows validado no PC do dono: instalação (2026-10-29) e **retorno sozinho depois de reiniciar o Windows** (novo PID, em execução, início automático). Falta ver o agente, rodando como SYSTEM, aplicar uma regra na conta da criança (por exemplo um limite curto) | Por execução no PC real | E-004 F1/F4, E-007 F2 |
 | GC-17 | Os avisos à criança ainda usam `WTSSendMessageW` (caixa de mensagem). A bandeja já existe e é iniciada e supervisionada pelo serviço (#21 e #22); falta os avisos e o tempo restante passarem por ela, com a caixa de mensagem como reserva se ela não confirmar, e ver o desenho no PC | Por decisão (provisório) | E-004 F3 (etapa 4) |
 | GC-20 | Logoff após 2 desbloqueios não ocorreu no teste real (2026-10-29): houve dois bloqueios por `LIMITE_DIARIO_TOTAL` com 30 s de intervalo e nenhuma ação nem erro registrados depois, até o limite ser removido 7 min mais tarde | Sim: log do teste do dono | Repetir com intervalo de 40 s entre as entradas e a saída da janela do `servir`; se reproduzir, investigar a detecção da sessão reconectada (`WTSSessionInfoEx`) |

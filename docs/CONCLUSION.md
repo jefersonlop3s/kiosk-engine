@@ -687,3 +687,12 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência**: `cargo check` e `cargo test` verdes (26 suites, 0 falhas).
 - **Commit**: este registro (branch `cline/correcao-gaps-gc08-gc19`).
 
+## 2026-10-30 — GC-13, GC-15 e hash encadeado (ADR-012)
+
+- **Origem**: pedido do dono para seguir com GC-13, GC-15 e hash encadeado.
+- **GC-13** (código): contagem de falhas de pareamento por IP (`client_ip`) em vez de global. Adicionado `AND client_ip = ?` à query SQL. **Fechado**.
+- **GC-15** (código, parcial): modo LAN com `KIOSK_LAN=1`. Permite endereços privados RFC 1918. Sem TLS — depende de adicionar `tokio-rustls` ao crate. **Aberto** (sem TLS).
+- **Hash encadeado** (ADR-012, código): migração `0009_hash_chain.sql` com coluna `prev_hash`, triggers de proteção (UPDATE bloqueado, DELETE só de registros com mais de 90 dias). Cálculo do hash na inserção via `security_logger_impl::hash_chain`. ADR-012 proposto. **Fechado**.
+- **Evidência**: `cargo check` e `cargo test` verdes (todas as suites).
+- **Commit**: este registro (branch `cline/gc13-gc15-hash`).
+

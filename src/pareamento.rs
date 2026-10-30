@@ -277,10 +277,14 @@ impl KioskDbManager {
     ) -> Result<Uuid, Rejeicao> {
         const ACAO: ActionType = ActionType::PairDevice;
         let janela = instante(agora - Duration::seconds(VALIDADE_CODIGO_SEGUNDOS));
+        // GC-13: contagem por IP para que um atacante na rede não possa consumir
+        // as tentativas de um dispositivo legítimo.
         let falhas: i64 = match sqlx::query_scalar(
             "SELECT count(*) FROM security_log \
-             WHERE action_attempted = 'PAIR_DEVICE' AND event_type = 'AUTH_FAIL' AND timestamp >= ?",
+             WHERE action_attempted = 'PAIR_DEVICE' AND event_type = 'AUTH_FAIL' \
+             AND client_ip = ? AND timestamp >= ?",
         )
+        .bind(&ctx.client_ip)
         .bind(janela)
         .fetch_one(self.pool())
         .await
