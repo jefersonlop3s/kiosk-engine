@@ -703,3 +703,9 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Código**: `avisos_pendentes` (fila de avisos sem confirmação, pura), `Sistema::estado` e `Sistema::avisos_sem_confirmacao`, `SistemaWindows::avisar` pela bandeja com a caixa de mensagem como reserva, `GerenteUi::enviar` apagando a confirmação antiga a cada aviso, e o agente registrando a reserva (`UI_NOT_CONFIRMED`) e empurrando o estado. Corrigida a chamada de `confirmacao` em `kiosk-ui.rs`, que não compilava no Windows desde o GC-08.
 - **Evidência**: `cargo test` verde (Linux). O código `cfg(windows)` não foi compilado nesta máquina (sem `mingw`): depende do CI Windows. **GC-17 segue aberto** até ver no PC real; aberto o GC-22 (restante do dia fora dos últimos minutos).
 - **Commit**: este registro (branch `claude/project-active-sessions-analysis-5ba1e1`).
+
+## 2026-10-30 — GC-22 (restante da sessão na dica) e falha intermitente do gate
+
+- **Gate da main** (PR #25, `5ace2b5`): `codigo_de_pareamento_e_de_uso_unico_expira_e_so_existe_como_hash` falhou no Ubuntu (Interno no lugar de NaoAutorizado) depois do merge e passou no CI da PR. Causa: o `drop(tx)` desfaz a transação de forma preguiçosa e ela ainda segurava o bloqueio de escrita quando a recusa era gravada em outra conexão. Corrigido com `rollback().await` em `pareamento` e `finish`. Não reproduzi localmente (30 rodadas): a causa vem da leitura do código, e só rodadas repetidas do CI confirmam.
+- **GC-22** (código): `motor::restante_da_sessao` (puro), `KioskDbManager::restante_da_sessao` e o agente empurrando o estado por balde. **Fechado em código**; a dica no PC real entra no GC-17.
+- **Evidência**: `cargo fmt --check`, `clippy -D warnings` e `cargo test` verdes no Linux.
