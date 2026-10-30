@@ -43,6 +43,12 @@ pub enum Comando {
         dia: NaiveDate,
     },
     Log(ConsultaLog),
+    /// Listagens (E-008 F1): perfis, apps e regras, estas com filtro opcional por perfil.
+    Profiles,
+    Apps,
+    Rules {
+        profile_id: Option<Uuid>,
+    },
 }
 
 /// Consulta do log forense: período e, opcionalmente, um perfil.
@@ -63,6 +69,9 @@ impl Comando {
             Self::ModifyLimit { .. } => ActionType::ModifyLimit,
             Self::Usage { .. } => ActionType::QueryUsage,
             Self::Log(_) => ActionType::QueryLog,
+            Self::Profiles => ActionType::QueryProfiles,
+            Self::Apps => ActionType::QueryApps,
+            Self::Rules { .. } => ActionType::QueryRules,
         }
     }
 }
@@ -99,6 +108,17 @@ struct LogBruto {
     to: String,
     profile_id: Option<String>,
     limit: Option<u32>,
+}
+
+/// Corpo das listagens de perfis e apps: um objeto vazio (esquema fechado).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Vazio {}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RulesBruto {
+    profile_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -176,6 +196,9 @@ pub fn acao_do_nome(nome: &str) -> Option<ActionType> {
         "modify_limit" => Some(ActionType::ModifyLimit),
         "usage" => Some(ActionType::QueryUsage),
         "log" => Some(ActionType::QueryLog),
+        "profiles" => Some(ActionType::QueryProfiles),
+        "apps" => Some(ActionType::QueryApps),
+        "rules" => Some(ActionType::QueryRules),
         _ => None,
     }
 }
@@ -275,6 +298,23 @@ pub fn interpretar(acao: &str, corpo: &[u8], agora: DateTime<Utc>) -> Result<Com
                 profile_id,
                 limite,
             }))
+        }
+        "profiles" => {
+            json::<Vazio>(corpo)?;
+            Ok(Comando::Profiles)
+        }
+        "apps" => {
+            json::<Vazio>(corpo)?;
+            Ok(Comando::Apps)
+        }
+        "rules" => {
+            let b: RulesBruto = json(corpo)?;
+            let profile_id = b
+                .profile_id
+                .as_deref()
+                .map(|p| uuid("profile_id", p))
+                .transpose()?;
+            Ok(Comando::Rules { profile_id })
         }
         outra => Err(ErroComando::UnknownAction(
             outra.chars().take(64).collect::<String>(),

@@ -44,7 +44,7 @@ Critério: cada fase do épico vale 100% concluída, 50% parcial e 0% não inici
 | [E-005](epics/E-005-api-comando-e-pareamento.md) API e pareamento | concluído nas fases | F1–F3 concluídas | 100% | Modo LAN com HTTPS (GC-15, fora das fases) |
 | [E-006](epics/E-006-app-mobile-administracao.md) App mobile dos pais | congelado | fases a definir | 0% | Condição de retomada |
 | [E-007](epics/E-007-onboarding-e-instalador.md) Onboarding e instalador | em andamento | F2 concluída; F1 e F3 não iniciadas | 35% | Assistente `kioskd configurar`, `.msi` |
-| [E-008](epics/E-008-cliente-grafico-dos-pais.md) Cliente gráfico dos pais | proposto | F1–F4 não iniciadas | 0% | Listagem remota na API (F1); a exigência de administrador no pareamento já foi antecipada |
+| [E-008](epics/E-008-cliente-grafico-dos-pais.md) Cliente gráfico dos pais | em andamento | F1 concluída; F2–F4 não iniciadas | 25% | ADR do toolkit e do repositório, depois o app (F2); a exigência de administrador no pareamento já foi antecipada |
 | [E-009](epics/E-009-servico-linux.md) Serviço Linux | congelado | fases a definir | 0% | Condição de retomada |
 | [E-010](epics/E-010-servico-macos.md) Serviço macOS | congelado | fases a definir | 0% | Condição de retomada |
 | [E-011](epics/E-011-servico-android.md) Serviço Android | congelado | fases a definir | 0% | Condição de retomada |

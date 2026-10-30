@@ -852,3 +852,122 @@ async fn log_mostra_a_tentativa_sem_privilegio_sem_o_sid_e_continua_omitindo_o_r
         .collect();
     assert_eq!(nesse, ["CREATE_PAIRING_CODE"], "{resp}");
 }
+
+// --- E-008 F1: listagens remotas de perfis, apps e regras
+
+async fn total_de_eventos(s: &Servico) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM security_log")
+        .fetch_one(s.db.pool())
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn listagens_devolvem_perfis_apps_e_regras_sem_o_sid_e_sem_gravar_evento() {
+    let s = servico().await;
+    let regra = regra_criada(
+        &s,
+        r#","daily_limit_seconds":3600,"window_start":"08:00","window_end":"20:00""#,
+    )
+    .await;
+    let outro = ChildProfile {
+        profile_id: Uuid::new_v4(),
+        windows_sid: "S-1-5-21-2".into(),
+        display_name: "Filha".into(),
+        daily_total_limit_seconds: Some(7200),
+    };
+    s.db.create_profile(&EventContext::local(), &outro)
+        .await
+        .unwrap();
+    let antes = total_de_eventos(&s).await;
+
+    let (st, resp) = s.comando("profiles", "{}").await;
+    assert_eq!(st, 200, "{resp}");
+    assert!(
+        !resp.contains("S-1-5"),
+        "o SID da conta do Windows não sai pela API: {resp}"
+    );
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    let perfis = v["profiles"].as_array().unwrap();
+    assert_eq!(perfis.len(), 2);
+    let filha = perfis
+        .iter()
+        .find(|p| p["display_name"] == "Filha")
+        .unwrap();
+    assert_eq!(filha["profile_id"], outro.profile_id.to_string());
+    assert_eq!(filha["daily_total_limit_seconds"], 7200);
+    assert_eq!(filha["windows"].as_array().unwrap().len(), 0);
+
+    let (st, resp) = s.comando("apps", "{}").await;
+    assert_eq!(st, 200, "{resp}");
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    assert_eq!(v["apps"][0]["app_id"], s.app.to_string());
+    assert_eq!(v["apps"][0]["process_name"], "jogo.exe");
+    assert_eq!(v["apps"][0]["status"], "MONITORED");
+
+    let (st, resp) = s.comando("rules", "{}").await;
+    assert_eq!(st, 200, "{resp}");
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    let r = &v["rules"][0];
+    assert_eq!(v["rules"].as_array().unwrap().len(), 1);
+    assert_eq!(r["rule_id"], regra.to_string());
+    assert_eq!(r["profile_id"], s.perfil.to_string());
+    assert_eq!(r["app_id"], s.app.to_string());
+    assert_eq!(r["state"], "PENDING");
+    assert_eq!(r["daily_limit_seconds"], 3600);
+    assert_eq!(
+        (&r["window_start"], &r["window_end"]),
+        (&"08:00".into(), &"20:00".into())
+    );
+    assert!(r["effective_until"].is_null());
+
+    // filtro por perfil: o do dono da regra traz uma; o outro, nenhuma
+    let (_, resp) = s
+        .comando("rules", &format!(r#"{{"profile_id":"{}"}}"#, s.perfil))
+        .await;
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    assert_eq!(v["rules"].as_array().unwrap().len(), 1);
+    let (st, resp) = s
+        .comando(
+            "rules",
+            &format!(r#"{{"profile_id":"{}"}}"#, outro.profile_id),
+        )
+        .await;
+    let v: serde_json::Value = serde_json::from_str(&resp).unwrap();
+    assert_eq!((st, v["rules"].as_array().map(Vec::len)), (200, Some(0)));
+
+    assert_eq!(
+        total_de_eventos(&s).await,
+        antes,
+        "consulta não grava evento"
+    );
+}
+
+#[tokio::test]
+async fn listagens_exigem_assinatura_e_recusam_corpo_invalido_sem_vazar_detalhe() {
+    let s = servico().await;
+    for acao in ["profiles", "apps", "rules"] {
+        let caminho = format!("/api/windows/{acao}");
+        let (st, resp) = http(s.addr, "POST", &caminho, &vec![], b"{}").await;
+        assert_eq!(
+            (st, resp.as_str()),
+            (403, REJEITADA),
+            "{acao} sem assinatura"
+        );
+    }
+    let antes = s.contar("VALIDATION_FAIL").await;
+    for (acao, ruim) in [
+        ("profiles", r#"{"x":1}"#.to_string()),
+        ("apps", r#"{"profile_id":"x"}"#.to_string()),
+        ("rules", r#"{"profile_id":"x"}"#.to_string()),
+        ("rules", format!(r#"{{"profile_id":"{}"}}"#, Uuid::new_v4())),
+        ("rules", r#"{"outro":1}"#.to_string()),
+    ] {
+        assert_eq!(
+            s.comando(acao, &ruim).await,
+            (403, REJEITADA.to_string()),
+            "{acao} {ruim}"
+        );
+    }
+    assert_eq!(s.contar("VALIDATION_FAIL").await, antes + 5);
+}

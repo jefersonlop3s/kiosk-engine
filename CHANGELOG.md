@@ -5,6 +5,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ## [Não lançado]
 
 ### Adicionado
+- **Listagens remotas** (E-008 F1): `kioskctl profile list`, `kioskctl app list` e `kioskctl rule list [--profile ID]` (em português: `perfil listar`, `app listar`, `regra listar`) mostram perfis, apps e regras do PC da criança sem digitar IDs. A API ganhou as consultas `profiles`, `apps` e `rules`; o SID da conta do Windows não sai pelo serviço.
 - **Tempo restante na dica da bandeja** (GC-22): a dica do ícone mostra o menor entre o que falta do limite diário total e o que falta para o fim da janela geral, atualizada a cada minuto (a cada 15 s nos últimos 5 minutos). Sem limite nem janela, a dica fica só com o título. Limites de app não entram.
 - **Corrigido (intermitente)**: o `drop` da transação desfazia a mudança de forma preguiçosa e a recusa de um código de pareamento já usado podia voltar como erro interno; agora o rollback é explícito.
 - **GC-08: Avisos configuráveis por regra** (ADR-001): nova coluna `warning_seconds` em `active_rules` (TEXT, "300,60" ou NULL para o padrão). O motor usa os limiares da regra quando presentes; `Decisao::Avisar` carrega os `thresholds` para o agente e a bandeja. O IPC aceita qualquer marco positivo (antes só 300 e 60). `ActiveRule.warning_seconds` populado em todas as queries e inserções. (branch `cline/correcao-gaps-gc08-gc19`)

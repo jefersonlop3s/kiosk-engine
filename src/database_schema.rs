@@ -293,6 +293,9 @@ pub enum ActionType {
     RevokeDevice,
     QueryUsage,
     QueryLog,
+    QueryProfiles,
+    QueryApps,
+    QueryRules,
 }
 
 impl ActionType {
@@ -312,6 +315,9 @@ impl ActionType {
             Self::RevokeDevice => "REVOKE_DEVICE",
             Self::QueryUsage => "QUERY_USAGE",
             Self::QueryLog => "QUERY_LOG",
+            Self::QueryProfiles => "QUERY_PROFILES",
+            Self::QueryApps => "QUERY_APPS",
+            Self::QueryRules => "QUERY_RULES",
         }
     }
 
@@ -331,6 +337,9 @@ impl ActionType {
             "REVOKE_DEVICE" => Ok(Self::RevokeDevice),
             "QUERY_USAGE" => Ok(Self::QueryUsage),
             "QUERY_LOG" => Ok(Self::QueryLog),
+            "QUERY_PROFILES" => Ok(Self::QueryProfiles),
+            "QUERY_APPS" => Ok(Self::QueryApps),
+            "QUERY_RULES" => Ok(Self::QueryRules),
             outro => Err(bad_value("ActionType", outro)),
         }
     }
