@@ -74,7 +74,14 @@ Estado: em andamento (adaptador Win32 e agente no serviço em 2026-10-28; faltam
 ## Bandeja, etapa 3: o serviço supervisiona a UI (2026-10-30)
 
 - `lancador_windows` (CreateProcessAsUser) e a supervisão no agente: inicia a bandeja da criança, e três batimentos perdidos viram `TAMPER_SUSPECTED` e relançamento. O `kioskd serve` já escuta o pipe `kiosk-ui`. `install` e `uninstall` encerram as bandejas em execução. Detalhes na seção da etapa 3 da ADR-004.
-- Falta: os avisos e o estado passarem pela bandeja, com a caixa de mensagem como reserva (GC-17), e ver o desenho no PC.
+- Os avisos e o estado passaram pela bandeja na etapa 4 (abaixo). Falta ver o desenho no PC.
+
+## Bandeja, etapa 4: avisos e estado pela bandeja (2026-10-30)
+
+- O aviso de 5 e 1 min segue pela bandeja conectada; sem confirmação em 6 s (`avisos_pendentes`), bandeja ausente ou fila cheia, sai pela caixa de mensagem, e a reserva por falta de confirmação vira `INTERNAL_ERROR` ligado ao perfil. O estado do tempo restante da sessão vai para a dica do ícone nos últimos minutos (Sistema::estado). Detalhes na seção da etapa 4 da [ADR-004](../adr/ADR-004-comunicacao-servico-ui-por-named-pipe.md).
+- Corrigido junto: `kiosk-ui.rs` chamava `confirmacao` com um argumento depois do GC-08 e não compilaria no Windows.
+- Testes: `tests/avisos_pendentes.rs`, `tests/agente_ui.rs` (estado e reserva). A parte `cfg(windows)` (`SistemaWindows`, `GerenteUi::enviar`) só compila no CI Windows: não foi verificada localmente (sem `mingw`).
+- Falta: ver no PC real os avisos pela bandeja e a reserva (matar a bandeja e esperar o aviso); o tempo restante fora dos últimos minutos (GC-22).
 
 ## Aceites
 
