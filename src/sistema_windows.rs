@@ -47,6 +47,7 @@ use windows_sys::Win32::System::Threading::{
 use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONWARNING, MB_OK};
 
 use crate::agente::{Aviso, ProcessoVisto, Sistema};
+use crate::motor::Motivo;
 
 /// Quanto tempo a caixa de aviso fica aberta antes de fechar sozinha.
 const AVISO_TIMEOUT_SEGUNDOS: u32 = 60;
@@ -573,6 +574,8 @@ fn sessao_do_sid(sid: &str) -> Result<u32, String> {
 #[derive(Default, Clone)]
 pub struct SistemaWindows {
     ui: Option<(crate::ui_windows::GerenteUi, std::path::PathBuf)>,
+    /// Avisos entregues à bandeja que ela ainda não confirmou (reserva, GC-17).
+    pendentes: crate::avisos_pendentes::AvisosPendentes,
 }
 
 impl SistemaWindows {
@@ -581,8 +584,37 @@ impl SistemaWindows {
     pub fn com_ui(gerente: crate::ui_windows::GerenteUi, exe_ui: std::path::PathBuf) -> Self {
         Self {
             ui: Some((gerente, exe_ui)),
+            pendentes: Default::default(),
         }
     }
+}
+
+/// A reserva (e o caminho de antes da bandeja): caixa de mensagem na sessão da criança.
+fn caixa_de_mensagem(aviso: &Aviso) -> Result<(), String> {
+    let id = sessao_do_sid(&aviso.sid)?;
+    let (titulo, mensagem) = texto_do_aviso(aviso);
+    let (t, m) = (para_utf16(&titulo), para_utf16(&mensagem));
+    let mut resposta = 0;
+    // SAFETY: buffers UTF-16 vivos durante a chamada; tamanhos em bytes sem o zero final;
+    // `bWait = FALSE` não bloqueia o agente.
+    let ok = unsafe {
+        WTSSendMessageW(
+            WTS_CURRENT_SERVER_HANDLE,
+            id,
+            t.as_ptr(),
+            ((t.len() - 1) * 2) as u32,
+            m.as_ptr(),
+            ((m.len() - 1) * 2) as u32,
+            MB_OK | MB_ICONWARNING,
+            AVISO_TIMEOUT_SEGUNDOS,
+            &mut resposta,
+            FALSE,
+        )
+    };
+    if ok == FALSE {
+        return Err(ultimo_erro("WTSSendMessageW"));
+    }
+    Ok(())
 }
 
 impl Sistema for SistemaWindows {
@@ -598,6 +630,38 @@ impl Sistema for SistemaWindows {
         let (_, exe) = self.ui.as_ref().ok_or("sem bandeja configurada")?;
         let sessao = sessao_do_sid(sid)?;
         crate::lancador_windows::iniciar_na_sessao(sessao, exe).map(|_| ())
+    }
+
+    fn estado(&mut self, sid: &str, restante_segundos: Option<u64>, motivo: Option<Motivo>) {
+        if let Some((gerente, _)) = &self.ui {
+            // melhor esforço: o aviso é que não pode se perder, e esse tem reserva
+            gerente.enviar(
+                sid,
+                crate::ipc::ParaUi::Estado {
+                    restante_segundos,
+                    motivo: motivo.map(|m| m.as_str().to_owned()),
+                },
+            );
+        }
+    }
+
+    fn avisos_sem_confirmacao(
+        &mut self,
+        agora: chrono::DateTime<chrono::Utc>,
+    ) -> Vec<(Aviso, Result<(), String>)> {
+        let Some((gerente, _)) = &self.ui else {
+            return Vec::new();
+        };
+        let vencidos = self
+            .pendentes
+            .vencidos(agora, |sid| gerente.ultimo_aviso_exibido(sid).is_some());
+        vencidos
+            .into_iter()
+            .map(|aviso| {
+                let r = caixa_de_mensagem(&aviso);
+                (aviso, r)
+            })
+            .collect()
     }
 
     fn processos(&mut self) -> Result<Vec<ProcessoVisto>, String> {
@@ -679,29 +743,14 @@ impl Sistema for SistemaWindows {
     }
 
     fn avisar(&mut self, aviso: &Aviso) -> Result<(), String> {
-        let id = sessao_do_sid(&aviso.sid)?;
-        let (titulo, mensagem) = texto_do_aviso(aviso);
-        let (t, m) = (para_utf16(&titulo), para_utf16(&mensagem));
-        let mut resposta = 0;
-        // SAFETY: buffers UTF-16 vivos durante a chamada; tamanhos em bytes sem o zero final;
-        // `bWait = FALSE` não bloqueia o agente.
-        let ok = unsafe {
-            WTSSendMessageW(
-                WTS_CURRENT_SERVER_HANDLE,
-                id,
-                t.as_ptr(),
-                ((t.len() - 1) * 2) as u32,
-                m.as_ptr(),
-                ((m.len() - 1) * 2) as u32,
-                MB_OK | MB_ICONWARNING,
-                AVISO_TIMEOUT_SEGUNDOS,
-                &mut resposta,
-                FALSE,
-            )
-        };
-        if ok == FALSE {
-            return Err(ultimo_erro("WTSSendMessageW"));
+        // com bandeja conectada, o aviso vai por ela e fica pendente de confirmação; sem ela (ou
+        // com a fila cheia), cai direto na caixa de mensagem
+        if let Some((gerente, _)) = &self.ui
+            && gerente.enviar(&aviso.sid, crate::ipc::ParaUi::from(aviso))
+        {
+            self.pendentes.registrar(aviso.clone(), chrono::Utc::now());
+            return Ok(());
         }
-        Ok(())
+        caixa_de_mensagem(aviso)
     }
 }

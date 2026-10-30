@@ -132,7 +132,7 @@ pub(crate) struct RuleRow {
 /// vale 60 (1 minuto).
 pub fn parse_warning_seconds(s: &str) -> Result<[u64; 2], Error> {
     let partes: Vec<&str> = s.split(',').collect();
-    if partes.len() < 1 || partes.len() > 2 {
+    if partes.is_empty() || partes.len() > 2 {
         return Err(bad_value("warning_seconds", s));
     }
     let p0 = decode(u64::try_from(decode(partes[0].trim().parse::<i64>())?))?;
@@ -293,6 +293,9 @@ pub enum ActionType {
     RevokeDevice,
     QueryUsage,
     QueryLog,
+    QueryProfiles,
+    QueryApps,
+    QueryRules,
 }
 
 impl ActionType {
@@ -312,6 +315,9 @@ impl ActionType {
             Self::RevokeDevice => "REVOKE_DEVICE",
             Self::QueryUsage => "QUERY_USAGE",
             Self::QueryLog => "QUERY_LOG",
+            Self::QueryProfiles => "QUERY_PROFILES",
+            Self::QueryApps => "QUERY_APPS",
+            Self::QueryRules => "QUERY_RULES",
         }
     }
 
@@ -331,6 +337,9 @@ impl ActionType {
             "REVOKE_DEVICE" => Ok(Self::RevokeDevice),
             "QUERY_USAGE" => Ok(Self::QueryUsage),
             "QUERY_LOG" => Ok(Self::QueryLog),
+            "QUERY_PROFILES" => Ok(Self::QueryProfiles),
+            "QUERY_APPS" => Ok(Self::QueryApps),
+            "QUERY_RULES" => Ok(Self::QueryRules),
             outro => Err(bad_value("ActionType", outro)),
         }
     }

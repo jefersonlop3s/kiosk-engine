@@ -114,9 +114,7 @@ pub fn endereco_permitido(ip: IpAddr) -> Result<(), MotivoEndereco> {
     let lan = match ip {
         IpAddr::V4(v4) => {
             let o = v4.octets();
-            o[0] == 10
-                || (o[0] == 172 && (16..=31).contains(&o[1]))
-                || (o[0] == 192 && o[1] == 168)
+            o[0] == 10 || (o[0] == 172 && (16..=31).contains(&o[1])) || (o[0] == 192 && o[1] == 168)
         }
         IpAddr::V6(_) => false, // redes locais IPv6 raras em casa; ignoradas
     };
@@ -330,6 +328,10 @@ async fn comando(
             Some(p) => vec![("profile", db.existe_perfil(p).await)],
             None => vec![],
         },
+        Comando::Rules {
+            profile_id: Some(p),
+        } => vec![("profile", db.existe_perfil(*p).await)],
+        Comando::Profiles | Comando::Apps | Comando::Rules { profile_id: None } => vec![],
     };
     for (nome_ref, existe) in referencias {
         match existe {
@@ -383,6 +385,9 @@ async fn comando(
         // consultas: somente leitura, respondem com dados e não geram evento
         Comando::Usage { profile_id, dia } => return consulta_uso(&db, profile_id, dia).await,
         Comando::Log(c) => return consulta_log(&db, &c).await,
+        Comando::Profiles => return consulta_perfis(&db).await,
+        Comando::Apps => return consulta_apps(&db).await,
+        Comando::Rules { profile_id } => return consulta_regras(&db, profile_id).await,
     };
 
     // Camada 5: resposta genérica
@@ -457,6 +462,97 @@ async fn consulta_log(db: &KioskDbManager, c: &crate::comandos::ConsultaLog) -> 
             resposta(
                 StatusCode::OK,
                 serde_json::json!({ "events": eventos }).to_string(),
+            )
+        }
+        Err(_) => erro_interno(),
+    }
+}
+
+/// `HH:MM` das janelas devolvidas pela API.
+fn hhmm(t: chrono::NaiveTime) -> String {
+    t.format("%H:%M").to_string()
+}
+
+/// Perfis (E-008 F1). Sem o SID da conta do Windows: o cliente não precisa dele e ele não sai do PC.
+async fn consulta_perfis(db: &KioskDbManager) -> Response {
+    let perfis = match db.listar_perfis().await {
+        Ok(p) => p,
+        Err(_) => return erro_interno(),
+    };
+    let mut saida = Vec::with_capacity(perfis.len());
+    for p in perfis {
+        let janelas = match db.janelas_do_perfil(p.profile_id).await {
+            Ok(j) => j,
+            Err(_) => return erro_interno(),
+        };
+        let janelas: Vec<_> = janelas
+            .into_iter()
+            .map(|(dia, j)| {
+                serde_json::json!({
+                    "weekday": dia,
+                    "window_start": hhmm(j.start),
+                    "window_end": hhmm(j.end),
+                })
+            })
+            .collect();
+        saida.push(serde_json::json!({
+            "profile_id": p.profile_id,
+            "display_name": p.display_name,
+            "daily_total_limit_seconds": p.daily_total_limit_seconds,
+            "windows": janelas,
+        }));
+    }
+    resposta(
+        StatusCode::OK,
+        serde_json::json!({ "profiles": saida }).to_string(),
+    )
+}
+
+async fn consulta_apps(db: &KioskDbManager) -> Response {
+    match db.listar_apps().await {
+        Ok(apps) => {
+            let apps: Vec<_> = apps
+                .into_iter()
+                .map(|a| {
+                    serde_json::json!({
+                        "app_id": a.app_id,
+                        "process_name": a.process_name,
+                        "status": a.status.as_str(),
+                    })
+                })
+                .collect();
+            resposta(
+                StatusCode::OK,
+                serde_json::json!({ "apps": apps }).to_string(),
+            )
+        }
+        Err(_) => erro_interno(),
+    }
+}
+
+async fn consulta_regras(db: &KioskDbManager, profile_id: Option<Uuid>) -> Response {
+    match db.listar_regras(profile_id).await {
+        Ok(regras) => {
+            let regras: Vec<_> = regras
+                .into_iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "rule_id": r.rule_id,
+                        "profile_id": r.profile_id,
+                        "app_id": r.app_id,
+                        "state": r.state.as_str(),
+                        "created_at": log_ts(r.creation_timestamp),
+                        "daily_limit_seconds": r.daily_limit_seconds,
+                        "window_start": r.time_window.as_ref().map(|j| hhmm(j.start)),
+                        "window_end": r.time_window.as_ref().map(|j| hhmm(j.end)),
+                        "effective_until": r.effective_until_timestamp.map(log_ts),
+                        "warning_seconds": r.warning_seconds,
+                    })
+                })
+                .collect();
+            resposta(
+                StatusCode::OK,
+                serde_json::json!({ "rules": regras }).to_string(),
             )
         }
         Err(_) => erro_interno(),

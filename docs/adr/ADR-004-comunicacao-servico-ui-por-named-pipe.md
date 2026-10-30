@@ -60,5 +60,12 @@ A decisão não mudou. Ao implementar o canal (`src/ui_windows.rs`), ficaram est
 10. **O serviço inicia a bandeja** na sessão de cada criança com sessão ativa (`WTSQueryUserToken` + `CreateProcessAsUserW`, na área de trabalho `winsta0\default`, com o ambiente da própria conta), assim que a sessão aparece. O `kiosk-ui.exe` é o de `Program Files\kiosk`.
 11. **Três batimentos perdidos (15 s) viram `TAMPER_SUSPECTED`** ligado ao perfil (`UI_STOPPED`), e a bandeja é relançada. Para uma criança que a feche sempre, o alerta sai no máximo uma vez a cada 5 minutos por conta (o relançamento continua a cada 15 s). Falha ao iniciar vira `INTERNAL_ERROR` (`UI_NOT_STARTED`), com o mesmo limite. Só contas com perfil recebem bandeja.
 12. **`install` e `uninstall` encerram as bandejas em execução**, depois de parar o serviço (que é quem as relançaria): sem isso, o Windows trava o `kiosk-ui.exe` e a atualização ou a remoção falham.
-13. Ainda falta: os avisos e o estado passarem pela bandeja (hoje o aviso segue pela caixa de mensagem do Windows), com a caixa como reserva se a bandeja não confirmar.
+13. (Resolvido na etapa 4, abaixo.) Os avisos e o estado passarem pela bandeja, com a caixa de mensagem como reserva.
+
+### Avisos e estado pela bandeja (etapa 4, GC-17)
+
+14. **O aviso vai pela bandeja quando ela está conectada** (`GerenteUi::enviar`) e fica pendente de confirmação (`avisos_pendentes`). Se `AvisoExibido` não chega em 6 s, ou a bandeja não está conectada, ou a fila dela está cheia, o aviso sai pela caixa de mensagem (`WTSSendMessageW`). A confirmação de um aviso antigo é apagada a cada novo aviso entregue, para não valer para o seguinte.
+15. **A reserva nunca é silenciosa**: aviso refeito pela caixa porque a bandeja não confirmou vira `INTERNAL_ERROR` (`WARNING_FAILED` com `UI_NOT_CONFIRMED`), ligado ao perfil, dizendo se a caixa também falhou. Bandeja ausente já é coberta pelo `TAMPER_SUSPECTED` da supervisão (item 11).
+16. **O estado (tempo restante da sessão) vai para a dica do ícone** a cada mudança de "balde": 1 min acima de 5 min restantes, 15 s dali para baixo. O restante é o menor entre o limite diário total e o fim da janela geral (`motor::restante_da_sessao`, GC-22). Sem nenhum dos dois, a dica não ganha número (e só volta ao texto simples se tinha). Limites de app não entram: a dica é da sessão.
+17. **Desvio**: a confirmação casa por existir `AvisoExibido` depois do envio, não pelo número do marco: a UI calcula o marco com os limiares padrão e a regra pode ter outros (GC-08). O protocolo não mudou.
 

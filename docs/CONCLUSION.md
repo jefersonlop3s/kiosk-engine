@@ -696,3 +696,23 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência**: `cargo check` e `cargo test` verdes (todas as suites).
 - **Commit**: este registro (branch `cline/gc13-gc15-hash`).
 
+
+## 2026-10-30 — E-004 F3 etapa 4: avisos e estado pela bandeja (GC-17)
+
+- **Origem**: pedido do dono para concluir o E-004.
+- **Código**: `avisos_pendentes` (fila de avisos sem confirmação, pura), `Sistema::estado` e `Sistema::avisos_sem_confirmacao`, `SistemaWindows::avisar` pela bandeja com a caixa de mensagem como reserva, `GerenteUi::enviar` apagando a confirmação antiga a cada aviso, e o agente registrando a reserva (`UI_NOT_CONFIRMED`) e empurrando o estado. Corrigida a chamada de `confirmacao` em `kiosk-ui.rs`, que não compilava no Windows desde o GC-08.
+- **Evidência**: `cargo test` verde (Linux). O código `cfg(windows)` não foi compilado nesta máquina (sem `mingw`): depende do CI Windows. **GC-17 segue aberto** até ver no PC real; aberto o GC-22 (restante do dia fora dos últimos minutos).
+- **Commit**: este registro (branch `claude/project-active-sessions-analysis-5ba1e1`).
+
+## 2026-10-30 — GC-22 (restante da sessão na dica) e falha intermitente do gate
+
+- **Gate da main** (PR #25, `5ace2b5`): `codigo_de_pareamento_e_de_uso_unico_expira_e_so_existe_como_hash` falhou no Ubuntu (Interno no lugar de NaoAutorizado) depois do merge e passou no CI da PR. Causa: o `drop(tx)` desfaz a transação de forma preguiçosa e ela ainda segurava o bloqueio de escrita quando a recusa era gravada em outra conexão. Corrigido com `rollback().await` em `pareamento` e `finish`. Não reproduzi localmente (30 rodadas): a causa vem da leitura do código, e só rodadas repetidas do CI confirmam.
+- **GC-22** (código): `motor::restante_da_sessao` (puro), `KioskDbManager::restante_da_sessao` e o agente empurrando o estado por balde. **Fechado em código**; a dica no PC real entra no GC-17.
+- **Evidência**: `cargo fmt --check`, `clippy -D warnings` e `cargo test` verdes no Linux.
+
+## 2026-10-30 — E-008 F1: listagens remotas de perfis, apps e regras
+
+- **Origem**: pedido do dono para seguir com a F1 do E-008.
+- **Código**: `ActionType` `QUERY_PROFILES`, `QUERY_APPS` e `QUERY_RULES`; `Comando::Profiles`, `Apps` e `Rules` na Camada 3 (esquema fechado); as consultas na API (somente leitura, sem evento, sem o SID); `kioskctl profile list`, `app list` e `rule list`, com as formas em `cli::FORMAS_KIOSKCTL` e o uso nos três idiomas. A conferência de nome do app em `rule list` usa a própria listagem de apps.
+- **Docs**: três fluxogramas, runbook, E-008, PENDING e ROADMAP (E-008 em 25%).
+- **Evidência**: `fmt --check`, `clippy -D warnings` e `cargo test` verdes no Linux; as saídas remotas de apps e regras são iguais às do `kioskd` local. Os fluxogramas **não** foram renderizados com o `mermaid-cli` (não está instalado aqui): validar antes do merge.

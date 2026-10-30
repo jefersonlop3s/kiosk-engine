@@ -5,6 +5,9 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ## [Não lançado]
 
 ### Adicionado
+- **Listagens remotas** (E-008 F1): `kioskctl profile list`, `kioskctl app list` e `kioskctl rule list [--profile ID]` (em português: `perfil listar`, `app listar`, `regra listar`) mostram perfis, apps e regras do PC da criança sem digitar IDs. A API ganhou as consultas `profiles`, `apps` e `rules`; o SID da conta do Windows não sai pelo serviço.
+- **Tempo restante na dica da bandeja** (GC-22): a dica do ícone mostra o menor entre o que falta do limite diário total e o que falta para o fim da janela geral, atualizada a cada minuto (a cada 15 s nos últimos 5 minutos). Sem limite nem janela, a dica fica só com o título. Limites de app não entram.
+- **Corrigido (intermitente)**: o `drop` da transação desfazia a mudança de forma preguiçosa e a recusa de um código de pareamento já usado podia voltar como erro interno; agora o rollback é explícito.
 - **GC-08: Avisos configuráveis por regra** (ADR-001): nova coluna `warning_seconds` em `active_rules` (TEXT, "300,60" ou NULL para o padrão). O motor usa os limiares da regra quando presentes; `Decisao::Avisar` carrega os `thresholds` para o agente e a bandeja. O IPC aceita qualquer marco positivo (antes só 300 e 60). `ActiveRule.warning_seconds` populado em todas as queries e inserções. (branch `cline/correcao-gaps-gc08-gc19`)
 
 - **GC-19: Harness pré-push com tags anotadas**: o `validation.py` agora resolve cada SHA enviado com `git rev-parse <sha>^{commit}`, que é idempotente para commits e resolve objetos de tag anotada para o commit destino. (branch `cline/correcao-gaps-gc08-gc19`)
@@ -16,9 +19,10 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 - **GC-15: Modo LAN (parcial)**: nova variável `KIOSK_LAN=1` permite endereços de rede privada (RFC 1918) na API. **Sem TLS ainda** — o tráfego LAN não é cifrado até a adição de `tokio-rustls`. (branch `cline/gc13-gc15-hash`)
 - **Hash encadeado no `Security_Log`** (ADR-012): nova coluna `prev_hash`, cálculo SHA-256 na inserção via `security_logger_impl`, triggers que protegem contra UPDATE e DELETE de registros recentes (menos de 90 dias). Migração `0009_hash_chain.sql`. (branch `cline/gc13-gc15-hash`)
 - **Bandeja da criança** (ADR-004, E-004 F3 e F4): o serviço inicia o `kiosk-ui.exe` na sessão de cada criança. Ele mostra um ícone na bandeja (com a dica do tempo restante e um balão para os avisos de 5 e 1 minuto, no idioma da conta) e conecta ao serviço por um pipe (`kiosk-ui`), mandando batimento e reconectando sozinho se o serviço cair. Se a criança fechar a bandeja, o serviço a relança e registra `TAMPER_SUSPECTED` em `kioskctl log` (no máximo uma vez a cada 5 minutos por conta). Falha ao iniciar a bandeja também é registrada. O `install` e o `uninstall` encerram as bandejas em execução, para o Windows não travar o arquivo.
-- **Os avisos de 5 e 1 minuto ainda seguem pela caixa de mensagem do Windows**; passar por esta bandeja, com a caixa como reserva, vem na próxima etapa. O ícone mostra o tempo restante só depois dessa etapa (o agente ainda não manda o estado).
+- **Avisos pela bandeja** (GC-17, ADR-004 etapa 4): os avisos de 5 e 1 minuto aparecem como balão da bandeja e a dica do ícone mostra o tempo restante nos últimos minutos. Se a bandeja não confirmar em 6 s, ou não estiver conectada, o aviso sai pela caixa de mensagem do Windows, e a falta de confirmação fica registrada no log. 
 
 ### Corrigido
+- `kiosk-ui.exe` não compilava no Windows desde o GC-08 (`confirmacao` ganhou um argumento).
 - `kioskctl log` passa a aceitar a consulta **sem** `--profile`: lista todos os eventos do PC, e cada linha diz de quem é (`[8 letras do perfil]` ou `[PC]`). Antes só dava para ler o log de um perfil, e os eventos que não são de um perfil, como o `AGENT_STOPPED` (e a recusa de um administrador sem elevação), existiam no banco mas os pais não tinham como vê-los. Visto no teste da 0.0.7 no PC real. A API já aceitava a consulta sem perfil.
 
 ## [0.0.7] - 2026-10-29

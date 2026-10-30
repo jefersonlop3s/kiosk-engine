@@ -1,6 +1,6 @@
 # E-008 — Cliente gráfico dos pais (Windows, Linux e macOS)
 
-Estado: proposto em 2026-10-29 (pedido do dono). Responsável: a definir. Repositório: kiosk (a confirmar na ADR de abertura).
+Estado: F1 concluída em 2026-10-30; F2 aguarda a ADR do toolkit (proposto em 2026-10-29, pedido do dono). Responsável: a definir. Repositório: kiosk (a confirmar na ADR de abertura).
 
 ## Resultado e escopo
 
@@ -44,6 +44,14 @@ O cliente só sincroniza com um PC se o pareamento partir de uma **conta de admi
 | F4 | Uso fluido: atualização automática da tela, PC fora de alcance, alertas de antiadulteração em destaque | F2 | Uso real pelo dono no próprio computador administrando o PC da criança |
 
 O CI atual roda Ubuntu e Windows; a F2 acrescenta o runner macOS.
+
+## F1 concluída (2026-10-30)
+
+- A API ganhou as consultas `profiles`, `apps` e `rules` (`POST /api/windows/{ação}`, `QUERY_PROFILES`, `QUERY_APPS`, `QUERY_RULES`), com as Camadas 0 a 5: assinatura, corpo de esquema fechado, perfil do filtro precisa existir e nenhum evento gravado (somente leitura). A resposta de `profiles` não leva o SID da conta do Windows.
+- O `kioskctl` ganhou `profile list`, `app list` e `rule list [--profile]`, que imprimem as mesmas linhas do `kioskd` local (teste de ponta a ponta compara as saídas).
+- Fluxogramas dos três comandos em [fluxos-dos-comandos](../architecture/fluxos-dos-comandos.md) e runbook atualizado.
+- Evidência: `tests/api.rs` (listagens, filtro, sem SID, sem evento, sem assinatura, corpo inválido) e `tests/cli.rs`.
+- A F2 usa estas consultas; falta decidir o toolkit na ADR (o Impeccable só entra se a ADR escolher front-end web).
 
 ## Aceites
 

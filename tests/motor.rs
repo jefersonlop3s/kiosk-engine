@@ -404,3 +404,45 @@ fn controle_negativo_dentro_da_janela_e_com_saldo_nunca_encerra_nem_bloqueia() {
         }
     }
 }
+
+#[test]
+fn restante_da_sessao_e_o_menor_entre_o_limite_e_a_janela_e_diz_qual() {
+    use kiosk_engine::motor::{Consumo, Motivo, restante_da_sessao};
+    let janela = TimeWindow {
+        start: NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+        end: NaiveTime::from_hms_opt(20, 0, 0).unwrap(),
+    };
+    let perfil = |limite, janela| PerfilCtx {
+        profile_id: Uuid::nil(),
+        limite_total_segundos: limite,
+        janela_geral: janela,
+    };
+    let c = |total| Consumo {
+        app_segundos: 0,
+        total_segundos: total,
+    };
+    // 19:00: a janela fecha em 3600 s; o limite (7200 - 600) ainda está longe
+    assert_eq!(
+        restante_da_sessao(&perfil(Some(7200), Some(janela)), as_(19, 0, 0), c(600)),
+        Some((3600, Motivo::ForaDaJanelaGeral))
+    );
+    // o limite vem primeiro
+    assert_eq!(
+        restante_da_sessao(&perfil(Some(1000), Some(janela)), as_(19, 0, 0), c(600)),
+        Some((400, Motivo::LimiteDiarioTotal))
+    );
+    // sem limite nem janela: nada a mostrar
+    assert_eq!(
+        restante_da_sessao(&perfil(None, None), as_(19, 0, 0), c(600)),
+        None
+    );
+    // estourado ou fora da janela: zero, sem estourar a subtração
+    assert_eq!(
+        restante_da_sessao(&perfil(Some(500), None), as_(19, 0, 0), c(600)),
+        Some((0, Motivo::LimiteDiarioTotal))
+    );
+    assert_eq!(
+        restante_da_sessao(&perfil(None, Some(janela)), as_(21, 0, 0), c(0)),
+        Some((0, Motivo::ForaDaJanelaGeral))
+    );
+}

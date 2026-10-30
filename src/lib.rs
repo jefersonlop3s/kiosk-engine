@@ -5,6 +5,7 @@ pub mod assinatura;
 pub mod auditoria;
 #[cfg(windows)]
 pub mod auditoria_windows;
+pub mod avisos_pendentes;
 pub mod bandeja;
 #[cfg(windows)]
 pub mod bandeja_windows;
