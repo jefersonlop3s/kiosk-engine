@@ -132,7 +132,7 @@ pub(crate) struct RuleRow {
 /// vale 60 (1 minuto).
 pub fn parse_warning_seconds(s: &str) -> Result<[u64; 2], Error> {
     let partes: Vec<&str> = s.split(',').collect();
-    if partes.len() < 1 || partes.len() > 2 {
+    if partes.is_empty() || partes.len() > 2 {
         return Err(bad_value("warning_seconds", s));
     }
     let p0 = decode(u64::try_from(decode(partes[0].trim().parse::<i64>())?))?;

@@ -5,9 +5,9 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use uuid::Uuid;
 
+use crate::database_schema::warning_seconds_to_str;
 use crate::database_schema::*;
 use crate::motor::{AppCtx, Consumo, Decisao, Instante, PerfilCtx, decidir};
-use crate::database_schema::warning_seconds_to_str;
 use crate::security_logger_impl::insert_event;
 use crate::uso::{MAX_INTERVALO_SEGUNDOS, dividir_por_dia_local};
 
@@ -33,7 +33,10 @@ impl KioskDbManager {
     }
 
     pub async fn begin_transaction(&self) -> Result<Transaction<'_, Sqlite>, sqlx::Error> {
-        self.pool.begin().await
+        // IMMEDIATE: `insert_event` lê o último registro (hash encadeado) antes de escrever. Numa
+        // transação deferida, subir de leitura para escrita falha na hora com SQLITE_BUSY quando
+        // outra conexão ainda segura o bloqueio, e a recusa deixava de ser gravada.
+        self.pool.begin_with("BEGIN IMMEDIATE").await
     }
 
     /// Grava um evento que não acompanha mudança de estado (AUTH_FAIL, enforcement etc.).

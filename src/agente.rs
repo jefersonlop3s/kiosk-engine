@@ -613,8 +613,17 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                 motivo,
                 thresholds,
             } => {
-                self.avisar(rel, ativos, perfil, None, sid, restante_segundos, motivo, thresholds)
-                    .await
+                self.avisar(
+                    rel,
+                    ativos,
+                    perfil,
+                    None,
+                    sid,
+                    restante_segundos,
+                    motivo,
+                    thresholds,
+                )
+                .await
             }
             _ => {}
         }
@@ -639,8 +648,17 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
                 thresholds,
             } => {
                 let nome = Some((app_id, g.app.process_name.as_str()));
-                self.avisar(rel, ativos, perfil, nome, sid, restante_segundos, motivo, thresholds)
-                    .await
+                self.avisar(
+                    rel,
+                    ativos,
+                    perfil,
+                    nome,
+                    sid,
+                    restante_segundos,
+                    motivo,
+                    thresholds,
+                )
+                .await
             }
             _ => {}
         }

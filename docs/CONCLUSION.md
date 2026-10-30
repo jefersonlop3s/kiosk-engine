@@ -696,3 +696,16 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Evidência**: `cargo check` e `cargo test` verdes (todas as suites).
 - **Commit**: este registro (branch `cline/gc13-gc15-hash`).
 
+
+## 2026-10-30 — Preparação da 0.0.8 e roteiro de testes dos GAPs
+
+- **Origem**: pedido do dono para montar uma stack de testes dos GAPs abertos e, na pergunta "precisamos de uma nova versão?", aceite de preparar a 0.0.8.
+- **Resultado**:
+  - o PC roda a 0.0.7, que não traz GC-08, GC-13, GC-15 (mínimo), hash encadeado nem GC-19; versão do `Cargo.toml` e do `Cargo.lock` sobe para 0.0.8 e o [CHANGELOG](../CHANGELOG.md) fecha a seção `[0.0.8]` (as duas seções "Corrigido" de "Não lançado" viraram uma);
+  - novo [runbook dos testes dos GAPs](runbooks/testes-dos-gaps.md): camada automática, serviço no PC (GC-16, GC-21), sessão da criança (GC-17, GC-20) e rede (GC-15).
+- **Regressão achada e corrigida**: `muitas_tentativas_de_codigo_errado_bloqueiam_o_pareamento` falhava em cerca de 1 de 3 execuções com os commits novos (12 de 12 verdes na `main`). Causa: `insert_event` lê antes de escrever (hash encadeado) e a transação deferida recebia `SQLITE_BUSY`; a recusa não era gravada. `begin_transaction` passou a `BEGIN IMMEDIATE`. O registro anterior ("testes verdes") valia só para uma execução.
+- **Achado novo**: o hash encadeado não encadeia (GC-22 no PENDING).
+- **Gate**: `cargo fmt` e uma comparação `len() < 1` do clippy estavam quebrados em código anterior; corrigidos.
+- **Não feito**: tag `v0.0.8` e release (aprovação do dono); nenhum teste do roteiro foi executado.
+- **Lacunas vistas**: GC-08 sem opção de CLI para `warning_seconds` e `kioskd log verify` (ADR-012) ainda não existe, então os dois só têm cobertura automática.
+- **Evidência**: `cargo fmt --check`, `cargo clippy --all-targets -D warnings` e `cargo test --locked --no-fail-fast` (26 suítes) verdes; a suíte `assinatura` 25 vezes seguidas sem falha. `verificar_refs.py` e `verificar_adr.py` não existem nesta máquina, não rodaram.
