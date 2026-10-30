@@ -68,7 +68,8 @@ impl KioskDbManager {
                 Ok(value)
             }
             Err(err) => {
-                drop(tx); // rollback da mudança
+                // rollback explícito (o `drop` solta o bloqueio de escrita só depois)
+                let _ = tx.rollback().await;
                 let fail = SecurityEvent::new(
                     &ctx.client_ip,
                     action,
