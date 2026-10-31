@@ -7,6 +7,7 @@
 /// Comandos e subcomandos: (português, inglês).
 pub const COMANDOS: &[(&str, &str)] = &[
     ("servir", "serve"),
+    ("configurar", "configure"),
     ("codigo-pareamento", "pairing-code"),
     ("dispositivos", "devices"),
     ("revogar", "revoke"),
@@ -138,6 +139,7 @@ pub const FORMAS_KIOSKD: &[Forma] = &[
     forma(&["rule", "revoke"], &[], &[], 1),
     forma(&["rule", "limit"], &["--seconds"], &[], 1),
     forma(&["rule", "list"], &["--profile"], &[], 0),
+    forma(&["configure"], &["--respostas"], &[], 0),
     forma(&["install"], &["--listen"], &[], 0),
     forma(&["uninstall"], &[], &["--purge-data"], 0),
     forma(&["status"], &[], &[], 0),

@@ -63,6 +63,12 @@ impl Sistema for ComUi {
     fn avisos_sem_confirmacao(&mut self, _: DateTime<Utc>) -> Vec<(Aviso, Result<(), String>)> {
         std::mem::take(&mut self.reservas)
     }
+    fn contas_locais(&mut self) -> Result<Vec<ContaLocal>, String> {
+        Ok(vec![])
+    }
+    fn atalhos_do_menu(&mut self) -> Result<Vec<ProgramaSugerido>, String> {
+        Ok(vec![])
+    }
 }
 
 struct Mundo {

@@ -27,6 +27,12 @@ impl Sistema for Vazio {
     fn avisar(&mut self, _: &Aviso) -> Result<(), String> {
         Ok(())
     }
+    fn contas_locais(&mut self) -> Result<Vec<ContaLocal>, String> {
+        Ok(vec![])
+    }
+    fn atalhos_do_menu(&mut self) -> Result<Vec<ProgramaSugerido>, String> {
+        Ok(vec![])
+    }
 }
 
 fn t0() -> DateTime<Utc> {

@@ -89,6 +89,27 @@ flowchart TD
     I --> P["cada requisição segue o pipeline comum"]
 ```
 
+### `kioskd configure`
+
+```mermaid
+flowchart TD
+    A["kioskd configure [--respostas FILE]"] --> W{"Windows: quem chama é administrador elevado?"}
+    W -->|não| X["avisa o serviço pelo pipe kiosk-audit"]
+    X --> E1["erro: só administrador executa o assistente"]
+    W -->|"sim, ou fora do Windows"| B["abre o banco e cria o MockSistema/SistemaWindows"]
+    B --> C{"--respostas?"}
+    C -->|sim| D["lê o arquivo TOML e valida os parâmetros"]
+    C -->|não| E["loop interativo no terminal"]
+    E --> F["lista contas locais (sistema.contas_locais)"]
+    F --> G["usuário seleciona uma conta (ou cancela)"]
+    G -->|cancelou| Z["erro: operação cancelada"]
+    G --> H["lista programas (sistema.atalhos_do_menu)"]
+    H --> I["usuário seleciona um programa (ou cancela)"]
+    I -->|cancelou| Z
+    I --> J["resumo: perfil + programa selecionados"]
+    J --> K["(em breve: grava perfil, app e regra no banco;<br/>instala serviço; mostra código de pareamento)"]
+    K --> L["fim"]
+```
 ### `kioskd pairing-code`
 
 ```mermaid

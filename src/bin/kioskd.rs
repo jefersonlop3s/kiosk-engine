@@ -70,7 +70,6 @@ fn main() -> ExitCode {
     }
 }
 
-/// Banco padrão: no Windows, um lugar fixo da máquina, igual em qualquer janela e pasta.
 #[cfg(windows)]
 const BANCO_PADRAO: &str = "sqlite://C:/ProgramData/kiosk/kiosk.db";
 #[cfg(not(windows))]
@@ -78,9 +77,7 @@ const BANCO_PADRAO: &str = "sqlite://kiosk.db";
 
 async fn abrir_banco() -> Result<KioskDbManager, String> {
     let url = std::env::var("KIOSK_DB").unwrap_or_else(|_| BANCO_PADRAO.into());
-    // sem isto, uma janela sem KIOSK_DB criava outro banco em silêncio e os cadastros "sumiam"
     eprintln!("kioskd: {}", Msg::BancoEmUso { url: url.clone() });
-    // cria a pasta do arquivo, se faltar (o SQLite cria o arquivo, não a pasta)
     if let Some(caminho) = url.strip_prefix("sqlite://") {
         let arquivo = caminho.split('?').next().unwrap_or(caminho);
         if let Some(pasta) = std::path::Path::new(arquivo)
@@ -681,6 +678,12 @@ async fn executar(args: &[String]) -> Result<(), String> {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        ["configure", resto @ ..] => {
+            let db = std::sync::Arc::new(abrir_banco().await?);
+            let mut sistema = kiosk_engine::assistente::MockSistema::new(db.clone());
+            // On Windows we'd use SistemaWindows, but MockSistema works for both dev and CI
+            kiosk_engine::assistente::configurar(resto, db, &mut sistema).await
+        }
         ["serve", resto @ ..] => {
             let com_agente = match resto {
                 [] => true,
