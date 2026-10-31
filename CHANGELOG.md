@@ -5,6 +5,7 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 ## [Não lançado]
 
 ### Adicionado
+- **Merge gate** (`scripts/merge_gate.sh <PR>`): monta o resultado do merge num worktree temporário, roda ali o `pre-push` do repositório (`fmt`, `clippy`, `test`), exige todos os checks remotos do PR verdes e vincula o merge à base validada (re-lê head e `origin/main` antes e confere o pai depois). `.harness.toml` já o declarava, mas o arquivo não existia, então o guard não recusava `gh pr merge` direto. Acompanha `.harness/github_checks.py`.
 - **Listagens remotas** (E-008 F1): `kioskctl profile list`, `kioskctl app list` e `kioskctl rule list [--profile ID]` (em português: `perfil listar`, `app listar`, `regra listar`) mostram perfis, apps e regras do PC da criança sem digitar IDs. A API ganhou as consultas `profiles`, `apps` e `rules`; o SID da conta do Windows não sai pelo serviço.
 - **Tempo restante na dica da bandeja** (GC-22): a dica do ícone mostra o menor entre o que falta do limite diário total e o que falta para o fim da janela geral, atualizada a cada minuto (a cada 15 s nos últimos 5 minutos). Sem limite nem janela, a dica fica só com o título. Limites de app não entram.
 - **Corrigido (intermitente)**: o `drop` da transação desfazia a mudança de forma preguiçosa e a recusa de um código de pareamento já usado podia voltar como erro interno; agora o rollback é explícito.
