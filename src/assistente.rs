@@ -1,7 +1,33 @@
 use crate::agente::{Aviso, ContaLocal, ProcessoVisto, ProgramaSugerido, Sistema};
-use crate::db_manager::KioskDbManager;
+use crate::database_schema::{ActiveRule, AppMetadata, ChildProfile, ProcessStatus, RuleState};
+use crate::db_manager::{EventContext, KioskDbManager};
 use std::io::{self, BufRead, Write};
+/// Pergunta um número inteiro com validação de faixa.
+fn ask_u64(prompt: &str, min: u64, max: u64) -> Result<u64, String> {
+    let stdin = io::stdin();
+    let mut reader = stdin.lock();
+
+    loop {
+        println!("\n{}", prompt);
+        print!("Valor ({}-{}): ", min, max);
+        io::stdout().flush().map_err(|e| e.to_string())?;
+
+        let mut input = String::new();
+        reader.read_line(&mut input).map_err(|e| e.to_string())?;
+        let input = input.trim();
+
+        if let Ok(num) = input.parse::<u64>()
+            && num >= min
+            && num <= max
+        {
+            return Ok(num);
+        }
+
+        println!("Valor inválido. Digite um número entre {} e {}.", min, max);
+    }
+}
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// Sistema de simulação para testes e desenvolvimento em plataformas não-Windows.
 pub struct MockSistema {
@@ -79,7 +105,7 @@ impl Sistema for MockSistema {
 ///   Pode incluir `--respostas <arquivo.toml>` para modo não interativo.
 pub async fn configurar(
     args: &[&str],
-    _db: Arc<KioskDbManager>,
+    db: Arc<KioskDbManager>,
     sistema: &mut dyn Sistema,
 ) -> Result<(), String> {
     if args.contains(&"--respostas") {
@@ -111,20 +137,110 @@ pub async fn configurar(
     let idx_prog = ask_one_choice("Selecione um programa para controlar:", &programas, |p| {
         format!("{} ({})", p.nome_amigavel, p.executavel)
     })?;
-    let prog_selecionado = &programas[idx_prog];
-    println!(
-        "kioskd: Programa selecionado: {}",
-        prog_selecionado.nome_amigavel
-    );
+    let prog = &programas[idx_prog];
+    println!("kioskd: Programa selecionado: {}", prog.nome_amigavel);
 
-    // 3. Resumo
-    println!("\n--- Resumo da Configuração ---");
-    println!("Perfil: {}", conta_selecionada.nome);
-    println!("Programa: {}", prog_selecionado.nome_amigavel);
-    println!("------------------------------");
+    // 3. Limite do app
+    let limite_app_min = ask_u64(
+        "Digite o limite diario para este app em minutos (0 = sem limite):",
+        0,
+        24 * 60,
+    )?;
+    let limite_app_seg = if limite_app_min > 0 {
+        Some(limite_app_min * 60)
+    } else {
+        None
+    };
+
+    // 4. Limite total do perfil
+    let limite_total_min = ask_u64(
+        "Digite o limite total diario para esta crianca em minutos (0 = sem limite):",
+        0,
+        24 * 60,
+    )?;
+    let limite_total_seg = if limite_total_min > 0 {
+        Some(limite_total_min * 60)
+    } else {
+        None
+    };
+
+    // 5. Resumo
+    println!("\n--- Resumo da Configuracao ---");
     println!(
-        "kioskd: (A gravação real no banco e instalação do serviço serão implementadas na próxima fase)"
+        "Perfil: {} ({})",
+        conta_selecionada.nome, conta_selecionada.sid
     );
+    println!("Programa: {}", prog.nome_amigavel);
+    let f = |s: Option<u64>| {
+        if let Some(v) = s {
+            format!("{} min", v / 60)
+        } else {
+            "sem limite".to_string()
+        }
+    };
+    println!("Limite do app: {}", f(limite_app_seg));
+    println!("Limite total:  {}", f(limite_total_seg));
+    println!("------------------------------");
+
+    // 6. Confirmar
+    let confirm = ask_one_choice(
+        "Confirmar e gravar?",
+        &["Sim".to_string(), "Cancelar".to_string()],
+        |s| s.clone(),
+    )?;
+    if confirm == 1 {
+        return Err("Operacao cancelada pelo usuario.".to_string());
+    }
+
+    // 7. Gravar no banco
+    let ctx = EventContext::local();
+    let perfil_id = Uuid::new_v4();
+    let perfil = ChildProfile {
+        profile_id: perfil_id,
+        windows_sid: conta_selecionada.sid.clone(),
+        display_name: conta_selecionada.nome.clone(),
+        daily_total_limit_seconds: limite_total_seg,
+    };
+    db.create_profile(&ctx, &perfil)
+        .await
+        .map_err(|e| format!("erro ao criar perfil: {e}"))?;
+    println!("kioskd: Perfil criado: {}", perfil_id);
+
+    let app_id = Uuid::new_v4();
+    let app = AppMetadata {
+        app_id,
+        process_name: prog.executavel.clone(),
+        status: ProcessStatus::Monitored,
+    };
+    db.create_app(&ctx, &app)
+        .await
+        .map_err(|e| format!("erro ao criar app: {e}"))?;
+    println!("kioskd: App criado: {}", app_id);
+
+    let rule_id = Uuid::new_v4();
+    let regra = ActiveRule {
+        rule_id,
+        profile_id: perfil_id,
+        app_id,
+        creation_timestamp: chrono::Utc::now(),
+        state: RuleState::Active,
+        daily_limit_seconds: limite_app_seg,
+        time_window: None,
+        effective_until_timestamp: None,
+        warning_seconds: None,
+    };
+    db.create_active_rule(&ctx, &regra)
+        .await
+        .map_err(|e| format!("erro ao criar regra: {e}"))?;
+    println!("kioskd: Regra ativa criada: {}", rule_id);
+
+    // 8. Gerar codigo de pareamento
+    let codigo = db
+        .criar_codigo_pareamento(&ctx, chrono::Utc::now())
+        .await
+        .map_err(|e| format!("erro ao gerar codigo de pareamento: {e}"))?;
+    println!("\nkioskd: Codigo de pareamento: {codigo}");
+    println!("kioskd: Use este codigo no dispositivo dos pais para parear.");
 
     Ok(())
 }
