@@ -477,6 +477,60 @@ flowchart TD
     R2 --> F2["kioskctl: novo limite diário"]
 ```
 
+### `kioskctl profile list`
+
+```mermaid
+flowchart TD
+    subgraph PAIS["Dispositivo dos pais"]
+        A["kioskctl profile list (em português: perfil listar)"] --> C["corpo JSON vazio; assinado"]
+    end
+    C -->|"POST /api/windows/profiles"| D
+    subgraph SRV["kioskd serve"]
+        D["Camadas 0 a 3: corpo é um objeto vazio; recusa campo desconhecido"] --> E["lê child_profile e profile_time_window; o SID da conta do Windows não entra na resposta"]
+        E --> G["consulta: não grava evento"]
+    end
+    D -->|recusa| R1["403 rejected"]
+    G --> R2["200 com a lista de perfis: id, nome, limite total e janelas por dia"]
+    R1 --> H1["kioskctl: recusou"]
+    R2 --> H2["kioskctl imprime uma linha por perfil: id, nome, limite diário total e janelas; sem perfil, avisa em stderr"]
+```
+
+### `kioskctl app list`
+
+```mermaid
+flowchart TD
+    subgraph PAIS["Dispositivo dos pais"]
+        A["kioskctl app list (em português: app listar)"] --> C["corpo JSON vazio; assinado"]
+    end
+    C -->|"POST /api/windows/apps"| D
+    subgraph SRV["kioskd serve"]
+        D["Camadas 0 a 3: corpo é um objeto vazio; recusa campo desconhecido"] --> E["lê app_metadata em ordem de nome do executável"]
+        E --> G["consulta: não grava evento"]
+    end
+    D -->|recusa| R1["403 rejected"]
+    G --> R2["200 com a lista de apps: id, executável e status"]
+    R1 --> H1["kioskctl: recusou"]
+    R2 --> H2["kioskctl imprime uma linha por app: id, executável e status, as mesmas linhas do kioskd app list"]
+```
+
+### `kioskctl rule list`
+
+```mermaid
+flowchart TD
+    subgraph PAIS["Dispositivo dos pais"]
+        A["kioskctl rule list, com --profile (opcional) (em português: regra listar)"] --> C["corpo JSON profile_id, se houve --profile; assinado"]
+    end
+    C -->|"POST /api/windows/rules"| D
+    subgraph SRV["kioskd serve"]
+        D["Camadas 0 a 3: corpo vazio ou com profile_id; o perfil, se informado, precisa existir"] --> E["lê active_rules, da mais antiga para a mais nova, só do perfil quando informado"]
+        E --> G["consulta: não grava evento"]
+    end
+    D -->|recusa| R1["403 rejected"]
+    G --> R2["200 com a lista de regras: id, perfil, app, estado, limite, janela e validade"]
+    R1 --> H1["kioskctl: recusou"]
+    R2 --> H2["kioskctl também pede a lista de apps para trocar o id do app pelo nome e imprime as mesmas linhas do kioskd rule list"]
+```
+
 ### `kioskctl usage`
 
 ```mermaid

@@ -697,15 +697,42 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Commit**: este registro (branch `cline/gc13-gc15-hash`).
 
 
+## 2026-10-30 — E-004 F3 etapa 4: avisos e estado pela bandeja (GC-17)
+
+- **Origem**: pedido do dono para concluir o E-004.
+- **Código**: `avisos_pendentes` (fila de avisos sem confirmação, pura), `Sistema::estado` e `Sistema::avisos_sem_confirmacao`, `SistemaWindows::avisar` pela bandeja com a caixa de mensagem como reserva, `GerenteUi::enviar` apagando a confirmação antiga a cada aviso, e o agente registrando a reserva (`UI_NOT_CONFIRMED`) e empurrando o estado. Corrigida a chamada de `confirmacao` em `kiosk-ui.rs`, que não compilava no Windows desde o GC-08.
+- **Evidência**: `cargo test` verde (Linux). O código `cfg(windows)` não foi compilado nesta máquina (sem `mingw`): depende do CI Windows. **GC-17 segue aberto** até ver no PC real; aberto o GC-22 (restante do dia fora dos últimos minutos).
+- **Commit**: este registro (branch `claude/project-active-sessions-analysis-5ba1e1`).
+
+## 2026-10-30 — GC-22 (restante da sessão na dica) e falha intermitente do gate
+
+- **Gate da main** (PR #25, `5ace2b5`): `codigo_de_pareamento_e_de_uso_unico_expira_e_so_existe_como_hash` falhou no Ubuntu (Interno no lugar de NaoAutorizado) depois do merge e passou no CI da PR. Causa: o `drop(tx)` desfaz a transação de forma preguiçosa e ela ainda segurava o bloqueio de escrita quando a recusa era gravada em outra conexão. Corrigido com `rollback().await` em `pareamento` e `finish`. Não reproduzi localmente (30 rodadas): a causa vem da leitura do código, e só rodadas repetidas do CI confirmam.
+- **GC-22** (código): `motor::restante_da_sessao` (puro), `KioskDbManager::restante_da_sessao` e o agente empurrando o estado por balde. **Fechado em código**; a dica no PC real entra no GC-17.
+- **Evidência**: `cargo fmt --check`, `clippy -D warnings` e `cargo test` verdes no Linux.
+
+## 2026-10-30 — E-008 F1: listagens remotas de perfis, apps e regras
+
+- **Origem**: pedido do dono para seguir com a F1 do E-008.
+- **Código**: `ActionType` `QUERY_PROFILES`, `QUERY_APPS` e `QUERY_RULES`; `Comando::Profiles`, `Apps` e `Rules` na Camada 3 (esquema fechado); as consultas na API (somente leitura, sem evento, sem o SID); `kioskctl profile list`, `app list` e `rule list`, com as formas em `cli::FORMAS_KIOSKCTL` e o uso nos três idiomas. A conferência de nome do app em `rule list` usa a própria listagem de apps.
+- **Docs**: três fluxogramas, runbook, E-008, PENDING e ROADMAP (E-008 em 25%).
+- **Evidência**: `fmt --check`, `clippy -D warnings` e `cargo test` verdes no Linux; as saídas remotas de apps e regras são iguais às do `kioskd` local. Os fluxogramas **não** foram renderizados com o `mermaid-cli` (não está instalado aqui): validar antes do merge.
+
+## 2026-10-30 — Merge gate do harness (GAP: declarado e ausente)
+
+- **Origem**: `.harness.toml` declarava `merge_gate = "scripts/merge_gate.sh"`, mas o script não existia. A regra `merge-direto` do guard só vale quando o arquivo existe, então as PRs #25 e #28 foram mergeadas com `gh pr merge` direto, sem a validação do resultado do merge.
+- **Base**: o template do `sovereign-harness` (`templates/git/merge_gate.sh`), do qual os 13 scripts do `sovereign-pair` são cópias especializadas (Node, gitleaks, trivy). O do kiosk usa `HARNESS_SKIP` (o mesmo nome do `.harness.toml`) e a checagem remota estrita (`.harness/github_checks.py`: nenhum check, check pendente, vermelho ou erro do `gh` recusam). Diferença deliberada: fetch da main por referência explícita, sem tags (correção do `sp-ui-shell`).
+- **Validação do script existente no `sovereign-pair`**: `shellcheck` sem avisos e o teste hermético do vínculo merge↔base (5 cenários: base estável, base movida, head movido, corrida na janela do merge, merge limpo) passou, tanto no template quanto na cópia do `sp-service`. O mesmo teste passou com o script do kiosk.
+- **Prova do fechamento**: com o script presente, o guard devolve `bloquear` para `gh pr merge` (regra `merge-direto`) e libera `scripts/merge_gate.sh`; sem o script (a `main` anterior), libera.
+- **Primeiro uso real** (`--dry-run` na PR #29): os 5 gates do `pre-push` passaram sobre o resultado do merge, os 4 checks remotos (Ubuntu e Windows) foram aceitos e a base ficou vinculada, mas o `actionlint` reprovou `release.yml:82` (SC2035, `sha256sum *`): problema que já estava na `main`, que nenhum gate anterior pegava. Corrigido com `sha256sum -- *`, que mantém os nomes do `SHA256SUMS.txt` publicado; o gate reprovou e foi corrigido, não contornado.
+
 ## 2026-10-30 — Preparação da 0.0.8 e roteiro de testes dos GAPs
 
 - **Origem**: pedido do dono para montar uma stack de testes dos GAPs abertos e, na pergunta "precisamos de uma nova versão?", aceite de preparar a 0.0.8.
 - **Resultado**:
   - o PC roda a 0.0.7, que não traz GC-08, GC-13, GC-15 (mínimo), hash encadeado nem GC-19; versão do `Cargo.toml` e do `Cargo.lock` sobe para 0.0.8 e o [CHANGELOG](../CHANGELOG.md) fecha a seção `[0.0.8]` (as duas seções "Corrigido" de "Não lançado" viraram uma);
   - novo [runbook dos testes dos GAPs](runbooks/testes-dos-gaps.md): camada automática, serviço no PC (GC-16, GC-21), sessão da criança (GC-17, GC-20) e rede (GC-15).
-- **Regressão achada e corrigida**: `muitas_tentativas_de_codigo_errado_bloqueiam_o_pareamento` falhava em cerca de 1 de 3 execuções com os commits novos (12 de 12 verdes na `main`). Causa: `insert_event` lê antes de escrever (hash encadeado) e a transação deferida recebia `SQLITE_BUSY`; a recusa não era gravada. `begin_transaction` passou a `BEGIN IMMEDIATE`. O registro anterior ("testes verdes") valia só para uma execução.
-- **Achado novo**: o hash encadeado não encadeia (GC-22 no PENDING).
-- **Gate**: `cargo fmt` e uma comparação `len() < 1` do clippy estavam quebrados em código anterior; corrigidos.
+- **Regressão achada e corrigida**: `muitas_tentativas_de_codigo_errado_bloqueiam_o_pareamento` falhava em cerca de 1 de 3 execuções com os commits novos (12 de 12 verdes na `main`). Causa: `insert_event` lê antes de escrever (hash encadeado) e a recusa não era gravada por `SQLITE_BUSY`. A `main` corrigiu a mesma intermitência por outro caminho (`rollback().await` no lugar do `drop(tx)`, PR #28/`41fffac`); ficam os dois: o rollback explícito trata o bloqueio da transação descartada e o `BEGIN IMMEDIATE` em `begin_transaction` trata a promoção deferida de leitura para escrita entre escritores concorrentes.
+- **Achado novo**: o hash encadeado não encadeia (GC-23 no PENDING).
 - **Não feito**: tag `v0.0.8` e release (aprovação do dono); nenhum teste do roteiro foi executado.
 - **Lacunas vistas**: GC-08 sem opção de CLI para `warning_seconds` e `kioskd log verify` (ADR-012) ainda não existe, então os dois só têm cobertura automática.
-- **Evidência**: `cargo fmt --check`, `cargo clippy --all-targets -D warnings` e `cargo test --locked --no-fail-fast` (26 suítes) verdes; a suíte `assinatura` 25 vezes seguidas sem falha. `verificar_refs.py` e `verificar_adr.py` não existem nesta máquina, não rodaram.
+- **Evidência** (depois do merge da `main`, Linux): `cargo fmt --check`, `clippy --all-targets -D warnings` e `cargo test --locked --no-fail-fast` verdes em 3 rodadas; a suíte `assinatura` 25 vezes seguidas sem falha. `verificar_refs.py` e `verificar_adr.py` não existem nesta máquina, não rodaram.

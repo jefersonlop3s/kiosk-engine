@@ -254,7 +254,7 @@ async fn lixo_depois_do_batimento_derruba_a_ui() {
     let sid = sid_atual();
     for (lixo, nome) in [
         (
-            "{\"v\":1,\"tipo\":\"aviso_exibido\",\"marco\":7}\n".to_owned(),
+            "{\"v\":1,\"tipo\":\"aviso_exibido\",\"marco\":0}\n".to_owned(),
             "marco inválido",
         ),
         (
@@ -568,7 +568,8 @@ async fn o_kiosk_ui_mostra_o_estado_e_o_aviso_no_idioma_da_conta_e_confirma_ao_s
     ));
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert_eq!(lido(), antes, "mostrou algo para um motivo desconhecido");
-    assert_eq!(s.gerente.ultimo_aviso_exibido(&sid), Some(300));
+    // o aviso novo apagou a confirmação do antigo e a UI não confirmou o novo (GC-17)
+    assert_eq!(s.gerente.ultimo_aviso_exibido(&sid), None);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

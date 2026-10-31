@@ -215,6 +215,35 @@ fn thresholds_da_regra(r: &ActiveRule) -> &[u64; 2] {
     r.warning_seconds.as_ref().unwrap_or(&AVISOS_SEGUNDOS)
 }
 
+/// Quanto falta para a sessão do perfil chegar ao limite do dia ou ao fim da janela geral, o que
+/// vier primeiro, com o motivo desse limite (GC-22). `None` se o perfil não tem nenhum dos dois.
+/// Passou do limite ou fora da janela: `Some((0, ..))`, e a decisão de bloquear é de [`decidir`].
+pub fn restante_da_sessao(
+    perfil: &PerfilCtx,
+    agora: Instante,
+    consumo: Consumo,
+) -> Option<(u64, Motivo)> {
+    let por_limite = perfil.limite_total_segundos.map(|l| {
+        (
+            l.saturating_sub(consumo.total_segundos),
+            Motivo::LimiteDiarioTotal,
+        )
+    });
+    let por_janela = perfil.janela_geral.as_ref().map(|j| {
+        let hora = agora.local.time();
+        let restante = if hora < j.start || hora >= j.end {
+            0
+        } else {
+            (j.end - hora).num_seconds().max(0) as u64
+        };
+        (restante, Motivo::ForaDaJanelaGeral)
+    });
+    [por_limite, por_janela]
+        .into_iter()
+        .flatten()
+        .min_by_key(|(r, _)| *r)
+}
+
 pub fn decidir(perfil: &PerfilCtx, app: &AppCtx, agora: Instante, consumo: Consumo) -> Decisao {
     let mut decisao = Decisao::Permitir;
 

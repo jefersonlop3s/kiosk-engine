@@ -174,6 +174,11 @@ Sem `--activate`, a regra nasce **pendente**. No PC os erros vêm com o motivo e
 **De outro dispositivo** (celular ou notebook dos pais, já pareado), com o `kioskctl`:
 
 ```powershell
+# descobrir os IDs sem copiar do PC da criança
+.\kioskctl.exe profile list
+.\kioskctl.exe app list
+.\kioskctl.exe rule list [--profile <id-do-perfil>]
+
 .\kioskctl.exe rule create --profile <id-do-perfil> --app <id-do-app> --limit 3600 --window 08:00-20:00
 .\kioskctl.exe rule activate <id-da-regra>
 .\kioskctl.exe rule limit <id-da-regra> --seconds 5400
@@ -183,6 +188,7 @@ Sem `--activate`, a regra nasce **pendente**. No PC os erros vêm com o motivo e
 .\kioskctl.exe log --days 7        # sem --profile: todos os eventos do PC
 ```
 
+- As listagens (`profile list`, `app list`, `rule list`) mostram o que o `kioskd` local mostra, menos o SID da conta do Windows, que não sai do PC.
 - A regra nasce **pendente**; só `ativar` a põe em vigor. Regra com `--limit 0` bloqueia o app.
 - `--limit` em segundos (até 86400); `--window` em `HH:MM-HH:MM`; `--until` em RFC 3339 (no futuro).
 - Se o serviço recusar, o CLI diz apenas que recusou: a resposta é genérica de propósito. O motivo exato fica no log do PC.

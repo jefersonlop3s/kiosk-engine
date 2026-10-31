@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::database_schema::warning_seconds_to_str;
 use crate::database_schema::*;
-use crate::motor::{AppCtx, Consumo, Decisao, Instante, PerfilCtx, decidir};
+use crate::motor::{AppCtx, Consumo, Decisao, Instante, Motivo, PerfilCtx, decidir};
 use crate::security_logger_impl::insert_event;
 use crate::uso::{MAX_INTERVALO_SEGUNDOS, dividir_por_dia_local};
 
@@ -71,7 +71,8 @@ impl KioskDbManager {
                 Ok(value)
             }
             Err(err) => {
-                drop(tx); // rollback da mudança
+                // rollback explícito (o `drop` solta o bloqueio de escrita só depois)
+                let _ = tx.rollback().await;
                 let fail = SecurityEvent::new(
                     &ctx.client_ip,
                     action,
@@ -565,6 +566,19 @@ impl KioskDbManager {
     ) -> Result<Decisao, sqlx::Error> {
         self.decidir_escopo(profile_id, Some(app), agora, false)
             .await
+    }
+
+    /// Tempo que falta para a sessão do perfil chegar ao limite do dia ou ao fim da janela geral
+    /// (GC-22), com o motivo; `None` se o perfil não tem nenhum dos dois.
+    pub async fn restante_da_sessao(
+        &self,
+        profile_id: Uuid,
+        agora: Instante,
+    ) -> Result<Option<(u64, Motivo)>, sqlx::Error> {
+        let dia = agora.local.date();
+        let perfil = self.perfil_ctx(profile_id, dia).await?;
+        let consumo = self.consumo_do_dia(profile_id, Uuid::nil(), dia).await?;
+        Ok(crate::motor::restante_da_sessao(&perfil, agora, consumo))
     }
 
     async fn decidir_escopo(

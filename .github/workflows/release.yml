@@ -88,7 +88,7 @@ jobs:
             fi
           fi
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
+          cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt && cd ..
           awk -v v="## [${versao}]" 'index($0, v) == 1 {p=1; next} /^## \[/ {p=0} p' CHANGELOG.md > notas.md
           test -s notas.md || { echo "CHANGELOG sem a seção ${versao}"; exit 1; }
       - uses: softprops/action-gh-release@v2

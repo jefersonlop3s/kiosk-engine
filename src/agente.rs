@@ -70,6 +70,17 @@ pub trait Sistema {
     fn iniciar_ui(&mut self, _sid: &str) -> Result<(), String> {
         Ok(())
     }
+    /// Empurra o tempo restante para a bandeja da conta (a dica do ícone). Melhor esforço: sem
+    /// bandeja conectada, não faz nada.
+    fn estado(&mut self, _sid: &str, _restante_segundos: Option<u64>, _motivo: Option<Motivo>) {}
+    /// Avisos entregues à bandeja que ela não confirmou a tempo e que o sistema refez pela
+    /// reserva (a caixa de mensagem), com o resultado da reserva (E-004 F3, GC-17).
+    fn avisos_sem_confirmacao(
+        &mut self,
+        _agora: DateTime<Utc>,
+    ) -> Vec<(Aviso, Result<(), String>)> {
+        Vec::new()
+    }
 }
 
 /// Intervalo mínimo entre dois alertas (ou dois erros) sobre a UI de uma mesma conta: uma criança
@@ -138,6 +149,8 @@ pub struct Agente<'a, S: Sistema, Tz: TimeZone> {
     iniciado: bool,
     ultimo_batimento: Option<DateTime<Utc>>,
     ui: HashMap<String, SupervisaoUi>,
+    /// Último "balde" de tempo restante empurrado à bandeja de cada conta (evita mensagem a cada tick, GC-22).
+    estados: HashMap<String, u64>,
     avisados: HashSet<(Uuid, Option<Uuid>, Motivo, u64)>,
     tentativas: HashMap<u32, u32>,
     abandonados: HashSet<u32>,
@@ -159,6 +172,7 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             iniciado: false,
             ultimo_batimento: None,
             ui: HashMap::new(),
+            estados: HashMap::new(),
             avisados: HashSet::new(),
             tentativas: HashMap::new(),
             abandonados: HashSet::new(),
@@ -347,6 +361,8 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             }
             // 2. sessão do perfil (uma sessão bloqueada já está contida: nada a fazer)
             if grupo.ativa {
+                self.mostrar_estado(&mut rel, *perfil_id, &grupo.sid, agora)
+                    .await;
                 match self.db.decidir_para(*perfil_id, None, agora).await {
                     Ok(d) => {
                         avaliadas.insert(grupo.sid.clone());
@@ -400,7 +416,10 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             .retain(|sid, _| !avaliadas.contains(sid) || bloqueando.contains(sid));
         if self.sistema.tem_ui() {
             self.supervisionar_ui(&mut rel, agora_utc, &ativas).await;
+            self.registrar_avisos_sem_confirmacao(&mut rel, agora_utc)
+                .await;
         }
+        self.estados.retain(|sid, _| ativas.contains(sid));
         self.ativas_anterior = ativas;
         self.avisados
             .retain(|(p, a, m, _)| ativos.contains(&(*p, *a, *m)));
@@ -482,6 +501,68 @@ impl<'a, S: Sistema, Tz: TimeZone> Agente<'a, S, Tz> {
             }
             self.ui.insert(sid.clone(), sup);
         }
+    }
+
+    /// A bandeja não confirmou um aviso a tempo e o sistema usou a reserva: vira falha no log, com
+    /// o que aconteceu na reserva (nada de reserva silenciosa, GC-17).
+    async fn registrar_avisos_sem_confirmacao(
+        &mut self,
+        rel: &mut Relatorio,
+        agora: DateTime<Utc>,
+    ) {
+        for (aviso, reserva) in self.sistema.avisos_sem_confirmacao(agora) {
+            let perfil = match self.db.perfil_por_sid(&aviso.sid).await {
+                Ok(p) => p.map(|p| p.profile_id),
+                Err(_) => None,
+            };
+            let error = match reserva {
+                Ok(()) => "UI_NOT_CONFIRMED: aviso refeito pela caixa de mensagem".to_owned(),
+                Err(e) => format!("UI_NOT_CONFIRMED: a caixa de mensagem também falhou: {e}"),
+            };
+            let d = Detalhe::WarningFailed {
+                reason: aviso.motivo.as_str().to_owned(),
+                error,
+            };
+            self.falha(rel, perfil, d).await;
+        }
+    }
+
+    /// Empurra o tempo restante da sessão (limite total e janela geral) para a dica da bandeja,
+    /// só quando o valor muda de "balde": 1 min acima de 5 min, 15 s dali para baixo (GC-22). Sem
+    /// limite de sessão não há número a mostrar: a dica só volta ao texto simples se havia um.
+    async fn mostrar_estado(
+        &mut self,
+        rel: &mut Relatorio,
+        perfil: Uuid,
+        sid: &str,
+        agora: Instante,
+    ) {
+        if !self.sistema.tem_ui() {
+            return;
+        }
+        let restante = match self.db.restante_da_sessao(perfil, agora).await {
+            Ok(r) => r,
+            Err(e) => {
+                rel.erros.push(
+                    Detalhe::SessionDecisionFailed {
+                        error: e.to_string(),
+                    }
+                    .texto(idioma()),
+                );
+                return;
+            }
+        };
+        let balde = match restante {
+            None => u64::MAX,
+            Some((r, _)) if r > 300 => 1_000_000 + r / 60,
+            Some((r, _)) => r / 15,
+        };
+        let anterior = self.estados.insert(sid.to_owned(), balde);
+        if anterior == Some(balde) || (anterior.is_none() && restante.is_none()) {
+            return;
+        }
+        self.sistema
+            .estado(sid, restante.map(|(r, _)| r), restante.map(|(_, m)| m));
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -328,7 +328,9 @@ impl KioskDbManager {
         match usado {
             Ok(r) if r.rows_affected() == 1 => {}
             Ok(_) => {
-                drop(tx);
+                // rollback explícito: o `drop` desfaz de forma preguiçosa e a transação ainda segura
+                // o bloqueio de escrita quando a recusa é gravada em outra conexão
+                let _ = tx.rollback().await;
                 let msg = "pairing code invalid, used or expired".to_string();
                 return Err(self
                     .recusar(ctx, ACAO, EventType::AuthFail, msg, agora)

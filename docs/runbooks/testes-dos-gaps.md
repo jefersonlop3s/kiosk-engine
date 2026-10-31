@@ -62,14 +62,14 @@ Falhou se: o app segue aberto sem erro no log (fail-loud violado).
 
 ## 5. GC-17: avisos pela bandeja, com a caixa de mensagem como reserva
 
-Hoje os avisos saem por `WTSSendMessageW`; o teste mostra o estado atual e serve de linha de base para a etapa 4 da bandeja.
+A etapa 4 está feita em código (avisos e estado pela bandeja; GC-22, a dica com o tempo restante, também). Falta ver no PC real.
 
 1. Com `crianca-teste` logada, confirmar que `kiosk-ui.exe` está em execução (bandeja) e que o serviço o reinicia ao encerrá-lo.
-2. Regra com limite que dispare aviso de 5 e 1 min.
-3. Registrar: o aviso apareceu como caixa de mensagem ou pela bandeja? O tempo restante aparece na bandeja?
-4. Encerrar `kiosk-ui.exe` antes do aviso e ver se o aviso ainda chega (reserva).
+2. Regra com limite que dispare os avisos de 5 e 1 min.
+3. **Esperado**: o aviso aparece como balão da bandeja e a dica do ícone mostra o tempo restante nos últimos minutos.
+4. Encerrar `kiosk-ui.exe` antes do aviso. **Esperado**: o aviso chega pela caixa de mensagem (reserva) e a reserva fica registrada no log.
 
-Resultado esperado hoje: caixa de mensagem. A mudança para a bandeja é desenvolvimento, não teste.
+Falhou se: nenhum aviso chega, ou a bandeja falha e nada registra a reserva.
 
 ## 6. GC-20: logoff após 2 desbloqueios
 
@@ -94,5 +94,5 @@ Só há HTTP sem TLS (`KIOSK_LAN=1` aceita endereços privados RFC 1918). Teste 
 ## 8. O que ainda não tem como testar
 
 - GC-08 (avisos por regra): não há opção no `kioskd`/`kioskctl` para definir `warning_seconds`; só o banco e os testes automáticos cobrem.
-- Hash encadeado ([ADR-012](../adr/ADR-012-hash-encadeado-security-log.md)): `kioskd log verify` está "a propor"; não existe comando para conferir a corrente em campo.
+- Hash encadeado ([ADR-012](../adr/ADR-012-hash-encadeado-security-log.md)): `kioskd log verify` está "a propor"; não existe comando para conferir a corrente em campo, e a corrente hoje não se forma (GC-23).
 - GC-13 (pareamento por IP): coberto por teste automático; em campo, errar o código 10 vezes de um IP não pode bloquear o pareamento de outro IP.
