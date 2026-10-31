@@ -733,6 +733,14 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
   - novo [runbook dos testes dos GAPs](runbooks/testes-dos-gaps.md): camada automática, serviço no PC (GC-16, GC-21), sessão da criança (GC-17, GC-20) e rede (GC-15).
 - **Regressão achada e corrigida**: `muitas_tentativas_de_codigo_errado_bloqueiam_o_pareamento` falhava em cerca de 1 de 3 execuções com os commits novos (12 de 12 verdes na `main`). Causa: `insert_event` lê antes de escrever (hash encadeado) e a recusa não era gravada por `SQLITE_BUSY`. A `main` corrigiu a mesma intermitência por outro caminho (`rollback().await` no lugar do `drop(tx)`, PR #28/`41fffac`); ficam os dois: o rollback explícito trata o bloqueio da transação descartada e o `BEGIN IMMEDIATE` em `begin_transaction` trata a promoção deferida de leitura para escrita entre escritores concorrentes.
 - **Achado novo**: o hash encadeado não encadeia (GC-23 no PENDING).
-- **Não feito**: tag `v0.0.8` e release (aprovação do dono); nenhum teste do roteiro foi executado.
+- **Não feito na época**: tag `v0.0.8` e release (publicados depois, ver "v0.0.8 publicada"); nenhum teste do roteiro foi executado.
 - **Lacunas vistas**: GC-08 sem opção de CLI para `warning_seconds` e `kioskd log verify` (ADR-012) ainda não existe, então os dois só têm cobertura automática.
 - **Evidência** (depois do merge da `main`, Linux): `cargo fmt --check`, `clippy --all-targets -D warnings` e `cargo test --locked --no-fail-fast` verdes em 3 rodadas; a suíte `assinatura` 25 vezes seguidas sem falha. `verificar_refs.py` e `verificar_adr.py` não existem nesta máquina, não rodaram.
+
+## 2026-10-30 — v0.0.8 publicada
+
+- **v0.0.8** ([release](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.8), pré-lançamento, de `04bd4dd`, o merge da PR #26), publicada pelo `release.yml` (manual, `publicar: true`) com a aprovação do dono, para os testes em PC real. SHA-256 do `.zip` do Windows: `485105132ff454b297167de1951819cb1eed84702c33a3699f35a9623ea10874`.
+- Traz: GC-08 (avisos por regra), GC-13 (pareamento por IP), GC-15 mínimo (`KIOSK_LAN=1`, sem TLS), GC-17 e GC-22 em código (avisos e tempo restante pela bandeja), hash encadeado (que ainda não encadeia: GC-23), `BEGIN IMMEDIATE` nas transações e `kioskd configure` (E-007 F1).
+- Merge pelo `scripts/merge_gate.sh 26`: 5 gates locais, `actionlint` e 4 checks remotos aprovados sobre o resultado do merge.
+- Para atualizar: rodar `kioskd install --listen ...` da pasta nova; `kioskd status` deve mostrar a versão da pasta e a instalada iguais a 0.0.8.
+- Para ver no PC real: o [roteiro dos GAPs](runbooks/testes-dos-gaps.md) (GC-16, GC-17, GC-20, GC-21 e o modo LAN do GC-15).
