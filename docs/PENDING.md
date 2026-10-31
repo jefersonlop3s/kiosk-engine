@@ -10,6 +10,8 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 ## GAPs de Código
 
+Roteiro de validação no PC: [testes dos GAPs](runbooks/testes-dos-gaps.md) (versão 0.0.8).
+
 Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agente-windows-enforcement.md) (núcleo SO-independente), revisão do próprio entregue em 2026-10-28.
 
 | ID | Mecanismo | Medido? | Próximo passo |
@@ -17,6 +19,7 @@ Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agen
 | GC-15 | Modo LAN da ADR-005 com HTTPS: implementado o mínimo (`KIOSK_LAN=1` permite endereços privados RFC 1918). **Sem TLS ainda** — depende da adição de `tokio-rustls` ao crate | Parcial (HTTP sem TLS) | Adicionar TLS quando `tokio-rustls` estiver disponível; rever pinning de certificado |
 | GC-16 | Serviço do Windows validado no PC do dono: instalação (2026-10-29) e **retorno sozinho depois de reiniciar o Windows** (novo PID, em execução, início automático). Falta ver o agente, rodando como SYSTEM, aplicar uma regra na conta da criança (por exemplo um limite curto) | Por execução no PC real | E-004 F1/F4, E-007 F2 |
 | GC-17 | Etapa 4 feita em código (2026-10-30): avisos e estado pela bandeja, com a caixa de mensagem como reserva e a reserva registrada. **Falta ver no PC real**: aviso aparecendo como balão, a dica com o tempo restante (GC-22, feito em código) e a reserva ao matar a bandeja | Por execução no PC real | E-004 F3 (etapa 4), ADR-004 |
+| GC-23 | Hash encadeado (ADR-012) não encadeia: `hash_chain` devolve `None` quando o `prev_hash` anterior é `None`, e o primeiro evento tem `None`, então **todo** `prev_hash` fica NULL (visto só pela leitura de `src/security_logger_impl.rs`, sem teste). Os triggers de UPDATE e DELETE valem; o `kioskd log verify` não existe | Por leitura do código | Escrever teste que reprova; decidir na ADR-012 o valor do primeiro elo (por exemplo, string vazia) e implementar `log verify` |
 | GC-20 | Logoff após 2 desbloqueios não ocorreu no teste real (2026-10-29): houve dois bloqueios por `LIMITE_DIARIO_TOTAL` com 30 s de intervalo e nenhuma ação nem erro registrados depois, até o limite ser removido 7 min mais tarde | Sim: log do teste do dono | Repetir com intervalo de 40 s entre as entradas e a saída da janela do `servir`; se reproduzir, investigar a detecção da sessão reconectada (`WTSSessionInfoEx`) |
 | GC-21 | Visto no PC real (2026-10-29): a tentativa de uma conta comum aparece em `kioskctl log --profile`, o limite de 5 por minuto vale e o administrador elevado gera o código. **Falta ver** a recusa com o serviço parado (`Stop-Service kiosk`): a mensagem deve dizer que a tentativa **não** foi registrada. O `kioskd.exe` inteiro como a conta padrão não roda no CI (`Start-Process -Credential` trava nos runners): só com `KIOSK_TESTE_PROCESSO_COMO_CONTA=1` | Por execução no PC real | [ADR-011](adr/ADR-011-rastro-de-tentativas-sem-privilegio.md), E-004 F4 |
 
