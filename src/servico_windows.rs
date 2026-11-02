@@ -777,7 +777,13 @@ pub fn instalar(escutar: &str) -> Result<u32, String> {
     };
     configurar_extras(&svc)?;
     // o serviço (SYSTEM) escreve o log no idioma de quem o instalou
-    gravar_ambiente(&[("KIOSK_LISTEN", escutar), ("KIOSK_LANG", idioma().tag())])?;
+    let mut ambiente = vec![("KIOSK_LISTEN", escutar), ("KIOSK_LANG", idioma().tag())];
+    // GC-15: o serviço não herda o ambiente de quem instala. Sem gravar `KIOSK_LAN`, um endereço
+    // de LAN aceito aqui seria recusado na subida do serviço, que pararia (visto no PC real).
+    if std::env::var("KIOSK_LAN").as_deref() == Ok("1") {
+        ambiente.push(("KIOSK_LAN", "1"));
+    }
+    gravar_ambiente(&ambiente)?;
     eprintln!("kioskd: {}", Msg::ServicoRegistrado);
 
     // SAFETY: sem argumentos.

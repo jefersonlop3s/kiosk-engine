@@ -15,6 +15,8 @@ kioskd version
 kioskd status        # "versão" e "versão instalada" iguais e = 0.0.8
 ```
 
+> **Atalho**: `scripts/testes-gaps.ps1` roda as seções 3, 4, 5 e 7 (e a 6 com `-Fase GC20 -Conta <crianca>`) num PowerShell de administrador, descobrindo IDs, SID e IP da LAN, e grava um arquivo de evidência: `powershell -ExecutionPolicy Bypass -File .\testes-gaps.ps1`.
+
 ## 1. Camadas
 
 | Camada | Onde | Cobre | Como |

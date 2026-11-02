@@ -314,7 +314,7 @@ flowchart TD
     I --> P["registro: Path do sistema ganha Program Files\kiosk, se faltar;<br/>aviso WM_SETTINGCHANGE para janelas novas"]
     P --> J["SCM: cria ou reconfigura o serviço<br/>LocalSystem, início automático, binário kioskd service"]
     J --> K["SCM: descrição, reinício 5 s após falha,<br/>permissões do serviço: conta padrão só consulta"]
-    K --> L["registro: Environment do serviço com KIOSK_LISTEN<br/>e KIOSK_LANG, o idioma de quem instala"]
+    K --> L["registro: Environment do serviço com KIOSK_LISTEN<br/>e KIOSK_LANG (o idioma de quem instala); KIOSK_LAN=1<br/>só se definida no ambiente de quem instala (GC-15)"]
     L --> M["SCM: inicia e espera em execução por até 30 s"]
     M --> N{"continua em execução 2 s depois?"}
     N -->|não| E3["erro: iniciou e parou, veja kioskd.log"]
@@ -377,7 +377,7 @@ Só lê o próprio binário: não abre o banco, não fala com o serviço, não e
 
 ```mermaid
 flowchart TD
-    W["Windows: SCM inicia Program Files\kiosk\kioskd.exe service,<br/>como LocalSystem, com KIOSK_LISTEN e KIOSK_LANG do registro"] --> A["entrega a thread principal ao SCM"]
+    W["Windows: SCM inicia Program Files\kiosk\kioskd.exe service,<br/>como LocalSystem, com KIOSK_LISTEN, KIOSK_LANG e, se gravada, KIOSK_LAN do registro"] --> A["entrega a thread principal ao SCM"]
     A --> B["registra o tratador de controle; informa iniciando"]
     B --> C{"abre ProgramData\kiosk\kioskd.log?"}
     C -->|não| E1["informa parado com código 3"]

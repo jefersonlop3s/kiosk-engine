@@ -262,6 +262,24 @@ fn instala_reinicia_recusa_conta_padrao_e_desinstala() {
         .unwrap();
     assert!(texto(&sc).contains("RESTART"), "{}", texto(&sc));
 
+    // GC-15: o serviço não herda o ambiente de quem instala, então `KIOSK_LAN` só vale se o
+    // `install` a gravar nele; reinstalar sem ela volta ao normal
+    assert!(!estado.contains("ambiente: KIOSK_LAN="), "{estado}");
+    let escuta = format!("127.0.0.1:{PORTA}");
+    let com_lan = Command::new(env!("CARGO_BIN_EXE_kioskd"))
+        .args(["install", "--listen", &escuta])
+        .env("KIOSK_LANG", "pt-BR")
+        .env("KIOSK_LAN", "1")
+        .env_remove("KIOSK_DB")
+        .env_remove("KIOSK_LISTEN")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(com_lan.status.success(), "{}", texto(&com_lan));
+    assert!(ok(&["status"]).contains("ambiente: KIOSK_LAN=1"));
+    ok(&["install", "--listen", &escuta]);
+    assert!(!ok(&["status"]).contains("ambiente: KIOSK_LAN="));
+
     // a API responde como serviço e o banco (gravado como SYSTEM) recebe a recusa
     let resp = esperar(Duration::from_secs(15), status_do_pareamento).expect("API não respondeu");
     assert!(resp.starts_with("HTTP/1.1 403"), "{resp}");
