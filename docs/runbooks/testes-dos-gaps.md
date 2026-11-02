@@ -4,15 +4,13 @@ Roteiro para o dono validar no PC Windows real os GAPs de Código abertos no [PE
 
 ## 0. Qual versão testar
 
-O que está no PC é a **0.0.7**. Ela **não** contém o que entrou depois (GC-08, GC-13, GC-15 mínimo, hash encadeado, GC-19): o `Cargo.toml` ainda diz `0.0.7` e as mudanças estão em "Não lançado" no [CHANGELOG](../../CHANGELOG.md).
-
-Para os testes valerem, é preciso uma **0.0.8**: só assim `kioskd status` mostra `versão` e `versão instalada` distintas da 0.0.7 e o `kioskd version` (commit) prova qual compilação foi exercitada. A publicação passa pelo `release.yml` (tag `v0.0.8`, aprovação do dono).
+Teste sempre a versão mais recente publicada: só assim `kioskd status` mostra `versão` e `versão instalada` iguais e o `kioskd version` (commit) prova qual compilação foi exercitada. Hoje é a **0.0.9**, que traz a correção do `install` com `KIOSK_LAN=1` (na 0.0.8 o serviço ficava parado). O script passa `-VersaoEsperada` para conferir isso.
 
 Antes de cada rodada, confira:
 
 ```powershell
 kioskd version
-kioskd status        # "versão" e "versão instalada" iguais e = 0.0.8
+kioskd status        # "versão" e "versão instalada" iguais e = 0.0.9
 ```
 
 > **Atalho**: `scripts/testes-gaps.ps1` roda as seções 3, 4, 5 e 7 (e a 6 com `-Fase GC20 -Conta <crianca>`) num PowerShell de administrador, descobrindo IDs, SID e IP da LAN, e grava um arquivo de evidência: `powershell -ExecutionPolicy Bypass -File .\testes-gaps.ps1`.

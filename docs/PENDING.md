@@ -10,13 +10,13 @@ Somente trabalho aberto. Detalhes nos [épicos](epics/README.md) e [gaps](gaps/R
 
 ## GAPs de Código
 
-Roteiro de validação no PC: [testes dos GAPs](runbooks/testes-dos-gaps.md) (versão 0.0.8).
+Roteiro de validação no PC: [testes dos GAPs](runbooks/testes-dos-gaps.md) (versão 0.0.9).
 
 Origem: [E-003](epics/E-003-motor-de-regras-e-uso.md) e [E-004](epics/E-004-agente-windows-enforcement.md) (núcleo SO-independente), revisão do próprio entregue em 2026-10-28.
 
 | ID | Mecanismo | Medido? | Próximo passo |
 |---|---|---|---|
-| GC-15 | Modo LAN da ADR-005 com HTTPS: implementado o mínimo (`KIOSK_LAN=1` permite endereços privados RFC 1918). **Sem TLS ainda** — depende da adição de `tokio-rustls` ao crate. No PC real (2026-11-02) o `install` com `KIOSK_LAN=1` deixou o **serviço parado**: `KIOSK_LAN` não era gravada no ambiente do serviço (corrigido no `install`, falta ver no PC real) | Parcial (HTTP sem TLS; a LAN não foi alcançada) | Reinstalar com `KIOSK_LAN=1`, ver a porta responder na LAN; TLS quando `tokio-rustls` estiver disponível; rever pinning de certificado |
+| GC-15 | Modo LAN da ADR-005 com HTTPS: implementado o mínimo (`KIOSK_LAN=1` permite endereços privados RFC 1918). **Sem TLS ainda** — depende da adição de `tokio-rustls` ao crate. No PC real (2026-11-02) o `install` com `KIOSK_LAN=1` deixou o **serviço parado**: `KIOSK_LAN` não era gravada no ambiente do serviço (corrigido no `install` na 0.0.9, falta ver no PC real com `scripts/testes-gaps.ps1 -Fase GC15`) | Parcial (HTTP sem TLS; a LAN não foi alcançada) | Reinstalar com `KIOSK_LAN=1`, ver a porta responder na LAN; TLS quando `tokio-rustls` estiver disponível; rever pinning de certificado |
 | GC-24 | Os executáveis não são assinados: o Smart App Control do Windows 11 bloqueia o `kioskctl.exe` ("uma política de Controle de Aplicativo bloqueou este arquivo"), mesmo com `Unblock-File`, na pasta extraída e na instalada. `kioskd.exe` e `kiosk-ui.exe` rodam (2026-11-02) | Sim: log do dono | Decidir a assinatura de código (certificado, custo, passo no `release.yml`) — ADR antes de executar |
 | GC-25 | Sem o `kioskctl`, o administrador do PC não tem como ler o log forense (`log` e `usage` existem só no `kioskctl`; o `kioskd.log` traz só início e parada) | Sim: GC-21 e GC-20 de 2026-11-02 sem evidência no log | Avaliar `kioskd log` e `kioskd usage` locais (somente leitura, administrador elevado) |
 | GC-23 | Hash encadeado (ADR-012) não encadeia: `hash_chain` devolve `None` quando o `prev_hash` anterior é `None`, e o primeiro evento tem `None`, então **todo** `prev_hash` fica NULL (visto só pela leitura de `src/security_logger_impl.rs`, sem teste). Os triggers de UPDATE e DELETE valem; o `kioskd log verify` não existe | Por leitura do código | Escrever teste que reprova; decidir na ADR-012 o valor do primeiro elo (por exemplo, string vazia) e implementar `log verify` |

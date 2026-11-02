@@ -98,7 +98,7 @@ flowchart TD
     X --> E1["erro: só administrador executa o assistente"]
     W -->|"sim, ou fora do Windows"| B["abre o banco e cria o MockSistema/SistemaWindows"]
     B --> C{"--respostas?"}
-    C -->|sim| D["lê o arquivo TOML e valida os parâmetros"]
+    C -->|sim| D["imprime que o modo não interativo ainda não está pronto<br/>e termina sem gravar (a leitura do TOML vem depois)"]
     C -->|não| E["loop interativo no terminal"]
     E --> F["lista contas locais (sistema.contas_locais)"]
     F --> G["usuário seleciona uma conta (ou cancela)"]
@@ -106,9 +106,14 @@ flowchart TD
     G --> H["lista programas (sistema.atalhos_do_menu)"]
     H --> I["usuário seleciona um programa (ou cancela)"]
     I -->|cancelou| Z
-    I --> J["resumo: perfil + programa selecionados"]
-    J --> K["(em breve: grava perfil, app e regra no banco;<br/>instala serviço; mostra código de pareamento)"]
-    K --> L["fim"]
+    I --> J1["pergunta o limite diário do app e o total da criança<br/>(minutos, 0 = sem limite)"]
+    J1 --> J["resumo: perfil, programa e limites"]
+    J --> J2{"confirma gravar?"}
+    J2 -->|cancelar| Z
+    J2 -->|sim| K["grava perfil, app e regra ativa (security_log: um evento por gravação);<br/>erro em qualquer uma interrompe e é devolvido"]
+    K --> P["gera o código de pareamento (tabela pairing_code, só o hash; vale 5 min)"]
+    P --> M["imprime os IDs criados e o código para quem chamou"]
+    M --> L["fim (não instala o serviço)"]
 ```
 ### `kioskd pairing-code`
 
