@@ -8,7 +8,7 @@ use std::fs::File;
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::IntoRawHandle;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use comum::{ContaPadrao, como};
@@ -392,7 +392,15 @@ async fn conta_padrao_conecta_e_so_recebe_o_que_e_dela() {
 struct ServicoIsolado {
     gerente: GerenteUi,
     rt: Option<tokio::runtime::Runtime>,
+    /// O último erro de subida (banco ou pipe), para a falha do teste dizer o motivo.
+    erro: Arc<Mutex<Option<String>>>,
     _dir: TempDir,
+}
+
+impl ServicoIsolado {
+    fn diagnostico(&self) -> String {
+        format!("erro de subida: {:?}", self.erro.lock().unwrap())
+    }
 }
 
 impl Drop for ServicoIsolado {
@@ -411,17 +419,41 @@ fn subir_isolado(nome: &str) -> ServicoIsolado {
     let gerente = GerenteUi::default();
     let (g, n) = (gerente.clone(), nome.to_owned());
     let db_url = format!("sqlite://{}", dir.path().join("k.db").display());
+    let erro = Arc::new(Mutex::new(None));
+    let e = erro.clone();
     rt.spawn(async move {
-        let db = Arc::new(KioskDbManager::new(&db_url).await.unwrap());
-        let config = Configuracao {
-            nome_do_pipe: n,
-            imagem_esperada: None,
+        let db = match KioskDbManager::new(&db_url).await {
+            Ok(db) => Arc::new(db),
+            Err(x) => {
+                *e.lock().unwrap() = Some(format!("banco: {x}"));
+                return;
+            }
         };
-        let _ = servir(config, g, db).await;
+        // um serviço que acabou de cair (`shutdown_background` não espera) pode ainda segurar a
+        // primeira instância do pipe: tenta de novo em vez de engolir o erro e nunca escutar
+        let limite = Instant::now() + Duration::from_secs(15);
+        loop {
+            let config = Configuracao {
+                nome_do_pipe: n.clone(),
+                imagem_esperada: None,
+            };
+            match servir(config, g.clone(), db.clone()).await {
+                Err(x) if Instant::now() < limite => {
+                    *e.lock().unwrap() = Some(format!("pipe: {x}"));
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+                Err(x) => {
+                    *e.lock().unwrap() = Some(format!("pipe (desistiu): {x}"));
+                    return;
+                }
+                Ok(()) => return,
+            }
+        }
     });
     ServicoIsolado {
         gerente,
         rt: Some(rt),
+        erro,
         _dir: dir,
     }
 }
@@ -453,7 +485,8 @@ async fn o_cliente_da_ui_espera_o_servico_manda_batimento_entrega_avisos_confirm
     let servico = subir_isolado(&nome);
     assert!(
         esperar(|| servico.gerente.conectada(&sid)).await,
-        "a UI devia conectar quando o serviço subiu"
+        "a UI devia conectar quando o serviço subiu ({})",
+        servico.diagnostico()
     );
 
     // 2. o batimento segue chegando
@@ -478,7 +511,8 @@ async fn o_cliente_da_ui_espera_o_servico_manda_batimento_entrega_avisos_confirm
     let novo = subir_isolado(&nome);
     assert!(
         esperar(|| novo.gerente.conectada(&sid)).await,
-        "a UI devia reconectar ao serviço reiniciado"
+        "a UI devia reconectar ao serviço reiniciado ({})",
+        novo.diagnostico()
     );
     assert!(novo.gerente.enviar(&sid, aviso()));
     assert_eq!(
