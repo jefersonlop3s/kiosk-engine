@@ -15,7 +15,8 @@ param(
     [ValidateSet('Tudo', 'GC21', 'GC16', 'GC15', 'GC20', 'Limpar')]
     [string]$Fase = 'Tudo',
     [string]$Conta = $env:USERNAME,
-    [int]$LimiteSegundos = 400
+    [int]$LimiteSegundos = 400,
+    [string]$VersaoEsperada = '0.0.9'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -124,6 +125,7 @@ function Preparar {
     Write-Host (Kiosk version)
     $v = [regex]::Matches($status, 'vers\S+o[^:]*:\s*(\S+)') | ForEach-Object { $_.Groups[1].Value }
     Resultado 'versao instalada = versao da pasta' (($v | Select-Object -Unique).Count -eq 1) ($v -join ' / ')
+    Resultado "versao instalada e a esperada ($VersaoEsperada)" (($v | Where-Object { $_ -notlike "$VersaoEsperada*" }).Count -eq 0) ($v -join ' / ')
     Resultado 'servico em execucao' ((Get-Service kiosk).Status -eq 'Running') (Get-Service kiosk).Status
 }
 
@@ -230,14 +232,19 @@ function TesteGC15 {
         Write-Host "  com KIOSK_LAN=1:`n  $com"
         Start-Sleep -Seconds 3
         $aceito = $com -notmatch 'recusado|refused|rejected'
+        $estado = Kiosk status
+        Write-Host $estado
+        $rodando = (Get-Service kiosk).Status -eq 'Running'
         $alcanca = (Test-NetConnection -ComputerName $lan -Port 8443 -WarningAction SilentlyContinue).TcpTestSucceeded
-        Write-Host (Kiosk status)
         Resultado 'GC-15 com KIOSK_LAN=1 o install aceita' $aceito 'esperado: aceita endereco privado'
+        Resultado 'GC-15 o servico gravou KIOSK_LAN=1 no proprio ambiente' ($estado -match 'KIOSK_LAN=1') 'esperado: "ambiente: KIOSK_LAN=1" no status (o servico SYSTEM nao herda o ambiente de quem instala)'
+        Resultado 'GC-15 o servico segue em execucao com a LAN' $rodando (Get-Service kiosk).Status
         Resultado 'GC-15 a porta responde na LAN' $alcanca "${lan}:8443 (HTTP, sem TLS: GC-15 so fecha com TLS)"
     } finally {
         Remove-Item Env:\KIOSK_LAN -ErrorAction SilentlyContinue
         Write-Host "  restaurando o servico sem LAN:`n  $(Kiosk install --listen $listen)"
-        Resultado 'servico restaurado' ((Get-Service kiosk).Status -eq 'Running') (Get-Service kiosk).Status
+        $depois = Kiosk status
+        Resultado 'servico restaurado sem LAN' (((Get-Service kiosk).Status -eq 'Running') -and ($depois -notmatch 'KIOSK_LAN=')) "$((Get-Service kiosk).Status); KIOSK_LAN removida do ambiente do servico"
     }
 }
 

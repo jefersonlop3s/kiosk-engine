@@ -758,3 +758,13 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Resíduos no PC**: perfis `teste-gaps-Jeferson` e o da conta `Arthur Oliveira` (não há `profile delete`); regras revogadas e limites removidos pelo script.
 - **Evidência**: logs do dono `testes-gaps-20261102-144123.log` e `testes-gaps-20261102-145607.log`; `cargo fmt`, `clippy -D warnings` e `cargo test` no Linux. O código `cfg(windows)` (a correção do `install`) não compila nesta máquina (sem `mingw`): depende do CI Windows.
 
+## 2026-11-02 — Preparação da 0.0.9
+
+- **Origem**: pedido do dono para preparar o corte 0.0.9, a ser instalado por ele no PC para repetir os testes locais.
+- **Resultado**:
+  - versão do `Cargo.toml` e do `Cargo.lock` sobe para 0.0.9; o [CHANGELOG](../CHANGELOG.md) fecha a seção `[0.0.9]` com a correção do `install` com `KIOSK_LAN=1` (PR #31), o `kioskd configure` gravando perfil, app, regra e código de pareamento (`622c135`, que não estava no CHANGELOG) e o `scripts/testes-gaps.ps1`;
+  - o fluxograma do `kioskd configure` dizia "(em breve: grava ...)" e estava defasado em relação ao código; agora descreve o comportamento real, inclusive o que ainda não existe (`--respostas` não grava, não instala o serviço, textos só em português);
+  - `scripts/testes-gaps.ps1` passa a conferir a versão esperada e, no GC-15, que o serviço grava `KIOSK_LAN=1`, segue em execução com a LAN e a porta responde, e que reinstalar sem a variável a remove.
+- **Não feito**: tag `v0.0.9` e release (aprovação do dono); nenhum teste da 0.0.9 foi executado no PC.
+- **Evidência**: `cargo fmt --check`, `clippy -D warnings` e `cargo test --locked` verdes no Linux; `verificar_refs.py` e `verificar_adr.py` em dia; fluxograma renderizado no `mermaid-cli`.
+

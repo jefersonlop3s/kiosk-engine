@@ -4,10 +4,15 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+## [0.0.9] - 2026-11-02
+
+Ainda **pré-lançamento**. Corrige o `install` com `KIOSK_LAN=1` (serviço parado no PC real), traz o assistente `kioskd configure` gravando no banco e o roteiro automatizado dos testes de GAP.
+
 ### Corrigido
 - **GC-15: `kioskd install` com `KIOSK_LAN=1` deixava o serviço parado.** O serviço (SYSTEM) não herda o ambiente de quem instala; sem `KIOSK_LAN` gravada no `Environment` do serviço, o endereço de LAN aceito pelo `install` era recusado na subida e o serviço parava (visto no PC real, 2026-11-02). O `install` agora grava `KIOSK_LAN=1` quando a variável está definida; reinstalar sem ela a remove.
 
 ### Adicionado
+- **`kioskd configure` grava no banco** (E-007 F1): no modo interativo, escolhe a conta e o programa, pergunta o limite diário do app e o total da criança (minutos; 0 = sem limite), mostra o resumo, pede confirmação e então cria o perfil, o app e a regra ativa e imprime um código de pareamento. **Ainda não**: `--respostas` só avisa que o modo não interativo não está pronto e termina sem gravar; não instala o serviço; os textos do assistente saem só em português (fora da regra de três idiomas da ADR-010).
 - `scripts/testes-gaps.ps1`: roteiro automatizado dos testes de GAP no PC Windows (GC-21, GC-16/17, GC-15 e, com `-Conta`, GC-20), com um único arquivo de evidência.
 
 ## [0.0.8] - 2026-10-30
