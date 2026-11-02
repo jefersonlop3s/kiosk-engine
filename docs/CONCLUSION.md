@@ -744,3 +744,17 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - Merge pelo `scripts/merge_gate.sh 26`: 5 gates locais, `actionlint` e 4 checks remotos aprovados sobre o resultado do merge.
 - Para atualizar: rodar `kioskd install --listen ...` da pasta nova; `kioskd status` deve mostrar a versão da pasta e a instalada iguais a 0.0.8.
 - Para ver no PC real: o [roteiro dos GAPs](runbooks/testes-dos-gaps.md) (GC-16, GC-17, GC-20, GC-21 e o modo LAN do GC-15).
+
+## 2026-11-02 — Testes dos GAPs no PC real com a 0.0.8 (`scripts/testes-gaps.ps1`)
+
+- **Origem**: pedido do dono para testar os GAPs abertos; roteiro em [testes dos GAPs](runbooks/testes-dos-gaps.md), executado pelo script `scripts/testes-gaps.ps1` (um arquivo de evidência por execução). PC do dono, Windows 11, v0.0.8 (`04bd4dd`) instalada e conferida (`versão` = `versão instalada`).
+- **GC-16 fechado**: com o serviço como SYSTEM, a regra de 400 s para `notepad.exe` encerrou o app em 411 s.
+- **GC-17 fechado** (e o GC-22 junto): o dono viu o balão de 5 min e o de 1 min na bandeja e a dica com o tempo restante nos últimos minutos. A caixa de mensagem como reserva não foi exercitada.
+- **GC-20 fechado**: com 40 s entre os desbloqueios, houve logoff automático depois do 2º. Em 2026-10-29, com 30 s, não houve; a hipótese é o intervalo, **não confirmada** (sem evidência no log forense: ver GC-25).
+- **GC-21 fechado quanto à mensagem**: sem elevação e com o serviço no ar, a recusa diz que a tentativa foi registrada; com o serviço parado, diz que **não** foi. A gravação em si segue vista só na 0.0.7 (`kioskctl log`). O script marcou FALHOU por engano (a regex não casava `NÃO` com a saída em UTF-8 lida como ANSI); corrigido no script.
+- **GC-15, achado**: sem `KIOSK_LAN`, o `install` recusa `192.168.x.x` (esperado). Com `KIOSK_LAN=1` o `install` aceitou, mas o **serviço ficou parado** (`o serviço não chegou a "em execução" em 30s`): o serviço (SYSTEM) não herda o ambiente de quem instala e `KIOSK_LAN` não era gravada no `Environment` dele. Corrigido em `servico_windows::instalar` (grava `KIOSK_LAN=1` quando definida) com asserção no teste do serviço real; **falta ver no PC real**. O script restaurou o serviço sem LAN e ele voltou a rodar.
+- **Achado novo, GC-24**: o Smart App Control bloqueia o `kioskctl.exe` (não assinado), mesmo com `Unblock-File`; `kioskd.exe` e `kiosk-ui.exe` rodam. **GC-25**: sem o `kioskctl`, o administrador não lê o log forense no PC.
+- **Teste instável no CI Windows**: `o_cliente_da_ui_espera_o_servico_..._e_reconecta` falhou duas vezes (`main` em 31/10, linha 454; PR #31, linha 479) e passou na repetição. O auxiliar `subir_isolado` engolia o erro de `servir` (`let _ =`) e de `KioskDbManager::new`, e o runtime antigo (`shutdown_background`, que não espera) podia ainda segurar a primeira instância do pipe. Agora o auxiliar tenta de novo por 15 s e a falha do teste mostra o erro de subida. Causa **inferida pela leitura do código**, não reproduzida: o CI Windows foi repetido para conferir.
+- **Resíduos no PC**: perfis `teste-gaps-Jeferson` e o da conta `Arthur Oliveira` (não há `profile delete`); regras revogadas e limites removidos pelo script.
+- **Evidência**: logs do dono `testes-gaps-20261102-144123.log` e `testes-gaps-20261102-145607.log`; `cargo fmt`, `clippy -D warnings` e `cargo test` no Linux. O código `cfg(windows)` (a correção do `install`) não compila nesta máquina (sem `mingw`): depende do CI Windows.
+

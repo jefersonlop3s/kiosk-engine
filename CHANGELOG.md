@@ -4,6 +4,12 @@ Mudanças do projeto kiosk. Formato baseado em [Keep a Changelog](https://keepac
 
 ## [Não lançado]
 
+### Corrigido
+- **GC-15: `kioskd install` com `KIOSK_LAN=1` deixava o serviço parado.** O serviço (SYSTEM) não herda o ambiente de quem instala; sem `KIOSK_LAN` gravada no `Environment` do serviço, o endereço de LAN aceito pelo `install` era recusado na subida e o serviço parava (visto no PC real, 2026-11-02). O `install` agora grava `KIOSK_LAN=1` quando a variável está definida; reinstalar sem ela a remove.
+
+### Adicionado
+- `scripts/testes-gaps.ps1`: roteiro automatizado dos testes de GAP no PC Windows (GC-21, GC-16/17, GC-15 e, com `-Conta`, GC-20), com um único arquivo de evidência.
+
 ## [0.0.8] - 2026-10-30
 
 Ainda **pré-lançamento**. Reúne os GC-08, GC-13, GC-15 (parcial), GC-19, o hash encadeado do `Security_Log` e a bandeja da criança, para os testes em PC real do [roteiro dos GAPs](docs/runbooks/testes-dos-gaps.md).
