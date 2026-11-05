@@ -24,6 +24,11 @@ use windows_sys::Win32::Storage::FileSystem::{FILE_FLAG_OVERLAPPED, SECURITY_IDE
 
 const BATIMENTO: &str = "{\"v\":1,\"tipo\":\"batimento\"}\n";
 
+/// Prazo para o que o teste espera acontecer. Só é gasto por inteiro quando algo falha: todo teste
+/// segue assim que a condição vale. O runner do Windows chega a levar minutos numa suíte de
+/// segundos, e prazos de 5 e 10 s derrubavam testes certos (o mesmo commit passou e falhou).
+const ESPERA_MAXIMA: Duration = Duration::from_secs(30);
+
 struct Servidor {
     _dir: TempDir,
     db: Arc<KioskDbManager>,
@@ -64,6 +69,7 @@ async fn subir(imagem_esperada: Option<PathBuf>) -> Servidor {
     }
 }
 
+#[derive(Debug)]
 enum Chegou {
     Linha(String),
     Fechou,
@@ -82,7 +88,7 @@ struct Cliente {
 impl Cliente {
     /// Abre o pipe (com algumas tentativas se o servidor ainda está recriando a instância).
     fn abrir(nome: &str) -> std::io::Result<File> {
-        let fim = Instant::now() + Duration::from_secs(10);
+        let fim = Instant::now() + ESPERA_MAXIMA;
         loop {
             match std::fs::OpenOptions::new()
                 .access_mode(DIREITOS_DO_CLIENTE)
@@ -137,7 +143,7 @@ impl Cliente {
 }
 
 async fn esperar(mut cond: impl FnMut() -> bool) -> bool {
-    let fim = Instant::now() + Duration::from_secs(10);
+    let fim = Instant::now() + ESPERA_MAXIMA;
     while Instant::now() < fim {
         if cond() {
             return true;
@@ -201,7 +207,7 @@ async fn a_ui_conecta_manda_batimento_e_recebe_aviso() {
 
     // serviço -> UI
     assert!(s.gerente.enviar(&sid, aviso()));
-    let Chegou::Linha(l) = c.proxima(Duration::from_secs(5)).await else {
+    let Chegou::Linha(l) = c.proxima(ESPERA_MAXIMA).await else {
         panic!("o aviso não chegou");
     };
     assert!(l.starts_with("{\"v\":1,\"tipo\":\"aviso\""), "{l}");
@@ -234,7 +240,7 @@ async fn a_primeira_mensagem_tem_de_ser_um_batimento() {
         let mut c = Cliente::conectar(&s.nome).await.unwrap();
         c.enviar(lixo).await.unwrap();
         assert!(
-            matches!(c.proxima(Duration::from_secs(5)).await, Chegou::Fechou),
+            matches!(c.proxima(ESPERA_MAXIMA).await, Chegou::Fechou),
             "devia ter sido descartada: {lixo}"
         );
         assert!(!s.gerente.conectada(&sid_atual()));
@@ -268,7 +274,7 @@ async fn lixo_depois_do_batimento_derruba_a_ui() {
         assert!(esperar(|| s.gerente.conectada(&sid)).await, "{nome}");
         c.enviar(&lixo).await.unwrap();
         assert!(
-            matches!(c.proxima(Duration::from_secs(5)).await, Chegou::Fechou),
+            matches!(c.proxima(ESPERA_MAXIMA).await, Chegou::Fechou),
             "{nome}: devia ter caído"
         );
         assert!(esperar(|| !s.gerente.conectada(&sid)).await, "{nome}");
@@ -286,9 +292,10 @@ async fn rajada_de_mensagens_derruba_a_ui() {
     // o limite é de 10 por segundo
     let rajada = BATIMENTO.repeat(60);
     let _ = c.enviar(&rajada).await;
+    let depois = c.proxima(ESPERA_MAXIMA).await;
     assert!(
-        matches!(c.proxima(Duration::from_secs(5)).await, Chegou::Fechou),
-        "a rajada devia derrubar a UI"
+        matches!(depois, Chegou::Fechou),
+        "a rajada devia derrubar a UI: {depois:?}"
     );
     assert!(esperar(|| !s.gerente.conectada(&sid)).await);
     let r = recusas(&s.db).await;
@@ -302,10 +309,7 @@ async fn so_o_executavel_esperado_vale_como_ui() {
     let s = subir(Some(PathBuf::from(r"C:\Windows\System32\notepad.exe"))).await;
     let mut c = Cliente::conectar(&s.nome).await.unwrap();
     c.enviar(BATIMENTO).await.unwrap();
-    assert!(matches!(
-        c.proxima(Duration::from_secs(5)).await,
-        Chegou::Fechou
-    ));
+    assert!(matches!(c.proxima(ESPERA_MAXIMA).await, Chegou::Fechou));
     assert!(!s.gerente.conectada(&sid));
     assert_eq!(
         recusas(&s.db).await,
@@ -333,14 +337,14 @@ async fn uma_ui_nova_da_mesma_conta_toma_o_lugar_da_anterior() {
     let mut nova = Cliente::conectar(&s.nome).await.unwrap();
     nova.enviar(BATIMENTO).await.unwrap();
     assert!(
-        matches!(velha.proxima(Duration::from_secs(5)).await, Chegou::Fechou),
+        matches!(velha.proxima(ESPERA_MAXIMA).await, Chegou::Fechou),
         "a UI anterior devia ser largada"
     );
     // a nova segue de pé e recebe
     assert!(s.gerente.conectada(&sid));
     assert!(s.gerente.enviar(&sid, aviso()));
     assert!(matches!(
-        nova.proxima(Duration::from_secs(5)).await,
+        nova.proxima(ESPERA_MAXIMA).await,
         Chegou::Linha(_)
     ));
 }
@@ -376,10 +380,7 @@ async fn conta_padrao_conecta_e_so_recebe_o_que_e_dela() {
     // o que é de outra conta não chega a ela, e o que é dela chega
     assert!(!s.gerente.enviar(&sid_runner, aviso()));
     assert!(s.gerente.enviar(&sid_conta, aviso()));
-    assert!(matches!(
-        c.proxima(Duration::from_secs(5)).await,
-        Chegou::Linha(_)
-    ));
+    assert!(matches!(c.proxima(ESPERA_MAXIMA).await, Chegou::Linha(_)));
     // a conta padrão não consegue criar outra instância do pipe (servidor falso)
     let falso = como(&conta, || {
         tokio::net::windows::named_pipe::ServerOptions::new().create(&nome)
@@ -499,7 +500,7 @@ async fn o_cliente_da_ui_espera_o_servico_manda_batimento_entrega_avisos_confirm
     // 3. serviço -> UI, e a confirmação da UI -> serviço
     assert!(servico.gerente.enviar(&sid, aviso()));
     let chegou = recebido
-        .recv_timeout(Duration::from_secs(5))
+        .recv_timeout(ESPERA_MAXIMA)
         .expect("o aviso não chegou");
     assert_eq!(chegou, aviso());
     confirma_tx.send(DaUi::AvisoExibido { marco: 300 }).unwrap();
@@ -517,7 +518,7 @@ async fn o_cliente_da_ui_espera_o_servico_manda_batimento_entrega_avisos_confirm
     assert!(novo.gerente.enviar(&sid, aviso()));
     assert_eq!(
         recebido
-            .recv_timeout(Duration::from_secs(5))
+            .recv_timeout(ESPERA_MAXIMA)
             .expect("o aviso depois de reconectar"),
         aviso()
     );

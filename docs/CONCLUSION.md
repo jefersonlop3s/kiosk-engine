@@ -768,3 +768,10 @@ Log cronológico de entregas, decisões, resoluções e descartes, com data, ori
 - **Não feito**: tag `v0.0.9` e release (aprovação do dono); nenhum teste da 0.0.9 foi executado no PC.
 - **Evidência**: `cargo fmt --check`, `clippy -D warnings` e `cargo test --locked` verdes no Linux; `verificar_refs.py` e `verificar_adr.py` em dia; fluxograma renderizado no `mermaid-cli`.
 
+## 2026-11-02 — v0.0.9 publicada e GC-15 (`install` com `KIOSK_LAN=1`) confirmado no PC real
+
+- **v0.0.9** ([release](https://github.com/jefersonlop3s/kiosk-engine/releases/tag/v0.0.9), de `b6ce193`, o merge da PR #32), publicada pelo `release.yml` (manual, `publicar: true`) com a aprovação do dono. SHA-256 do `.zip` do Windows: `27d4e85a2b67be0c85fafd4498c12e562b17e17814e0d15db4066c8d6dc2e6e7`.
+- Merge pelo `scripts/merge_gate.sh 32`: 5 gates locais, `actionlint` e 4 checks remotos aprovados sobre o resultado do merge.
+- **Teste no PC real** (`scripts/testes-gaps.ps1 -Fase GC15`, versão instalada 0.0.9 `b6ce193`): 9 de 9 passaram. Sem `KIOSK_LAN` o endereço de LAN é recusado; com `KIOSK_LAN=1` o `install` grava a variável no ambiente do serviço, o serviço segue em execução e a porta responde na LAN (192.168.6.94:8443); reinstalar sem a variável a remove e o serviço volta a escutar só em Tailscale e loopback.
+- Fica aberto no GC-15: TLS (HTTP puro na LAN) e pinning de certificado.
+- **CI do PR #33 falhou no Windows** (`rajada_de_mensagens_derruba_a_ui` e o teste do cliente da UI, em `tests/ui_windows.rs`), num PR só de docs: o mesmo commit passou na execução de `push` e falhou na de `pull_request`, e o runner levou minutos numa suíte de segundos. Causa provável: prazos de 5 e 10 s apertados demais para esse runner; não reproduzida (sem Windows local). Os prazos dos testes passaram a 30 s (`ESPERA_MAXIMA`), sem custo quando passam, e a falha da rajada agora diz o que chegou. Se voltar a falhar, a hipótese está errada e o próximo passo é registrar o tempo do `recusar` (escrita no log antes de fechar a conexão).
